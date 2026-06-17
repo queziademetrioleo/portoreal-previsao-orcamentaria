@@ -25,15 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# previsao.py (raiz do projeto) e a biblioteca core: parsers, regras R1-R8, IA
-_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.abspath(os.path.join(_BACKEND_DIR, '..', '..'))
-for p in (_ROOT, _BACKEND_DIR):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-import previsao as core          # noqa: E402
-from gerador_previsao import gerar_previsao_adaptativa  # noqa: E402
+import previsao as core
+from gerador_previsao import gerar_previsao_adaptativa
 
 app = FastAPI(title='Previsao Orcamentaria', version='2.0')
 
@@ -46,7 +39,7 @@ app.add_middleware(
 
 # Sessoes persistidas em disco (JSON) — sobrevivem a restart do container
 SESSOES_DIR = os.environ.get('PREVISAO_SESSOES_DIR',
-                             os.path.join(_BACKEND_DIR, 'sessoes'))
+                             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessoes'))
 os.makedirs(SESSOES_DIR, exist_ok=True)
 
 ARQUIVOS_ESPERADOS = {
