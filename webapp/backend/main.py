@@ -307,6 +307,6 @@ def download(sid: str):
 # ---------------------------------------------------------------------------
 # Frontend estatico (build do React) — prod
 # ---------------------------------------------------------------------------
-_DIST = os.path.join(_BACKEND_DIR, 'static')
-if os.path.isdir(_DIST):
-    app.mount('/', StaticFiles(directory=_DIST, html=True), name='frontend')
+_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+if os.path.isdir(_STATIC):
+    app.mount('/', StaticFiles(directory=_STATIC, html=True), name='frontend')
