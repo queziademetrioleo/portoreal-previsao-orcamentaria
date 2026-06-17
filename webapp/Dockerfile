@@ -24,6 +24,7 @@ COPY webapp/backend/main.py webapp/backend/gerador_previsao.py ./backend/
 COPY --from=front /app/dist/ ./backend/static/
 
 ENV PREVISAO_SESSOES_DIR=/dados/sessoes
+ENV PYTHONPATH=/app
 VOLUME /dados
 
 EXPOSE 8000
