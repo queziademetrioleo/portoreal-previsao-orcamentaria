@@ -1,0 +1,20 @@
+# Chaves de API — NUNCA commitar
+chave_claude.txt
+chave_openai.txt
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Backend
+webapp/backend/sessoes/
+webapp/backend/static/
+
+# Frontend
+webapp/frontend/node_modules/
+webapp/frontend/dist/
+
+# Sistema
+.DS_Store
+*.log

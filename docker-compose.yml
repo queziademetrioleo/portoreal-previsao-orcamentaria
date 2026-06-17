@@ -1,0 +1,20 @@
+services:
+  previsao:
+    build:
+      context: .
+      dockerfile: webapp/Dockerfile
+    container_name: previsao
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - PREVISAO_IA_PROVEDOR=${PREVISAO_IA_PROVEDOR:-}
+      - PREVISAO_IA_MODELO=${PREVISAO_IA_MODELO:-claude-opus-4-8}
+      - PREVISAO_IA_MODELO_OPENAI=${PREVISAO_IA_MODELO_OPENAI:-gpt-5.4}
+    volumes:
+      - previsao_dados:/dados
+
+volumes:
+  previsao_dados:
