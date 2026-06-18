@@ -230,52 +230,67 @@ def ia_parse_pasta(pasta):
 def _call_ia(system, user, max_tokens=16000):
     """Chama a Claude API. Retorna texto ou None."""
     try:
-        # Tenta importar as funções do previsao.py
+        # Tenta importar as funções do previsao.py (com fallback Anthropic→OpenAI)
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import previsao as core
         if core._ia_disponivel():
-            return core._claude_chat(system, user, max_tokens=max_tokens)
+            resp = core._claude_chat(system, user, max_tokens=max_tokens)
+            if resp:
+                return resp
     except Exception as e:
-        pass
+        print(f"   ⚠️  core._claude_chat falhou: {e}")
 
-    # Fallback: chave direta
-    key = os.environ.get('ANTHROPIC_API_KEY', '').strip()
-    if not key:
-        key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chave_claude.txt')
-        if os.path.exists(key_file):
-            for line in open(key_file, encoding='utf-8'):
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    key = line
-                    break
-    if not key:
-        return None
+    # Fallback: chama APIs diretamente
+    providers = []
+    # Anthropic
+    key_ant = os.environ.get('ANTHROPIC_API_KEY', '').strip()
+    if key_ant:
+        providers.append(('anthropic', key_ant))
+    # OpenAI
+    key_oai = os.environ.get('OPENAI_API_KEY', '').strip()
+    if key_oai:
+        providers.append(('openai', key_oai))
 
-    try:
-        import urllib.request
-        model = os.environ.get('PREVISAO_IA_MODELO', 'claude-opus-4-8')
-        body = {
-            'model': model,
-            'max_tokens': max_tokens,
-            'system': system,
-            'messages': [{'role': 'user', 'content': user}]
-        }
-        req = urllib.request.Request(
-            'https://api.anthropic.com/v1/messages',
-            data=json.dumps(body).encode('utf-8'),
-            headers={
-                'Content-Type': 'application/json',
-                'x-api-key': key,
-                'anthropic-version': '2023-06-01'
-            }
-        )
-        with urllib.request.urlopen(req, timeout=300) as r:
-            data = json.loads(r.read().decode('utf-8'))
-        return ''.join(b.get('text', '') for b in data.get('content', [])
-                       if b.get('type') == 'text')
-    except Exception as e:
-        print(f"   ❌ Erro na chamada IA: {e}")
-        return None
+    for prov, key in providers:
+        try:
+            import urllib.request
+            if prov == 'anthropic':
+                model = os.environ.get('PREVISAO_IA_MODELO', 'claude-opus-4-8')
+                body = {
+                    'model': model, 'max_tokens': max_tokens,
+                    'system': system,
+                    'messages': [{'role': 'user', 'content': user}]
+                }
+                req = urllib.request.Request(
+                    'https://api.anthropic.com/v1/messages',
+                    data=json.dumps(body).encode('utf-8'),
+                    headers={'Content-Type': 'application/json',
+                             'x-api-key': key, 'anthropic-version': '2023-06-01'}
+                )
+                with urllib.request.urlopen(req, timeout=300) as r:
+                    data = json.loads(r.read().decode('utf-8'))
+                return ''.join(b.get('text', '') for b in data.get('content', [])
+                               if b.get('type') == 'text')
+            else:
+                model = os.environ.get('PREVISAO_IA_MODELO_OPENAI', 'gpt-5.4')
+                body = {
+                    'model': model, 'max_completion_tokens': max_tokens,
+                    'messages': [{'role': 'system', 'content': system},
+                                 {'role': 'user', 'content': user}]
+                }
+                req = urllib.request.Request(
+                    'https://api.openai.com/v1/chat/completions',
+                    data=json.dumps(body).encode('utf-8'),
+                    headers={'Content-Type': 'application/json',
+                             'Authorization': f'Bearer {key}'}
+                )
+                with urllib.request.urlopen(req, timeout=300) as r:
+                    data = json.loads(r.read().decode('utf-8'))
+                return data['choices'][0]['message']['content'] or ''
+        except Exception as e:
+            print(f"   ❌ IA {prov} falhou: {e}")
+
+    return None
 
 
 def _extrair_json(texto):
