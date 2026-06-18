@@ -202,15 +202,17 @@ def ia_parse_pasta(pasta):
     prompt = "\n\n".join(partes)
 
     print(f"   🤖 IA analisando {len(prompt)} caracteres de dados brutos...")
-    resp = _call_ia(SYSTEM_DUMP_PROMPT, prompt, max_tokens=16000)
+    resp = _call_ia(SYSTEM_DUMP_PROMPT, prompt, max_tokens=32000)
     if resp is None:
         print("   ⚠️  IA indisponível — usando parsers rígidos como fallback")
         return None
 
+    print(f"   📝 IA respondeu {len(resp)} caracteres (inicio: {resp[:120]}...)")
+
     # Extrair JSON da resposta
     dados = _extrair_json(resp)
     if dados is None:
-        print("   ⚠️  IA retornou JSON inválido — usando parsers rígidos como fallback")
+        print(f"   ⚠️  IA retornou JSON inválido — resposta bruta: {resp[:500]}")
         return None
 
     # Validar estrutura mínima
