@@ -39,6 +39,23 @@ export async function gerarDocumento(
   return r.json()
 }
 
+export async function previewDocumento(
+  sid: string,
+  decisoes: {
+    extraordinarias: Record<string, string>
+    revisar: Record<string, string>
+    inadimplencia: Record<string, string>
+  },
+): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number }> {
+  const r = await fetch(`${BASE}/api/sessao/${sid}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decisoes),
+  })
+  if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
+  return r.json()
+}
+
 export function urlDownload(sid: string): string {
   return `${BASE}/api/sessao/${sid}/download`
 }

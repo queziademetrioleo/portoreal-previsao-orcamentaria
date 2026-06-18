@@ -16,6 +16,7 @@ import sys
 import json
 import uuid
 import shutil
+import pickle
 import tempfile
 import datetime
 
@@ -67,6 +68,63 @@ def _carregar_estado(sid):
         return json.load(f)
 
 
+def _salvar_R(sid, R):
+    """Cacheia o resultado de core.analisar() para que preview/gerar nao precisem
+    re-parsear os .xls nem re-rodar a IA a cada clique."""
+    try:
+        with open(os.path.join(_sessao_path(sid), 'R.pkl'), 'wb') as f:
+            pickle.dump(R, f)
+    except Exception:
+        pass  # cache e best-effort; fallback re-analisa
+
+
+def _obter_R(sid):
+    p = os.path.join(_sessao_path(sid), 'R.pkl')
+    if os.path.exists(p):
+        try:
+            with open(p, 'rb') as f:
+                return pickle.load(f)
+        except Exception:
+            pass
+    return core.analisar(_sessao_path(sid))
+
+
+def _aplicar_decisoes(estado, dec):
+    """Aplica as decisoes humanas no estado (in-place)."""
+    for item in estado['extraordinarias']:
+        d = dec.extraordinarias.get(str(item['id']))
+        if d in ('aprovada', 'reprovada'):
+            item['decisao'] = d
+    for item in estado['revisar']:
+        d = dec.revisar.get(str(item['id']))
+        if d in ('aprovada', 'reprovada', 'pendente'):
+            item['decisao'] = d
+    for item in estado['inadimplencia']:
+        d = dec.inadimplencia.get(str(item['id']))
+        if d in ('abater', 'ignorar'):
+            item['decisao'] = d
+
+
+def _recalcular_com_decisoes(sid, estado):
+    """Recalcula subtotal/total/impacto a partir das decisoes ja no 'estado'.
+    Retorna (R2, impacto_receita). Nao gera xlsx."""
+    ids_remover = {i['id'] for i in estado['extraordinarias'] if i['decisao'] == 'aprovada'}
+    ids_remover |= {i['id'] for i in estado['revisar'] if i['decisao'] == 'aprovada'}
+
+    R = _obter_R(sid)
+    for idx, it in enumerate(R['des']['itens']):
+        it['cat'] = 'Extraordinaria' if idx in ids_remover else (
+            'Recorrente' if it['cat'] in ('Extraordinaria', 'Revisar') else it['cat'])
+    R2 = core.recalcular(R)
+
+    unidades = {}
+    for item in estado['inadimplencia']:
+        if item['decisao'] == 'abater':
+            unidades.setdefault(item['unidade'], []).append(item['valor'])
+    impacto = sum(sum(v) / len(v) for v in unidades.values())
+    return R2, impacto
+
+
 # ---------------------------------------------------------------------------
 # 1) UPLOAD + ANALISE
 # ---------------------------------------------------------------------------
@@ -106,6 +164,7 @@ async def criar_sessao(
 
     estado = _montar_estado(sid, nome_condominio, ano_previsao, R)
     _salvar_estado(sid, estado)
+    _salvar_R(sid, R)
     return JSONResponse(estado)
 
 
@@ -225,48 +284,26 @@ class Decisoes(BaseModel):
     inadimplencia: dict = {}
 
 
+@app.post('/api/sessao/{sid}/preview')
+def preview(sid: str, dec: Decisoes):
+    """Recalcula subtotal/total/impacto com as decisoes atuais SEM gerar o xlsx.
+    Permite que a interface atualize os numeros ao vivo a cada clique."""
+    estado = _carregar_estado(sid)
+    _aplicar_decisoes(estado, dec)
+    R2, impacto = _recalcular_com_decisoes(sid, estado)
+    return {'ok': True,
+            'subtotal': round(R2['subtotal'], 2),
+            'total_previsto': round(R2['total_previsto'], 2),
+            'impacto_receita_mensal': round(impacto, 2)}
+
+
 @app.post('/api/sessao/{sid}/gerar')
 def gerar(sid: str, dec: Decisoes):
     estado = _carregar_estado(sid)
     pasta = _sessao_path(sid)
 
-    # aplicar decisoes humanas no estado
-    for item in estado['extraordinarias']:
-        d = dec.extraordinarias.get(str(item['id']))
-        if d in ('aprovada', 'reprovada'):
-            item['decisao'] = d
-    for item in estado['revisar']:
-        d = dec.revisar.get(str(item['id']))
-        if d in ('aprovada', 'reprovada', 'pendente'):
-            item['decisao'] = d
-    for item in estado['inadimplencia']:
-        d = dec.inadimplencia.get(str(item['id']))
-        if d in ('abater', 'ignorar'):
-            item['decisao'] = d
-
-    # reconstruir o calculo com as decisoes:
-    #   Extraordinaria aprovada  -> continua removida
-    #   Extraordinaria reprovada -> volta para a base (recorrente)
-    #   Revisar aprovada (= e extraordinaria) -> removida
-    #   Revisar reprovada/pendente -> fica na base
-    ids_remover = {i['id'] for i in estado['extraordinarias'] if i['decisao'] == 'aprovada'}
-    ids_remover |= {i['id'] for i in estado['revisar'] if i['decisao'] == 'aprovada'}
-
-    R = core.analisar(pasta)  # IA-powered parsing (fallback automático para parsers rígidos)
-
-    # sobrescrever a classificacao com a decisao humana (fonte da verdade)
-    for idx, it in enumerate(R['des']['itens']):
-        it['cat'] = 'Extraordinaria' if idx in ids_remover else (
-            'Recorrente' if it['cat'] in ('Extraordinaria', 'Revisar') else it['cat'])
-
-    R2 = core.recalcular(R)
-
-    # inadimplencia: impacto na receita = soma das taxas das unidades marcadas p/ abater
-    unidades = {}
-    for item in estado['inadimplencia']:
-        if item['decisao'] == 'abater':
-            unidades.setdefault(item['unidade'], []).append(item['valor'])
-    impacto_receita = sum(sum(v) / len(v) for v in unidades.values())
+    _aplicar_decisoes(estado, dec)
+    R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
 
     out_xlsx = os.path.join(pasta, f"Previsão {estado['ano_previsao']}.xlsx")
     modelo = os.path.join(os.path.dirname(os.path.abspath(__file__)),

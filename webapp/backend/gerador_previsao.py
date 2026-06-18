@@ -31,6 +31,76 @@ def _norm(s):
                    if unicodedata.category(c) != 'Mn')
 
 
+# Similaridade minima (Jaccard de tokens) para aceitar um match aproximado.
+# Substring por comprimento e cego: ou e frouxo (o generico "contrato" vira
+# substring de "Contrato de Manutencao do Jardim" -> contas fantasma) ou e
+# estrito demais (descarta "Manut. Extintores e/ou Teste" x "Manut. Extintores").
+# Jaccard de tokens distingue os dois casos.
+_SIM_MIN_MATCH = 0.5
+
+# Conectores ignorados na tokenizacao (nao carregam significado de conta).
+_STOPWORDS = {'de', 'do', 'da', 'dos', 'das', 'e', 'ou', 'com', 'para', 'p',
+              'no', 'na', 'a', 'o', 'as', 'os', 'em', 'ao', 'eou'}
+
+# Palavras-CATEGORIA genericas: aparecem em muitas linhas e NAO distinguem a
+# conta (ex.: "Contrato de Manutencao do Jardim" x "... da E.T.A." compartilham
+# {contrato, manutencao}). O match exige pelo menos um token ESPECIFICO em comum
+# (jardim/eta/elevador/...), nunca so as categoricas — senao o generico
+# "Contrato de Manutencao" cairia em "...do Jardim" (a 1a linha que aparece).
+_GENERICAS = {'contrato', 'manutencao', 'manut', 'despesas', 'taxa', 'geral'}
+
+
+def _tokens(nome):
+    brutos = re.split(r'[^a-z0-9]+', nome)
+    return {t for t in brutos if len(t) >= 3 and t not in _STOPWORDS}
+
+
+def _achar_valor(nn, valores, usados):
+    """Encontra o melhor valor para a conta normalizada 'nn'.
+
+    1) match exato; 2) similaridade de tokens (Jaccard) >= _SIM_MIN_MATCH E pelo
+    menos um token ESPECIFICO (nao-categorico) em comum. Cada chave de 'valores'
+    so e consumida uma vez (registrada em 'usados'). Retorna (chave, valor) ou
+    (None, None).
+    """
+    if nn in valores and nn not in usados:
+        return nn, valores[nn]
+    tn = _tokens(nn)
+    espec_n = tn - _GENERICAS
+    if not tn or not espec_n:
+        return None, None
+    melhor_chave = None
+    melhor_sim = 0.0
+    for vn, vv in valores.items():
+        if vn in usados:
+            continue
+        tv = _tokens(vn)
+        if not tv:
+            continue
+        # Exige token especifico em comum (alem de eventuais categoricas).
+        if not (espec_n & (tv - _GENERICAS)):
+            continue
+        sim = len(tn & tv) / len(tn | tv)
+        if sim > melhor_sim:
+            melhor_sim = sim
+            melhor_chave = vn
+    if melhor_chave is not None and melhor_sim >= _SIM_MIN_MATCH:
+        return melhor_chave, valores[melhor_chave]
+    return None, None
+
+
+def _receita_mensal(ln):
+    """Valor mensal de uma receita = media dos meses ATIVOS (total / n_meses).
+
+    Receitas pontuais (1 mes) nao sao recorrentes e nao entram na previsao
+    mensal — retorna None para que a conta seja ignorada.
+    """
+    nm = ln.get('n_meses') or 0
+    if nm <= 1:
+        return None
+    return round(ln['total'] / nm, 2)
+
+
 def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
                                num_fracoes=None, inflacao=0.10,
                                impacto_receita_mensal=0.0,
@@ -63,14 +133,38 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     hoje = datetime.date.today()
     data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
 
-    # Construir mapa: nome normalizado -> final calculado
-    valores = {}
+    # Mapas separados: por CLASSE e por GRUPO. Manter separados evita que uma
+    # chave de grupo (ex.: "despesas diversas") seja substring de uma linha de
+    # classe (ex.: "Estorno de Despesas Diversas") e contamine o valor dela.
+    valores_classe = {}
+    valores_grupo = {}
+    classes_por_grupo = {}   # grupo_norm -> {classe_norm: final}
     for l in linhas:
-        nc = _norm(l['classe'])
-        valores[nc] = l['final']
-        # Tambem indexa pelo grupo
+        valores_classe[_norm(l['classe'])] = l['final']
         ng = _norm(l['grupo'] or '')
-        valores[ng] = valores.get(ng, 0) + l['final']
+        valores_grupo[ng] = valores_grupo.get(ng, 0) + l['final']
+        classes_por_grupo.setdefault(ng, {})[_norm(l['classe'])] = l['final']
+    # Para a PREVISAO (que mistura linhas de classe e de grupo) usamos o
+    # combinado, com a classe tendo prioridade.
+    valores = {**valores_grupo, **valores_classe}
+
+    def _classes_do_grupo(grupo_tmpl):
+        """Classes parseadas dos grupos que casam com o grupo do template.
+        Restringir ao mesmo grupo evita que uma conta homonima de outro grupo
+        (ex.: '13o Taxa de Administracao' existe em Diversas E Administrativas)
+        seja roteada para a linha errada."""
+        gt = _tokens(grupo_tmpl)
+        if not gt:
+            return valores_classe
+        out = {}
+        for g, classes in classes_por_grupo.items():
+            tg = _tokens(g)
+            if tg and len(gt & tg) / len(gt | tg) >= 0.5:
+                out.update(classes)
+        # Sem fallback para "todas as classes": se nenhum grupo parseado casa com
+        # o grupo do template, as linhas ficam vazias (evita contaminacao entre
+        # grupos). Os nomes de grupo do Condominio21 sao padronizados e casam.
+        return out
 
     # ---------- CONTAS ----------
     if ' C O N T A S ' in wb.sheetnames:
@@ -88,42 +182,93 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             elif 'subtotal atual' in n3:
                 ws_c.cell(r, 4).value = round(R['subtotal'], 2)
 
+        # Limpar dados RESIDUAIS (lixo de preenchimentos anteriores) que o template
+        # carrega: ajustes manuais em E:H (ex.: "Outros Materiais" E=1000) e valores
+        # literais em D/I de linhas de classe que ficaram de um condominio anterior
+        # (ex.: "Contrato" D=5234.52). Sem isso, linhas nao preenchidas nesta
+        # geracao mantem numeros antigos e inflam o subtotal. Preserva FORMULAS do
+        # template (VLOOKUP, =SUM, =D-SUM(E:H), =+D205).
+        for r in range(11, ws_c.max_row + 1):
+            for col in (5, 6, 7, 8):
+                if isinstance(ws_c.cell(r, col).value, (int, float)):
+                    ws_c.cell(r, col).value = None
+            code_b = str(ws_c.cell(r, 2).value or '').strip()
+            if re.match(r'^\d{2}\.\d{2}$', code_b):  # linha de classe
+                for col in (4, 9):
+                    if isinstance(ws_c.cell(r, col).value, (int, float)):
+                        ws_c.cell(r, col).value = None
+
         # Receitas — procura cada conta de receita e atualiza D
         for ln in bal.get('receitas', []):
+            val = _receita_mensal(ln)
+            if val is None:
+                continue
             nc = _norm(ln['classe'])
             for r in range(1, ws_c.max_row + 1):
                 nn = _norm(ws_c.cell(r, 3).value)
                 if nn == nc:
-                    val = round(ln['total'] / 12.0, 2)
                     ws_c.cell(r, 4).value = val
                     ws_c.cell(r, 9).value = val
                     break
 
-        # Despesas — percorre linhas do template e atualiza com valores calculados
+        # Despesas — percorre linhas do template e atualiza com valores calculados.
+        # 'usados' garante que cada valor parseado preencha no maximo uma linha.
+        # 'grupo_atual' guarda o ultimo cabecalho de grupo (XX) para restringir o
+        # match as classes do mesmo grupo.
+        usados_c = set()
+        grupo_atual = ''
         for r in range(1, ws_c.max_row + 1):
-            code = str(ws_c.cell(r, 2).value or '').strip()
+            code_a = str(ws_c.cell(r, 1).value or '').strip()  # col A
+            code_b = str(ws_c.cell(r, 2).value or '').strip()  # col B
             nome = str(ws_c.cell(r, 3).value or '').strip()
             if not nome:
                 continue
+            # Cabecalho de grupo (codigo XX). O template e inconsistente: grupos
+            # 02-10 trazem o codigo na col A, mas 14-17 (Admin, Montagem, Fundo
+            # Reserva, Pro-labore) trazem na col B. Aceitar ambas, senao o
+            # 'grupo_atual' trava e contas desses grupos nao sao preenchidas.
+            grp = code_a if re.match(r'^\d{2}$', code_a) else (
+                  code_b if re.match(r'^\d{2}$', code_b) else None)
+            if grp:
+                if not grp.startswith('01'):
+                    grupo_atual = _norm(nome)
+                continue
+            # So linhas de CLASSE de despesa (codigo XX.YY na col B). Cabecalhos de
+            # grupo mantem suas formulas =SUM(...). 01.xx sao receitas.
+            if not re.match(r'^\d{2}\.\d{2}$', code_b) or code_b.startswith('01'):
+                continue
             nn = _norm(nome)
-
-            # Match exato primeiro
-            val = valores.get(nn)
-            # Match parcial
-            if val is None:
-                for vn, vv in valores.items():
-                    if len(nn) > 5 and len(vn) > 5 and (nn in vn or vn in nn):
-                        val = vv
-                        break
-
+            candidatos = _classes_do_grupo(grupo_atual)
+            chave, val = _achar_valor(nn, candidatos, usados_c)
             if val is not None and abs(val) > 0.005:
-                # Linha de conta individual (XX.YY) ou grupo (XX)
-                if re.match(r'^\d{2}(\.\d{2})?$', code):
-                    ws_c.cell(r, 4).value = round(val, 2)
-                    ws_c.cell(r, 9).value = round(val, 2)
-                elif re.match(r'^\d{2}$', code):
-                    ws_c.cell(r, 4).value = round(val, 2)
-                    ws_c.cell(r, 9).value = round(val, 2)
+                ws_c.cell(r, 4).value = round(val, 2)
+                ws_c.cell(r, 9).value = round(val, 2)
+                usados_c.add(chave)
+
+        # Provisoes R4 (Laudo de Autovistoria) e R5 (Sistema de Incendio).
+        # Sao gravadas como ajuste NEGATIVO na coluna E: como a coluna I do
+        # template e =D-SUM(E:H), um E negativo soma a provisao ao valor final,
+        # que entao flui para a PREVISAO via formula. Sem isso o "Subtotal Atual"
+        # da CONTAS nao bate com a soma da PREVISAO.
+        def _acha_linha(*termos):
+            for rr in range(1, ws_c.max_row + 1):
+                n = _norm(ws_c.cell(rr, 3).value)
+                if n and all(t in n for t in termos):
+                    return rr
+            return None
+
+        r_laudo = _acha_linha('laudo', 'autovistoria') or _acha_linha('autovistoria')
+        if r_laudo and R.get('prov_laudo', 0) > 0.005:
+            if not ws_c.cell(r_laudo, 4).value:
+                ws_c.cell(r_laudo, 4).value = 0
+            ws_c.cell(r_laudo, 5).value = -round(R['prov_laudo'], 2)
+
+        r_inc = (_acha_linha('sistema', 'combate', 'incendio')
+                 or _acha_linha('registro', 'convencao'))
+        if r_inc and R.get('prov_incendio', 0) > 0.005:
+            if not ws_c.cell(r_inc, 4).value:
+                ws_c.cell(r_inc, 4).value = 0
+            ws_c.cell(r_inc, 5).value = -round(R['prov_incendio'], 2)
 
     # ---------- PREVISAO ----------
     ws_p = None
@@ -141,18 +286,33 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             if isinstance(v, str) and 'BARRAMARES' in v.upper():
                 ws_p.cell(r, 1).value = nome_condominio
 
+        # IMPORTANTE: nesta planilha a PREVISAO e inteiramente movida por
+        # formulas que apontam para a CONTAS (ex.: D22 = CONTAS!I64,
+        # contratos D33..D42 = CONTAS!I194..I203). Preencher a CONTAS
+        # corretamente ja resolve a PREVISAO. So escrevemos um valor estatico
+        # quando a celula NAO for formula (templates sem formula / do-zero),
+        # nunca sobrescrevendo as formulas do modelo.
+        def _set_se_nao_formula(r, c, valor):
+            atual = ws_p.cell(r, c).value
+            if isinstance(atual, str) and atual.startswith('='):
+                return
+            ws_p.cell(r, c).value = valor
+
         # Receitas
         for ln in bal.get('receitas', []):
+            val = _receita_mensal(ln)
+            if val is None:
+                continue
             nc = _norm(ln['classe'])
             for r in range(1, ws_p.max_row + 1):
                 nn = _norm(ws_p.cell(r, 3).value)
                 if nn == nc:
-                    val = round(ln['total'] / 12.0, 2)
-                    ws_p.cell(r, 4).value = val
-                    ws_p.cell(r, 5).value = val
+                    _set_se_nao_formula(r, 4, val)
+                    _set_se_nao_formula(r, 5, val)
                     break
 
         # Despesas — atualiza linhas existentes com valores calculados
+        usados_p = set()
         for r in range(1, ws_p.max_row + 1):
             nome = str(ws_p.cell(r, 3).value or '').strip()
             if not nome:
@@ -168,36 +328,30 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             if 'infla' in nn and 'previsao' in nn:
                 continue
 
-            # Buscar valor
-            val = valores.get(nn)
-            if val is None:
-                for vn, vv in valores.items():
-                    if len(nn) > 5 and len(vn) > 5 and (nn in vn or vn in nn):
-                        val = vv
-                        break
-
+            chave, val = _achar_valor(nn, valores, usados_p)
             if val is not None and abs(val) > 0.005:
-                ws_p.cell(r, 4).value = round(val, 2)
-                ws_p.cell(r, 5).value = round(val / num_frac, 2)
-                ws_p.cell(r, 6).value = round(val / 12, 2)
+                _set_se_nao_formula(r, 4, round(val, 2))
+                _set_se_nao_formula(r, 5, round(val / num_frac, 2))
+                _set_se_nao_formula(r, 6, round(val / 12, 2))
+                usados_p.add(chave)
 
-        # SUBTOTAL, INFLACAO, TOTAL, SALDO
+        # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
         subtotal_val = R.get('subtotal', 0)
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
-                ws_p.cell(r, 4).value = round(subtotal_val, 2)
-                ws_p.cell(r, 6).value = round(subtotal_val / 12, 2)
+                _set_se_nao_formula(r, 4, round(subtotal_val, 2))
+                _set_se_nao_formula(r, 6, round(subtotal_val / 12, 2))
             elif 'infla' in n3 and 'previsao' in n3:
-                ws_p.cell(r, 4).value = round(subtotal_val * inflacao, 2)
+                _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
             elif n3 == 'total':
                 total = subtotal_val * (1 + inflacao)
-                ws_p.cell(r, 4).value = round(total, 2)
-                ws_p.cell(r, 5).value = round(total / num_frac, 2)
+                _set_se_nao_formula(r, 4, round(total, 2))
+                _set_se_nao_formula(r, 5, round(total / num_frac, 2))
             elif 'saldo' in n3 or 'deficit' in n3 or 'superavit' in n3:
                 rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
                 total = subtotal_val * (1 + inflacao)
-                ws_p.cell(r, 4).value = round(rec_anual - total, 2)
+                _set_se_nao_formula(r, 4, round(rec_anual - total, 2))
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:
@@ -256,10 +410,13 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r_ini = r
     cod = 1
     for ln in bal.get('receitas', []):
+        val = _receita_mensal(ln)
+        if val is None:
+            continue
         ws_c.cell(r, 2, f'01.{cod:02d}')
         ws_c.cell(r, 3, ln['classe'])
-        ws_c.cell(r, 4, round(ln['total'] / 12.0, 2)).number_format = MONEY
-        ws_c.cell(r, 9, round(ln['total'] / 12.0, 2)).number_format = MONEY
+        ws_c.cell(r, 4, val).number_format = MONEY
+        ws_c.cell(r, 9, val).number_format = MONEY
         cod += 1
         r += 1
     r += 1
@@ -320,7 +477,9 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 1
     rec_total = 0
     for ln in bal.get('receitas', []):
-        val = round(ln['total'] / 12.0, 2)
+        val = _receita_mensal(ln)
+        if val is None:
+            continue
         ws_p.cell(r, 3, ln['classe'])
         ws_p.cell(r, 4, val).number_format = MONEY
         ws_p.cell(r, 5, val).number_format = MONEY

@@ -661,6 +661,7 @@ REVISAR_CLASSES = [
     'sistema de combate a incendio', 'laudo', 'autovistoria',
     'rescisao trabalhista', 'indenizacao trabalhista', 'indenizacao judicial',
     'acordo judicial', 'taxa sobre realizacao', 'poco semi', 'confeccao',
+    'pensao aliment',  # julgamento humano: deduzir (pontual) ou manter (folha)
 ]
 RECORRENTE_HINTS = [
     'salario', 'inss', 'fgts', 'pis', 'cofins', 'csll', 'ferias',
@@ -849,15 +850,17 @@ def analisar(folder):
             ded = base; final = 0.0
             prov_incendio += base
             regra = 'R5: Cartoriais -> provisao Sist. Incendio/Registro'
-        # R2 pessoal pontual — pensao alimenticia CONTINUA (6+ meses) e
-        # desconto em folha repassado, nao custo extra: fica na base
-        # (aprendido do manual 2023: Quezia manteve pensao de 11 meses)
+        # R2 pessoal pontual (rescisao, indenizacao, pensao alimenticia) —
+        # JULGAMENTO caso a caso: no corpus a Quezia ora mantem (pensao continua
+        # de folha), ora deduz (ex.: Chateau 2024). Default = manter pensao
+        # continua (>=6 meses) / deduzir os pontuais; a decisao final fica para a
+        # REVISAO humana (estes itens sao sinalizados em classify() -> Revisar).
         elif any(k in nc for k in PESSOAL_PONTUAL):
             if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
-                regra = 'Recorrente: pensao alimenticia continua (desconto em folha)'
+                regra = 'Pessoal pontual: pensao continua — revisar'
             else:
                 ded = base; final = 0.0
-                regra = 'R2: evento pontual de pessoal deduzido 100%'
+                regra = 'R2: pessoal pontual deduzido — revisar'
         # R6 anualizacao
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
@@ -1007,9 +1010,9 @@ def recalcular(R):
             regra = 'R5: Cartoriais -> provisao Incendio/Registro'
         elif any(k in nc for k in PESSOAL_PONTUAL):
             if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
-                regra = 'Recorrente: pensao continua (desconto em folha)'
+                regra = 'Pessoal pontual: pensao continua — revisar'
             else:
-                ded, final, regra = base, 0.0, 'R2: pessoal pontual'
+                ded, final, regra = base, 0.0, 'R2: pessoal pontual deduzido — revisar'
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ded, regra = base - final, 'R6: ultimo mensal x 12'

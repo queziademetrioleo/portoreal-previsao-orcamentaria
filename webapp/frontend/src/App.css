@@ -111,8 +111,9 @@ h3 small { color: var(--cinza); font-weight: 400; font-size: .8rem; }
 .periodo { color: var(--cinza); font-size: .8rem; }
 .numeros { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .numeros label { display: block; font-size: .7rem; color: var(--cinza); text-transform: uppercase; }
-.numeros b { font-size: .95rem; }
+.numeros b { font-size: .95rem; transition: color .15s; }
 .numeros .primario { margin-top: 0; }
+.numeros.recalculando b { color: var(--azul-claro); opacity: .65; }
 .alerta { color: var(--vermelho); }
 
 .item {

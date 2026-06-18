@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { criarSessao, gerarDocumento, urlDownload } from './api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { criarSessao, gerarDocumento, previewDocumento, urlDownload } from './api'
 import { type ItemInad, type ItemRevisao, type Sessao } from './types'
 import './App.css'
 
@@ -174,6 +174,33 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
     return { dedExtra, dedRev, impacto }
   }, [extra, revisar, inad])
 
+  // Resultado AO VIVO: a cada decisao, recalcula no backend (debounce) o subtotal
+  // e o total previsto reais — sem precisar gerar o documento.
+  const [vivo, setVivo] = useState<{ subtotal: number; total: number; impacto: number }>({
+    subtotal: sessao.resumo.subtotal,
+    total: sessao.resumo.total_previsto,
+    impacto: sessao.resumo.impacto_receita_mensal ?? 0,
+  })
+  const [calculando, setCalculando] = useState(false)
+  const primeiraRender = useRef(true)
+
+  useEffect(() => {
+    if (primeiraRender.current) { primeiraRender.current = false; return }
+    setCalculando(true)
+    const t = setTimeout(async () => {
+      try {
+        const r = await previewDocumento(sessao.sessao_id, {
+          extraordinarias: Object.fromEntries(extra.map(i => [String(i.id), i.decisao])),
+          revisar: Object.fromEntries(revisar.map(i => [String(i.id), i.decisao])),
+          inadimplencia: Object.fromEntries(inad.map(i => [String(i.id), i.decisao])),
+        })
+        setVivo({ subtotal: r.subtotal, total: r.total_previsto, impacto: r.impacto_receita_mensal })
+      } catch { /* mantem ultimo valor */ }
+      finally { setCalculando(false) }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [extra, revisar, inad, sessao.sessao_id])
+
   async function salvar() {
     setGerando(true); setErro('')
     try {
@@ -211,10 +238,11 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
           <span className="periodo">Base: {sessao.resumo.periodo[0]} a {sessao.resumo.periodo[1]}
             {sessao.ia_ativa ? ` · 🤖 ${sessao.modelo_ia}` : ' · IA desligada'}</span>
         </div>
-        <div className="numeros">
+        <div className={`numeros ${calculando ? 'recalculando' : ''}`}>
           <div><label>Despesa 12m</label><b>{brl(sessao.resumo.base_total)}</b></div>
-          <div><label>Removendo</label><b>{brl(aoVivo.dedExtra + aoVivo.dedRev + sessao.resumo.desconsideracoes)}</b></div>
-          <div><label>Impacto receita/mês</label><b className={aoVivo.impacto > 0 ? 'alerta' : ''}>−{brl(aoVivo.impacto)}</b></div>
+          <div><label>Subtotal previsto</label><b>{brl(vivo.subtotal)}</b></div>
+          <div><label>Total c/ inflação</label><b>{brl(vivo.total)}</b></div>
+          <div><label>Impacto receita/mês</label><b className={vivo.impacto > 0 ? 'alerta' : ''}>−{brl(vivo.impacto)}</b></div>
           <button className="primario" disabled={gerando} onClick={salvar}>
             {gerando ? 'Gerando…' : `Salvar e gerar Previsão ${sessao.ano_previsao}.xlsx`}
           </button>
