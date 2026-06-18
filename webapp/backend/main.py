@@ -269,6 +269,8 @@ def gerar(sid: str, dec: Decisoes):
     impacto_receita = sum(sum(v) / len(v) for v in unidades.values())
 
     out_xlsx = os.path.join(pasta, f"Previsão {estado['ano_previsao']}.xlsx")
+    modelo = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'templates', 'modelo_previsao.xlsx')
     gerar_previsao_adaptativa(
         destino=out_xlsx,
         R=R2,
@@ -277,6 +279,7 @@ def gerar(sid: str, dec: Decisoes):
         impacto_receita_mensal=impacto_receita,
         inad_detalhe=estado['inadimplencia'],
         inad_meta=estado['inad_meta'],
+        referencia=modelo if os.path.exists(modelo) else None,
     )
 
     estado['status'] = 'gerado'
