@@ -777,29 +777,15 @@ def _ws_header(ws, row, headers, widths=None):
 
 def analisar(folder):
     """Executa parsing + classificacao + regras; retorna dict com tudo.
-    Usa IA (Claude API) como parser principal; fallback para parsers rigidos."""
+    Parsers de codigo sao PRIMARIOS (precisao). IA atua na CLASSIFICACAO e PARECER."""
     nome = os.path.basename(folder.rstrip('/'))
 
-    # --- IA-powered parsing (substitui os 4 parsers rigidos) ---
-    ia_dados = None
-    try:
-        from ia_parser import ia_parse_pasta
-        ia_dados = ia_parse_pasta(folder)
-    except Exception as e:
-        print(f'   ⚠️  ia_parser indisponivel ({e}) — usando parsers rigidos')
-
-    if ia_dados:
-        bal = ia_dados['bal']
-        des = ia_dados['des']
-        sin = ia_dados['sin']
-        ina = ia_dados['inad'] if ia_dados['inad'] and ia_dados['inad'].get('itens') else None
-    else:
-        # --- Fallback: parsers rigidos originais ---
-        bal = parse_balanual(os.path.join(folder, 'balanual.xls'))
-        des = parse_desbai(os.path.join(folder, 'desbai06.xls'))
-        sin = parse_dessin(os.path.join(folder, 'dessin02.xls'))
-        inad_path = os.path.join(folder, 'inad01.xls')
-        ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
+    # --- Parsers de codigo (primario — mais precisos para extracao) ---
+    bal = parse_balanual(os.path.join(folder, 'balanual.xls'))
+    des = parse_desbai(os.path.join(folder, 'desbai06.xls'))
+    sin = parse_dessin(os.path.join(folder, 'dessin02.xls'))
+    inad_path = os.path.join(folder, 'inad01.xls')
+    ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
 
     prev_paths = glob.glob(os.path.join(folder, 'Previs*.xlsx'))
     manual = parse_previsao(prev_paths[0]) if prev_paths else None
