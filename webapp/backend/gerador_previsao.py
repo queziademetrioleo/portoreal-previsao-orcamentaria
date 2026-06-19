@@ -289,6 +289,28 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                                          or v.upper().startswith('COND')):
                 ws_p.cell(r, 1).value = nome_condominio
 
+        # Linha de Obras/Benfeitorias MANTIDAS na revisão (R1 reprovado). O
+        # template não tem linha de Obras na PREVISÃO; usamos uma linha livre
+        # (dentro do range do SUBTOTAL) referenciando o grupo Obras da CONTAS.
+        # Fica 0 quando nada é mantido.
+        if ' C O N T A S ' in wb.sheetnames:
+            ws_c2 = wb[' C O N T A S ']
+            r_obras = None
+            for rr in range(1, ws_c2.max_row + 1):
+                nrc = _norm(ws_c2.cell(rr, 3).value)
+                code_a = str(ws_c2.cell(rr, 1).value or '').strip()
+                if 'obras' in nrc and re.match(r'^\d{2}$', code_a):
+                    r_obras = rr
+                    break
+            if r_obras:
+                # achar primeira linha de despesa livre (C vazio) antes do SUBTOTAL
+                for rr in range(22, 48):
+                    nome_l = _norm(ws_p.cell(rr, 3).value)
+                    if not nome_l:
+                        ws_p.cell(rr, 3).value = 'Despesas com Obras/Benfeitorias'
+                        ws_p.cell(rr, 4).value = f"=' C O N T A S '!$I${r_obras}"
+                        break
+
         # IMPORTANTE: nesta planilha a PREVISAO e inteiramente movida por
         # formulas que apontam para a CONTAS (ex.: D22 = CONTAS!I64,
         # contratos D33..D42 = CONTAS!I194..I203). Preencher a CONTAS

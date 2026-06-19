@@ -988,10 +988,13 @@ def recalcular(R):
     Usado pelo webapp apos o usuario aprovar/reprovar itens na interface.
     Retorna o mesmo dict R, atualizado com as novas linhas e subtotais."""
     extra_por_classe = defaultdict(float)
+    keep_por_classe = defaultdict(float)  # NFs que o humano REPROVOU (manter na base)
     for it in R['des']['itens']:
+        key = (_norm(it['grupo'] or ''), _norm(it['classe'] or ''))
         if it['cat'] == 'Extraordinaria':
-            extra_por_classe[(_norm(it['grupo'] or ''),
-                              _norm(it['classe'] or ''))] += it['valor_pago']
+            extra_por_classe[key] += it['valor_pago']
+        elif it['cat'] == 'Recorrente':
+            keep_por_classe[key] += it['valor_pago']
 
     bal = R['bal']
     media_ult = {}
@@ -1006,8 +1009,15 @@ def recalcular(R):
         base = l['total']
         ded, regra, final = 0.0, '', base
         if 'obras' in ng or 'benfeitoria' in ng:
-            desconsider += base
-            ded, final, regra = base, 0.0, 'R1: Obras/Benfeitorias'
+            # R1: capital, excluído por padrão. Mas se o humano REPROVOU itens
+            # (decidiu manter), essa parte volta para a base (e aparece numa
+            # linha de Obras na PREVISÃO via gerador).
+            kept = min(keep_por_classe.get((ng, nc), 0.0), base)
+            final = round(kept, 2)
+            ded = base - final
+            desconsider += ded
+            regra = ('R1: Obras — parte mantida na revisão' if kept > 0.005
+                     else 'R1: Obras/Benfeitorias')
         elif 'diversas' in ng and 'seguro' not in nc:
             # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
             # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
