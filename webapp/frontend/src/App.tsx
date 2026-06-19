@@ -157,6 +157,24 @@ function CartaoItem({ item, onDecisao, opcoes, onEditar }: {
   )
 }
 
+// ----------------------------------------------------- Item revisado (cinza) ---
+function CartaoRevisado({ item, onReabrir }: { item: ItemRevisao; onReabrir: () => void }) {
+  const removido = item.decisao === 'aprovada'
+  return (
+    <div className="rev-item">
+      <div className="rev-main">
+        <span className="rev-classe">{item.classe}</span>
+        <span className="rev-meta">{item.grupo}</span>
+      </div>
+      <span className={`rev-tag ${removido ? 'rem' : 'man'}`}>
+        {removido ? 'removido da base' : 'mantido na base'}
+      </span>
+      <span className="rev-valor">{brl(item.valor)}</span>
+      <button className="mini neutro rev-reabrir" onClick={onReabrir}>↩ Reabrir</button>
+    </div>
+  )
+}
+
 // ------------------------------------------------------------- Revisão ---
 function TelaRevisao({ sessao }: { sessao: Sessao }) {
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
@@ -237,8 +255,6 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
     { valor: 'pendente', rotulo: 'Decidir depois', classe: 'neutro' },
   ]
 
-  const pendentes = revisar.filter(i => i.decisao === 'pendente').length
-
   return (
     <div className="revisao">
       <header className="topo-fixo">
@@ -268,54 +284,48 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
 
       <section>
         <h3>🔴 Despesas extraordinárias detectadas <small>
-          ({extra.filter(i => i.decisao === 'aprovada').length} de {extra.length} aprovadas como extraordinárias
-          = {brl(aoVivo.dedExtra)} removidos da base)</small></h3>
-        <p className="dica">A análise já marcou estes itens como extraordinários. Confirme um a um — ou clique em "Não é extraordinário" para devolver o gasto à base recorrente. Ao decidir, o item vai para "Resolvidos".</p>
+          ({extra.filter(i => !feitos.has(i.id)).length} pendentes de {extra.length}
+          · {brl(aoVivo.dedExtra)} removidos da base)</small></h3>
+        <p className="dica">Já marcadas como extraordinárias. Confirme cada uma — ou marque "Não é extraordinário" para mantê-la na base. Ao decidir, o item vai para <strong>✓ Revisados</strong> (abaixo).</p>
         {extra.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opExtra}
                       onDecisao={d => {
                         setExtra(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))
-                        // aprovar (extraordinário) some da lista; recorrente fica visível (cinza)
-                        if (d === 'aprovada') marcarFeito(item.id); else reabrir(item.id)
+                        marcarFeito(item.id)   // qualquer decisão -> vai p/ Revisados
                       }} />
         ))}
-        {extra.filter(i => !feitos.has(i.id)).length === 0 && extra.length > 0 &&
-          <p className="vazio">✓ Todos os {extra.length} itens revisados.</p>}
-        {extra.some(i => feitos.has(i.id)) && (
-          <details className="resolvidos">
-            <summary>✓ {extra.filter(i => feitos.has(i.id)).length} resolvido(s) — clique para revisar/reabrir</summary>
-            {extra.filter(i => feitos.has(i.id)).map(item => (
-              <CartaoItem key={item.id} item={item} opcoes={opExtra}
-                          onDecisao={() => {}} onEditar={() => reabrir(item.id)} />
-            ))}
-          </details>
-        )}
+        {extra.filter(i => !feitos.has(i.id)).length === 0 &&
+          <p className="vazio">✓ Tudo revisado nesta seção.</p>}
       </section>
 
       <section>
         <h3>🟡 Em revisão — você decide <small>
-          ({revisar.length} itens ambíguos · {pendentes} sem decisão · {brl(aoVivo.dedRev)} removidos até agora)</small></h3>
-        <p className="dica">A análise não teve certeza nestes itens. Sem a sua decisão, eles permanecem na base (postura conservadora). Ao decidir, o item vai para "Resolvidos".</p>
+          ({revisar.filter(i => !feitos.has(i.id)).length} pendentes de {revisar.length}
+          · {brl(aoVivo.dedRev)} removidos até agora)</small></h3>
+        <p className="dica">A análise não teve certeza nestes itens. Sem decisão, permanecem na base (conservador). "Decidir depois" mantém na lista.</p>
         {revisar.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opRevisar}
                       onDecisao={d => {
                         setRevisar(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))
-                        // "é extraordinário" (aprovada) some; recorrente fica cinza; pendente fica
-                        if (d === 'aprovada') marcarFeito(item.id); else reabrir(item.id)
+                        if (d === 'pendente') reabrir(item.id); else marcarFeito(item.id)
                       }} />
         ))}
-        {revisar.filter(i => !feitos.has(i.id)).length === 0 && revisar.length > 0 &&
-          <p className="vazio">✓ Todos os {revisar.length} itens revisados.</p>}
-        {revisar.some(i => feitos.has(i.id)) && (
-          <details className="resolvidos">
-            <summary>✓ {revisar.filter(i => feitos.has(i.id)).length} resolvido(s) — clique para revisar/reabrir</summary>
-            {revisar.filter(i => feitos.has(i.id)).map(item => (
-              <CartaoItem key={item.id} item={item} opcoes={opRevisar}
-                          onDecisao={() => {}} onEditar={() => reabrir(item.id)} />
-            ))}
-          </details>
-        )}
+        {revisar.filter(i => !feitos.has(i.id)).length === 0 &&
+          <p className="vazio">✓ Tudo revisado nesta seção.</p>}
       </section>
+
+      {(() => {
+        const decididos = [...extra, ...revisar].filter(i => feitos.has(i.id))
+        if (!decididos.length) return null
+        return (
+          <section className="secao-revisados">
+            <h3>✓ Revisados <small>({decididos.length} já tratados — “Reabrir” para mudar)</small></h3>
+            {decididos.map(item => (
+              <CartaoRevisado key={item.id} item={item} onReabrir={() => reabrir(item.id)} />
+            ))}
+          </section>
+        )
+      })()}
 
       <section>
         <h3>💸 Inadimplência <small>

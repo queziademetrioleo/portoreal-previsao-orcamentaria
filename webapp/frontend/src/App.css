@@ -168,10 +168,26 @@ h3 small { color: var(--cinza); font-weight: 400; font-size: .8rem; }
   .acoes { flex-direction: row; }
 }
 
-/* Itens resolvidos (já decididos) — recolhidos e esmaecidos */
-.resolvidos { margin-top: 10px; border-top: 1px dashed var(--borda); padding-top: 8px; }
-.resolvidos > summary { cursor: pointer; font-size: .85rem; color: var(--cinza); font-weight: 600; padding: 6px 0; list-style: revert; }
-.resolvidos > summary:hover { color: var(--azul); }
-.item.resolvido { opacity: .68; }
-.item.resolvido:hover { opacity: 1; }
 .vazio { font-size: .85rem; color: var(--verde); font-style: italic; padding: 6px 0; }
+
+/* ---------- Seção REVISADOS (itens já decididos, em cinza) ---------- */
+.secao-revisados { margin-top: 28px; }
+.secao-revisados h3 { color: var(--cinza); border-top: 2px solid var(--borda); padding-top: 16px; }
+.rev-item {
+  display: flex; align-items: center; gap: 12px;
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 9px 14px; margin: 6px 0;
+  filter: grayscale(1); transition: filter .15s, background .15s;
+}
+.rev-item:hover { filter: grayscale(.4); background: #eef0f3; }
+.rev-main { flex: 1; min-width: 0; }
+.rev-classe { display: block; font-weight: 600; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rev-meta { font-size: .72rem; color: #9aa3b0; }
+.rev-tag {
+  font-size: .7rem; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap; background: #e5e7eb; text-transform: uppercase; letter-spacing: .3px;
+}
+.rev-tag.rem { color: #8a4a3c; }
+.rev-tag.man { color: #4b5563; }
+.rev-valor { font-weight: 700; color: #6b7280; white-space: nowrap; min-width: 90px; text-align: right; }
+.rev-reabrir { padding: 6px 10px; font-size: .75rem; }
