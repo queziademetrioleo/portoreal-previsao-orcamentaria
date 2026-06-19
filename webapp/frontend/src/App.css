@@ -161,3 +161,11 @@ h3 small { color: var(--cinza); font-weight: 400; font-size: .8rem; }
   .item { flex-direction: column; align-items: stretch; }
   .acoes { flex-direction: row; }
 }
+
+/* Itens resolvidos (já decididos) — recolhidos e esmaecidos */
+.resolvidos { margin-top: 10px; border-top: 1px dashed var(--borda); padding-top: 8px; }
+.resolvidos > summary { cursor: pointer; font-size: .85rem; color: var(--cinza); font-weight: 600; padding: 6px 0; list-style: revert; }
+.resolvidos > summary:hover { color: var(--azul); }
+.item.resolvido { opacity: .68; }
+.item.resolvido:hover { opacity: 1; }
+.vazio { font-size: .85rem; color: var(--verde); font-style: italic; padding: 6px 0; }

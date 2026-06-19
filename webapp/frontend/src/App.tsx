@@ -119,14 +119,15 @@ const BADGES: Record<ItemRevisao['decisao'], { texto: string; classe: string }> 
   pendente: { texto: '🟡 SEM DECISÃO — permanece na base por segurança', classe: 'badge-pendente' },
 }
 
-function CartaoItem({ item, onDecisao, opcoes }: {
+function CartaoItem({ item, onDecisao, opcoes, onEditar }: {
   item: ItemRevisao
   onDecisao: (d: ItemRevisao['decisao']) => void
   opcoes: Array<{ valor: ItemRevisao['decisao']; rotulo: string; classe: string }>
+  onEditar?: () => void
 }) {
   const badge = BADGES[item.decisao]
   return (
-    <div className={`item ${item.decisao}`}>
+    <div className={`item ${item.decisao} ${onEditar ? 'resolvido' : ''}`}>
       <div className="item-info">
         <div className="item-topo">
           <strong>{item.classe}</strong>
@@ -140,13 +141,17 @@ function CartaoItem({ item, onDecisao, opcoes }: {
         <div className={`badge ${badge.classe}`}>{badge.texto}</div>
       </div>
       <div className="acoes">
-        {opcoes.map(o => (
-          <button key={o.valor}
-                  className={`mini ${o.classe} ${item.decisao === o.valor ? 'ativa' : ''}`}
-                  onClick={() => onDecisao(o.valor)}>
-            {item.decisao === o.valor ? '✓ ' : ''}{o.rotulo}
-          </button>
-        ))}
+        {onEditar ? (
+          <button className="mini neutro" onClick={onEditar}>↩ Reabrir</button>
+        ) : (
+          opcoes.map(o => (
+            <button key={o.valor}
+                    className={`mini ${o.classe} ${item.decisao === o.valor ? 'ativa' : ''}`}
+                    onClick={() => onDecisao(o.valor)}>
+              {item.decisao === o.valor ? '✓ ' : ''}{o.rotulo}
+            </button>
+          ))
+        )}
       </div>
     </div>
   )
@@ -157,6 +162,10 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
+  // itens já decididos pelo humano somem da lista de pendentes (vão p/ "Resolvidos")
+  const [feitos, setFeitos] = useState<Set<number>>(new Set())
+  const marcarFeito = (id: number) => setFeitos(s => new Set(s).add(id))
+  const reabrir = (id: number) => setFeitos(s => { const n = new Set(s); n.delete(id); return n })
   const [gerando, setGerando] = useState(false)
   const [resultado, setResultado] = useState<{ subtotal: number; total: number; impacto: number } | null>(null)
   const [erro, setErro] = useState('')
@@ -261,21 +270,43 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
         <h3>🔴 Despesas extraordinárias detectadas <small>
           ({extra.filter(i => i.decisao === 'aprovada').length} de {extra.length} aprovadas como extraordinárias
           = {brl(aoVivo.dedExtra)} removidos da base)</small></h3>
-        <p className="dica">A análise já marcou estes itens como extraordinários. Confirme um a um — ou clique em "Não é extraordinário" para devolver o gasto à base recorrente.</p>
-        {extra.map(item => (
+        <p className="dica">A análise já marcou estes itens como extraordinários. Confirme um a um — ou clique em "Não é extraordinário" para devolver o gasto à base recorrente. Ao decidir, o item vai para "Resolvidos".</p>
+        {extra.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opExtra}
-                      onDecisao={d => setExtra(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))} />
+                      onDecisao={d => { setExtra(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x)); marcarFeito(item.id) }} />
         ))}
+        {extra.filter(i => !feitos.has(i.id)).length === 0 && extra.length > 0 &&
+          <p className="vazio">✓ Todos os {extra.length} itens revisados.</p>}
+        {extra.some(i => feitos.has(i.id)) && (
+          <details className="resolvidos">
+            <summary>✓ {extra.filter(i => feitos.has(i.id)).length} resolvido(s) — clique para revisar/reabrir</summary>
+            {extra.filter(i => feitos.has(i.id)).map(item => (
+              <CartaoItem key={item.id} item={item} opcoes={opExtra}
+                          onDecisao={() => {}} onEditar={() => reabrir(item.id)} />
+            ))}
+          </details>
+        )}
       </section>
 
       <section>
         <h3>🟡 Em revisão — você decide <small>
           ({revisar.length} itens ambíguos · {pendentes} sem decisão · {brl(aoVivo.dedRev)} removidos até agora)</small></h3>
-        <p className="dica">A análise não teve certeza nestes itens. Sem a sua decisão, eles permanecem na base (postura conservadora).</p>
-        {revisar.map(item => (
+        <p className="dica">A análise não teve certeza nestes itens. Sem a sua decisão, eles permanecem na base (postura conservadora). Ao decidir, o item vai para "Resolvidos".</p>
+        {revisar.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opRevisar}
-                      onDecisao={d => setRevisar(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))} />
+                      onDecisao={d => { setRevisar(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x)); marcarFeito(item.id) }} />
         ))}
+        {revisar.filter(i => !feitos.has(i.id)).length === 0 && revisar.length > 0 &&
+          <p className="vazio">✓ Todos os {revisar.length} itens revisados.</p>}
+        {revisar.some(i => feitos.has(i.id)) && (
+          <details className="resolvidos">
+            <summary>✓ {revisar.filter(i => feitos.has(i.id)).length} resolvido(s) — clique para revisar/reabrir</summary>
+            {revisar.filter(i => feitos.has(i.id)).map(item => (
+              <CartaoItem key={item.id} item={item} opcoes={opRevisar}
+                          onDecisao={() => {}} onEditar={() => reabrir(item.id)} />
+            ))}
+          </details>
+        )}
       </section>
 
       <section>
