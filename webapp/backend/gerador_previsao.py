@@ -273,17 +273,20 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     # ---------- PREVISAO ----------
     ws_p = None
     for nome in wb.sheetnames:
-        if 'REVIS' in nome.upper() and '(2)' not in nome:
+        # nome da aba vem espacado: ' P R E V I S Ã O ' -> remover espacos p/ casar
+        if 'REVIS' in nome.upper().replace(' ', '') and '(2)' not in nome:
             ws_p = wb[nome]
             break
 
     if ws_p:
-        # Atualizar cabecalho
+        # Atualizar cabecalho: titulo com o ano (preserva acentos) e nome do
+        # condominio onde houver placeholder (BARRAMARES / COND. ...).
         for r in range(1, 10):
             v = ws_p.cell(r, 1).value
             if isinstance(v, str) and ('PREVIS' in v.upper() or 'ORCAMENT' in v.upper()):
-                ws_p.cell(r, 1).value = f'PREVISAO ORCAMENTARIA PARA {ano}'
-            if isinstance(v, str) and 'BARRAMARES' in v.upper():
+                ws_p.cell(r, 1).value = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
+            elif isinstance(v, str) and ('BARRAMARES' in v.upper()
+                                         or v.upper().startswith('COND')):
                 ws_p.cell(r, 1).value = nome_condominio
 
         # IMPORTANTE: nesta planilha a PREVISAO e inteiramente movida por
@@ -355,9 +358,17 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:
-        if 'REVIS' in nome.upper() and '(2)' in nome:
+        if 'REVIS' in nome.upper().replace(' ', '') and '(2)' in nome:
             ws_p2 = wb[nome]
             ws_p2['E11'] = num_frac
+            # A6 do template = VLOOKUP(Cadastro!A4,...) que resolvia para o nome
+            # do condominio do template (BARRAMARES XX). Sobrescreve com o nome
+            # real desta previsao. A8 = titulo com o ano correto.
+            cab = str(ws_p2['A6'].value or '')
+            if cab.startswith('=') or 'BARRAMARES' in cab.upper() or cab.upper().startswith('COND'):
+                ws_p2['A6'] = nome_condominio
+            if isinstance(ws_p2['A8'].value, str) and 'PREVIS' in ws_p2['A8'].value.upper():
+                ws_p2['A8'] = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
             break
 
     # ---------- Inadimplencia ----------
