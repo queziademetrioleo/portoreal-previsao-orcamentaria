@@ -676,6 +676,9 @@ RECORRENTE_HINTS = [
     'servico de faxina',
 ]
 GENERIC_CLASSES = ['outras despesas', 'outros materiais', 'outros', 'estorno']
+# Baldes genéricos no grupo Despesas Diversas que NÃO devem virar provisão de
+# Laudo (R4): são heterogêneos e a decisão de manter/excluir é humana (revisão).
+DIVERSAS_GENERICAS = ['outras despesa', 'outros', 'estorno', 'diversas']
 # Termos inequivocamente de CAPITAL/obra (nunca aparecem em compras rotineiras de consumo)
 CAPITAL_KW = ['reforma', 'benfeitoria', 'laudo', 'projeto',
               'reconstruc', 'autovistoria']
@@ -841,6 +844,11 @@ def analisar(folder):
             # estão mal classificados no grupo. Manter na base (como os manuais fazem).
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
                 regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
+            elif any(k in nc for k in DIVERSAS_GENERICAS):
+                # Balde genérico (ex.: "Outras Despesas") — NÃO virar provisão de
+                # Laudo (não é laudo). Mantém visível na linha de Diversas para
+                # decisão humana na revisão (caso a caso: manter ou excluir).
+                regra = 'Diversas genérica — manter p/ revisao (nao provisionada)'
             else:
                 ded = base; final = 0.0
                 prov_laudo += base
@@ -1001,9 +1009,17 @@ def recalcular(R):
             desconsider += base
             ded, final, regra = base, 0.0, 'R1: Obras/Benfeitorias'
         elif 'diversas' in ng and 'seguro' not in nc:
-            ded, final = base, 0.0
-            prov_laudo += base
-            regra = 'R4: Diversas -> provisao Laudo'
+            # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
+            # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
+            # resto vira provisão de Laudo (R4).
+            if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
+                regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
+            elif any(k in nc for k in DIVERSAS_GENERICAS):
+                regra = 'Diversas genérica — manter p/ revisao (nao provisionada)'
+            else:
+                ded, final = base, 0.0
+                prov_laudo += base
+                regra = 'R4: Diversas -> provisao Laudo'
         elif 'cartoriais' in ng or 'honorarios' in ng:
             ded, final = base, 0.0
             prov_incendio += base
