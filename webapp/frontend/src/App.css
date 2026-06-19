@@ -123,15 +123,21 @@ h3 small { color: var(--cinza); font-weight: 400; font-size: .8rem; }
   transition: background .2s, border-color .2s;
 }
 .item.aprovada { border-left-color: var(--vermelho); background: #fff8f6; }
-.item.reprovada { border-left-color: var(--verde); background: #f7fcf9; }
+.item.reprovada { border-left-color: #9aa3b0; background: #f3f4f6; }
 .item.pendente { border-left-color: #e3b505; background: #fffdf4; }
+
+/* RECORRENTE (mantido na base) = card todo cinza/esmaecido */
+.item.reprovada .item-info,
+.item.reprovada .item-topo .valor,
+.item.reprovada strong { color: #6b7280; }
+.item.reprovada { filter: grayscale(1); }
 
 .badge {
   display: inline-block; margin-top: 8px; padding: 4px 10px;
   border-radius: 999px; font-size: .74rem; font-weight: 700;
 }
 .badge-removido { background: var(--vermelho-bg); color: var(--vermelho); }
-.badge-mantido { background: var(--verde-bg); color: var(--verde); }
+.badge-mantido { background: #e5e7eb; color: #4b5563; }
 .badge-pendente { background: var(--amarelo-bg); color: #8a6d00; }
 
 .dica { color: var(--cinza); font-size: .85rem; margin: 0 0 10px; }

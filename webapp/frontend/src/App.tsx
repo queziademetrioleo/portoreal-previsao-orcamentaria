@@ -115,7 +115,7 @@ function TelaUpload({ onPronto }: { onPronto: (s: Sessao) => void }) {
 // --------------------------------------------------------- Item de revisão ---
 const BADGES: Record<ItemRevisao['decisao'], { texto: string; classe: string }> = {
   aprovada: { texto: '🔴 EXTRAORDINÁRIO — será removido da base', classe: 'badge-removido' },
-  reprovada: { texto: '🟢 RECORRENTE — permanece na base', classe: 'badge-mantido' },
+  reprovada: { texto: '⚪ RECORRENTE — permanece na base (conta no total)', classe: 'badge-mantido' },
   pendente: { texto: '🟡 SEM DECISÃO — permanece na base por segurança', classe: 'badge-pendente' },
 }
 
@@ -273,7 +273,11 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
         <p className="dica">A análise já marcou estes itens como extraordinários. Confirme um a um — ou clique em "Não é extraordinário" para devolver o gasto à base recorrente. Ao decidir, o item vai para "Resolvidos".</p>
         {extra.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opExtra}
-                      onDecisao={d => { setExtra(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x)); marcarFeito(item.id) }} />
+                      onDecisao={d => {
+                        setExtra(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))
+                        // aprovar (extraordinário) some da lista; recorrente fica visível (cinza)
+                        if (d === 'aprovada') marcarFeito(item.id); else reabrir(item.id)
+                      }} />
         ))}
         {extra.filter(i => !feitos.has(i.id)).length === 0 && extra.length > 0 &&
           <p className="vazio">✓ Todos os {extra.length} itens revisados.</p>}
@@ -294,7 +298,11 @@ function TelaRevisao({ sessao }: { sessao: Sessao }) {
         <p className="dica">A análise não teve certeza nestes itens. Sem a sua decisão, eles permanecem na base (postura conservadora). Ao decidir, o item vai para "Resolvidos".</p>
         {revisar.filter(i => !feitos.has(i.id)).map(item => (
           <CartaoItem key={item.id} item={item} opcoes={opRevisar}
-                      onDecisao={d => { setRevisar(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x)); marcarFeito(item.id) }} />
+                      onDecisao={d => {
+                        setRevisar(xs => xs.map(x => x.id === item.id ? { ...x, decisao: d } : x))
+                        // "é extraordinário" (aprovada) some; recorrente fica cinza; pendente fica
+                        if (d === 'aprovada') marcarFeito(item.id); else reabrir(item.id)
+                      }} />
         ))}
         {revisar.filter(i => !feitos.has(i.id)).length === 0 && revisar.length > 0 &&
           <p className="vazio">✓ Todos os {revisar.length} itens revisados.</p>}
