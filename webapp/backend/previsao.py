@@ -39,6 +39,7 @@ sys.modules['previsao_raiz'] = _core
 _spec.loader.exec_module(_core)
 
 # Exporta todos os nomes publicos para o namespace deste modulo
-__all__ = [a for a in dir(_core) if not a.startswith('_')]
+# (inclui nomes com _ pois main.py referencia _ia_modelo, _ia_disponivel, etc.)
+__all__ = [a for a in dir(_core) if not a.startswith('__')]
 for _attr in __all__:
     globals()[_attr] = getattr(_core, _attr)
