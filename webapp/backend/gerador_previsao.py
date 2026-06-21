@@ -407,45 +407,68 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             if isinstance(ws_p2['A8'].value, str) and 'PREVIS' in ws_p2['A8'].value.upper():
                 ws_p2['A8'] = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
 
-            # Constroi mapa da PREVISAO: B_code -> (nome, valor_D, valor_E)
-            prev_map = {}
+            # Constroi listas em ordem da PREVISAO (ignora B codes — sao formulas
+            # que openpyxl nao calcula). A PREVISAO (2) tem a mesma ordem.
+            prev_rec = []   # (nome, val_d, val_e) em ordem
+            prev_desp = []
             for rp in range(1, ws_p.max_row + 1):
-                code_b = ws_p.cell(rp, 2).value
-                if isinstance(code_b, (int, float)) and code_b > 0:
-                    nome = str(ws_p.cell(rp, 3).value or '').strip()
-                    val_d = ws_p.cell(rp, 4).value
-                    val_e = ws_p.cell(rp, 5).value
-                    prev_map[int(code_b)] = (nome, val_d, val_e)
+                nome = str(ws_p.cell(rp, 3).value or '').strip()
+                if not nome:
+                    continue
+                nn = _norm(nome)
+                if nn in ('receitas', 'despesas', 'subtotal', 'total', ''):
+                    continue
+                if 'previsao de inflacao' in nn or 'aumento' in nn:
+                    continue
+                if 'saldo' in nn or 'deficit' in nn or 'superavit' in nn:
+                    continue
+                val_d = ws_p.cell(rp, 4).value
+                val_e = ws_p.cell(rp, 5).value
+                if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
+                    if 10 <= rp <= 19:
+                        prev_rec.append((nome, val_d, val_e))
+                    elif rp >= 22:
+                        prev_desp.append((nome, val_d, val_e))
 
-            # Preenche PREVISAO (2) copiando da PREVISAO pelo codigo B
+            # Preenche PREVISAO (2) na mesma ordem: receitas rows 10-18, despesas rows 22+
+            for i, (nome, val_d, val_e) in enumerate(prev_rec):
+                r2 = 10 + i
+                if r2 <= 18:
+                    ws_p2.cell(r2, 3).value = nome
+                    ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
+                    ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
+
+            for i, (nome, val_d, val_e) in enumerate(prev_desp):
+                r2 = 22 + i
+                if r2 <= 46:
+                    ws_p2.cell(r2, 3).value = nome
+                    ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
+                    ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
+
+            # Linhas de totais: identifica pelo texto da FORMULA (antes de ser limpa)
+            # A formula contem "SUBTOTAL", "TOTAL", "SALDO" etc.
             for r2 in range(1, ws_p2.max_row + 1):
-                code_b2 = ws_p2.cell(r2, 2).value
-                if isinstance(code_b2, (int, float)) and int(code_b2) in prev_map:
-                    nome, val_d, val_e = prev_map[int(code_b2)]
-                    ws_p2.cell(r2, 3).value = nome      # sobrescreve VLOOKUP
-                    if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
-                        ws_p2.cell(r2, 4).value = round(float(val_d), 2)
-                    if isinstance(val_e, (int, float)) and abs(val_e) > 0.005:
-                        ws_p2.cell(r2, 5).value = round(float(val_e), 2)
-                else:
-                    # Linhas de totais: procura por nome normalizado
-                    n2 = _norm(ws_p2.cell(r2, 3).value)
-                    if not n2:
-                        continue
-                    if 'subtotal' in n2:
-                        ws_p2.cell(r2, 3).value = 'SUBTOTAL'
-                        ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
-                        ws_p2.cell(r2, 7).value = 'Inflação'
-                    elif 'infla' in n2 and 'aumento' in n2:
-                        ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
-                    elif n2 == 'total':
-                        ws_p2.cell(r2, 3).value = 'TOTAL'
-                        total = subtotal_val * (1 + inflacao)
-                        ws_p2.cell(r2, 4).value = round(total, 2)
-                        ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
-                    elif 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
-                        rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
-                        ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
+                val_c3 = ws_p2.cell(r2, 3).value
+                val_text = str(val_c3 or '')
+                # Tenta match pelo texto da formula ou pelo valor calculado
+                if 'SUBTOTAL' in val_text.upper():
+                    ws_p2.cell(r2, 3).value = 'SUBTOTAL'
+                    ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
+                    ws_p2.cell(r2, 7).value = 'Inflação'
+                elif 'AUMENTO' in val_text.upper() or ('infla' in _norm(val_text) and 'aumento' in _norm(val_text)):
+                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
+                elif val_text.upper().strip() in ('TOTAL', '="TOTAL"') or (_norm(val_text) == 'total' and 'aumento' not in _norm(val_text)):
+                    ws_p2.cell(r2, 3).value = 'TOTAL'
+                    total = subtotal_val * (1 + inflacao)
+                    ws_p2.cell(r2, 4).value = round(total, 2)
+                    ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
+                elif 'SALDO' in val_text.upper() or 'DEFICIT' in val_text.upper() or 'SUPERAVIT' in val_text.upper():
+                    rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
+                    ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
+                # Fallback: identifica pelo valor na coluna B (99 = inflacao)
+                val_b = ws_p2.cell(r2, 2).value
+                if val_b == 99:
+                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
 
             # Limpa colunas G/H (formulas c/ FR e s/ FR — preserva cabecalhos)
             for r2 in range(1, ws_p2.max_row + 1):
@@ -461,8 +484,8 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # Preenche com valores diretos (VLOOKUPs do template nao recalculam)
         for r in range(1, ws_cd.max_row + 1):
             code_b = ws_cd.cell(r, 2).value
-            if isinstance(code_b, (int, float)) and int(code_b) in prev_map:
-                nome, val_d, val_e = prev_map[int(code_b)]
+            if isinstance(code_b, (int, float)) and int(code_b) in prev_desp:
+                nome, val_d, val_e = prev_desp[int(code_b)]
                 ws_cd.cell(r, 3).value = nome
                 if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
                     ws_cd.cell(r, 4).value = round(float(val_d), 2)
