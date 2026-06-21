@@ -1,18 +1,18 @@
-interface Props {
+export default function BulkActions({ count, onApproveAll, onRejectAll, approveLabel, rejectLabel }: {
+  count: number
   onApproveAll: () => void
   onRejectAll: () => void
-  count: number
-}
-
-export default function BulkActions({ onApproveAll, onRejectAll, count }: Props) {
+  approveLabel?: string
+  rejectLabel?: string
+}) {
   if (count <= 1) return null
   return (
     <div className="bulk-actions">
-      <button className="bulk-aprovar" onClick={onApproveAll}>
-        Aprovar todos ({count})
+      <button className="btn btn-approve btn-sm" onClick={onApproveAll}>
+        ✓ {approveLabel || 'Aprovar todos'} ({count})
       </button>
-      <button className="bulk-reprovar" onClick={onRejectAll}>
-        Rejeitar todos ({count})
+      <button className="btn btn-reject btn-sm" onClick={onRejectAll}>
+        ✗ {rejectLabel || 'Rejeitar todos'} ({count})
       </button>
     </div>
   )

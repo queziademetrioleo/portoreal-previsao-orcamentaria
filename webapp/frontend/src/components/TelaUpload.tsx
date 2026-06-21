@@ -1,137 +1,109 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { criarSessao } from '../api'
 import type { Sessao } from '../types'
 
-interface Props {
-  onSessaoCriada: (s: Sessao) => void
+export default function TelaUpload({ onCriada, onVoltar }: {
+  onCriada: (s: Sessao) => void
   onVoltar: () => void
-}
-
-const ETAPAS = [
-  'Lendo balanual.xls — demonstrativo de receitas e despesas...',
-  'Lendo desbai06.xls — despesas nota fiscal por nota fiscal...',
-  'Extraindo contas, grupos e valores mensais...',
-  'Analisando inadimplencia...',
-  'IA classificando notas fiscais ambiguas...',
-  'Aplicando regras de calculo (R1 a R8)...',
-  'Montando resultado final...',
-]
-
-const CAMPOS: Array<{ chave: string; rotulo: string; obrigatorio: boolean }> = [
-  { chave: 'balanual', rotulo: 'balanual.xls — Demonstrativo anual', obrigatorio: true },
-  { chave: 'desbai', rotulo: 'desbai06.xls — Despesas baixadas (NF a NF)', obrigatorio: true },
-  { chave: 'dessin', rotulo: 'dessin02.xls — Sintetico de despesas', obrigatorio: false },
-  { chave: 'inad', rotulo: 'inad01.xls — Inadimplencia', obrigatorio: false },
-]
-
-export default function TelaUpload({ onSessaoCriada, onVoltar }: Props) {
+}) {
   const [nome, setNome] = useState('')
-  const [ano, setAno] = useState(new Date().getFullYear() + 1)
-  const [arquivos, setArquivos] = useState<Record<string, File | null>>({
-    balanual: null, desbai: null, dessin: null, inad: null,
-  })
-  const [carregando, setCarregando] = useState(false)
+  const [ano, setAno] = useState(new Date().getFullYear())
+  const [balanual, setBalanual] = useState<File | null>(null)
+  const [desbai, setDesbai] = useState<File | null>(null)
+  const [dessin, setDessin] = useState<File | null>(null)
+  const [inad, setInad] = useState<File | null>(null)
+  const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
-  const [progresso, setProgresso] = useState('')
+  const formRef = useRef<HTMLFormElement>(null)
 
-  async function enviar() {
-    if (!nome.trim() || !arquivos.balanual || !arquivos.desbai) {
-      setErro('Preencha o nome do condominio e os dois arquivos obrigatorios.')
-      return
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nome.trim()) { setErro('Informe o nome do condomínio.'); return }
+    if (!ano || ano < 2020 || ano > 2035) { setErro('Informe um ano válido (2020–2035).'); return }
+    if (!balanual || !desbai) { setErro('Os arquivos balanual.xls e desbai06.xls são obrigatórios.'); return }
     setErro('')
-    setCarregando(true)
-    setProgresso(ETAPAS[0])
-
-    let i = 0
-    const anim = setInterval(() => {
-      i = (i + 1) % ETAPAS.length
-      setProgresso(ETAPAS[i])
-    }, 3000)
-
+    setLoading(true)
     try {
-      const s = await criarSessao({
-        nome: nome.trim(), ano,
-        balanual: arquivos.balanual, desbai: arquivos.desbai,
-        dessin: arquivos.dessin, inad: arquivos.inad,
-      })
-      clearInterval(anim)
-      onSessaoCriada(s)
-    } catch (e) {
-      clearInterval(anim)
-      setErro(e instanceof Error ? e.message : String(e))
+      const s = await criarSessao({ nome: nome.trim(), ano, balanual, desbai, dessin, inad })
+      onCriada(s)
+    } catch (err: any) {
+      setErro(err.message || 'Erro ao enviar os arquivos.')
     } finally {
-      setCarregando(false)
-      setProgresso('')
+      setLoading(false)
     }
   }
 
-  return (
-    <div className="card upload fade-in">
-      <div className="upload-header">
-        <button className="btn-voltar" onClick={onVoltar}>
-          &larr; Voltar
-        </button>
-        <div className="header-logo">
-          <img src="/assets/logo.png" alt="Porto Real" className="logo" />
-          <div>
-            <h1>Previsao Orcamentaria</h1>
-            <p className="sub">
-              Envie os relatorios do Condominio para que a analise seja feita
-              e a IA consiga gerar seu relatorio. Uma revisao sera feita antes
-              de gerar o documento final.
-            </p>
-          </div>
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="upload-card card" style={{textAlign:'center'}}>
+          <div className="spinner" />
+          <p className="spinner-text">Analisando os relatórios... Isso pode levar alguns segundos.</p>
+          <p className="spinner-text" style={{color:'var(--t3)',fontSize:'12px'}}>A IA está classificando as despesas.</p>
         </div>
       </div>
+    )
+  }
 
-      <label className="campo">
-        <span>Nome do condominio</span>
-        <input
-          value={nome}
-          onChange={e => setNome(e.target.value)}
-          placeholder="COND. ED. CHATEAU LAVOISIER"
-        />
-      </label>
+  return (
+    <>
+      <header className="app-header">
+        <a href="/" className="logo" onClick={e => { e.preventDefault(); onVoltar() }}>
+          <img src="/assets/logo.png" alt="" /> Previsão Orçamentária
+        </a>
+        <button className="btn btn-ghost btn-sm" onClick={onVoltar}>← Voltar</button>
+      </header>
+      <div className="container">
+        <div className="upload-card card">
+          <div className="eyebrow">Nova Análise</div>
+          <h1 className="title">Envie os relatórios</h1>
+          <p className="subtitle">Anexe os arquivos exportados do Condomínio21.</p>
 
-      <label className="campo">
-        <span>Ano da previsao</span>
-        <input
-          type="number"
-          value={ano}
-          onChange={e => setAno(Number(e.target.value))}
-        />
-      </label>
+          {erro && <div className="erro">{erro}</div>}
 
-      {CAMPOS.map(c => (
-        <label key={c.chave} className={`arquivo ${arquivos[c.chave] ? 'ok' : ''}`}>
-          <span>
-            {c.rotulo} {c.obrigatorio ? '*' : '(opcional)'}
-          </span>
-          <input
-            type="file"
-            accept=".xls"
-            onChange={e =>
-              setArquivos(a => ({ ...a, [c.chave]: e.target.files?.[0] ?? null }))
-            }
-          />
-          {arquivos[c.chave] && <em>{arquivos[c.chave]!.name}</em>}
-        </label>
-      ))}
+          <form ref={formRef} onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Condomínio</label>
+              <input className="form-input" type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do condomínio" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Ano da previsão</label>
+              <input className="form-input" type="number" value={ano} onChange={e => setAno(Number(e.target.value))} min={2020} max={2035} />
+            </div>
 
-      {erro && <div className="erro">{erro}</div>}
+            <div className="form-group">
+              <label className="form-label">Relatórios</label>
+              <div className="file-grid">
+                <FileZone label="balanual.xls" file={balanual} setFile={setBalanual} required />
+                <FileZone label="desbai06.xls" file={desbai} setFile={setDesbai} required />
+                <FileZone label="dessin02.xls" file={dessin} setFile={setDessin} />
+                <FileZone label="inad01.xls" file={inad} setFile={setInad} />
+              </div>
+              <p className="file-hint">* balanual.xls e desbai06.xls são obrigatórios</p>
+            </div>
 
-      {carregando ? (
-        <div className="loading-container">
-          <div className="spinner" />
-          <p className="loading-texto">{progresso}</p>
-          <p className="loading-aviso">Aguarde — isso pode levar ate 3 minutos</p>
+            <button type="submit" className="btn btn-primary btn-full" style={{marginTop:'var(--s-lg)'}}>
+              Iniciar análise
+            </button>
+          </form>
         </div>
-      ) : (
-        <button className="primario" onClick={enviar}>
-          Analisar
-        </button>
-      )}
-    </div>
+      </div>
+    </>
+  )
+}
+
+function FileZone({ label, file, setFile, required }: {
+  label: string
+  file: File | null
+  setFile: (f: File | null) => void
+  required?: boolean
+}) {
+  return (
+    <label className={`file-zone${file ? ' has-file' : ''}`}>
+      <input type="file" accept=".xls,.xlsx" onChange={e => setFile(e.target.files?.[0] || null)} />
+      <span className="file-icon">{file ? '📄' : '📎'}</span>
+      <span className="file-name">{file ? file.name : label}{required ? ' *' : ''}</span>
+      {file && <span className="file-check">✓</span>}
+    </label>
   )
 }
