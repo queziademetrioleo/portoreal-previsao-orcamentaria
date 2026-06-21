@@ -61,6 +61,39 @@ def _carregar_estado(sid):
     return json.loads(row['estado_json'])
 
 
+def _json_dumps(obj):
+    """Serializa objeto para JSON, convertendo chaves tupla em string."""
+    def _converter(o):
+        if isinstance(o, dict):
+            return {str(k) if isinstance(k, tuple) else k: _converter(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [_converter(v) for v in o]
+        if isinstance(o, tuple):
+            return str(o)
+        return o
+    return json.dumps(_converter(obj), ensure_ascii=False, default=str)
+
+
+def _json_loads(s):
+    """Carrega JSON, convertendo chaves que parecem tuplas de volta para tupla."""
+    import ast
+    def _converter(o):
+        if isinstance(o, dict):
+            result = {}
+            for k, v in o.items():
+                if isinstance(k, str) and k.startswith('(') and k.endswith(')'):
+                    try:
+                        k = ast.literal_eval(k)
+                    except (ValueError, SyntaxError):
+                        pass
+                result[k] = _converter(v)
+            return result
+        if isinstance(o, list):
+            return [_converter(v) for v in o]
+        return o
+    return _converter(json.loads(s))
+
+
 def _obter_R(sid):
     """Retorna o cache de analise (R) do MySQL; fallback para core.analisar()."""
     row = db.carregar_sessao(sid)
@@ -68,7 +101,7 @@ def _obter_R(sid):
         raise HTTPException(404, 'Sessao nao encontrada')
     if row.get('cache_analise'):
         try:
-            return json.loads(row['cache_analise'])
+            return _json_loads(row['cache_analise'])
         except (json.JSONDecodeError, TypeError):
             pass
     # Fallback: reconstituir arquivos do MySQL e re-analisar
@@ -79,7 +112,7 @@ def _obter_R(sid):
                 with open(os.path.join(tmpdir, fname), 'wb') as f:
                     f.write(content)
         R = core.analisar(tmpdir)
-        db.salvar_cache_analise(sid, json.dumps(R, ensure_ascii=False, default=str))
+        db.salvar_cache_analise(sid, _json_dumps(R))
         return R
 
 
@@ -274,7 +307,7 @@ async def criar_sessao(
 
     estado = _montar_estado(sid, nome_condominio, ano_previsao, R)
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
-    db.salvar_cache_analise(sid, json.dumps(R, ensure_ascii=False, default=str))
+    db.salvar_cache_analise(sid, _json_dumps(R))
     return JSONResponse(estado)
 
 
