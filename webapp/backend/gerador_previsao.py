@@ -317,11 +317,15 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # corretamente ja resolve a PREVISAO. So escrevemos um valor estatico
         # quando a celula NAO for formula (templates sem formula / do-zero),
         # nunca sobrescrevendo as formulas do modelo.
-        def _set_se_nao_formula(r, c, valor):
-            atual = ws_p.cell(r, c).value
-            if isinstance(atual, str) and atual.startswith('='):
-                return
+        def _set(r, c, valor):
+            """Sempre sobrescreve o valor — formulas do template nao sao
+            confiaveis porque o openpyxl nao recalcula, e as referencias
+            (ex.: =' C O N T A S '!$I$64) apontam para linhas fixas que
+            podem nao corresponder ao condominio atual."""
             ws_p.cell(r, c).value = valor
+
+        # compatibilidade: chamadas antigas a _set_se_nao_formula
+        _set_se_nao_formula = _set
 
         # Receitas
         for ln in bal.get('receitas', []):
