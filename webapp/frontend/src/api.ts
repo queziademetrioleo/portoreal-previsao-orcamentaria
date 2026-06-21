@@ -1,6 +1,6 @@
 import { type Sessao } from './types'
 
-const BASE = import.meta.env.DEV ? 'http://localhost:8000' : ''
+export const BASE = import.meta.env.DEV ? 'http://localhost:8000' : ''
 
 export async function criarSessao(form: {
   nome: string
@@ -58,4 +58,27 @@ export async function previewDocumento(
 
 export function urlDownload(sid: string): string {
   return `${BASE}/api/sessao/${sid}/download`
+}
+
+export async function salvarDecisoes(sid: string, decisoes: any) {
+  const r = await fetch(`${BASE}/api/sessao/${sid}/salvar-decisoes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(decisoes),
+  });
+  return r.json();
+}
+
+export interface SessaoResumida {
+  sessao_id: string
+  nome: string
+  ano: number
+  criado_em: string
+  status: string
+}
+
+export async function listarSessoes(): Promise<SessaoResumida[]> {
+  const r = await fetch(`${BASE}/api/sessoes`)
+  if (!r.ok) throw new Error(`Erro ${r.status}`)
+  return r.json()
 }

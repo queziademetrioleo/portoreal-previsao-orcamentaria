@@ -25,7 +25,7 @@ REGRAS APRENDIDAS DO HISTORICO (2022-2026, 4 condominios):
      provisao para Sistema de Combate a Incendio / Registro da Convencao.
  R6. Contratos, Pro-labore e Taxa de Administracao -> previsao = ultimo valor
      mensal vigente x 12 (anualizacao da tarifa atual, nao a soma historica).
- R7. Reajuste de inflacao: +10% sobre o subtotal.
+ R7. Reajuste de inflacao: +IPCA 4.72% sobre o subtotal (ou PREVISAO_INFLACAO_PCT).
  R8. Inadimplencia: nao entra como despesa; reportada como risco de caixa,
      com regua de criticidade > 3 meses da data-base do inad01.
 """
@@ -661,6 +661,7 @@ REVISAR_CLASSES = [
     'sistema de combate a incendio', 'laudo', 'autovistoria',
     'rescisao trabalhista', 'indenizacao trabalhista', 'indenizacao judicial',
     'acordo judicial', 'taxa sobre realizacao', 'poco semi', 'confeccao',
+    'pensao aliment',  # julgamento humano: deduzir (pontual) ou manter (folha)
 ]
 RECORRENTE_HINTS = [
     'salario', 'inss', 'fgts', 'pis', 'cofins', 'csll', 'ferias',
@@ -675,6 +676,9 @@ RECORRENTE_HINTS = [
     'servico de faxina',
 ]
 GENERIC_CLASSES = ['outras despesas', 'outros materiais', 'outros', 'estorno']
+# Baldes genéricos no grupo Despesas Diversas que NÃO devem virar provisão de
+# Laudo (R4): são heterogêneos e a decisão de manter/excluir é humana (revisão).
+DIVERSAS_GENERICAS = ['outras despesa', 'outros', 'estorno', 'diversas']
 # Termos inequivocamente de CAPITAL/obra (nunca aparecem em compras rotineiras de consumo)
 CAPITAL_KW = ['reforma', 'benfeitoria', 'laudo', 'projeto',
               'reconstruc', 'autovistoria']
@@ -752,7 +756,7 @@ LUMPY_KEYS = list(FATOR_DEDUCAO_HIST.keys())
 PESSOAL_PONTUAL = ['rescisao', 'indenizacao trabalhista', 'pensao aliment']
 ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
              '13. taxa de administrac', '13o taxa']
-INFLACAO = 0.10
+INFLACAO = float(os.environ.get('PREVISAO_INFLACAO_PCT', '0.0472'))
 
 THIN = Side(style='thin', color='CCCCCC')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -763,6 +767,171 @@ WARN_FILL = PatternFill('solid', fgColor='FFF2CC')
 EXTRA_FILL = PatternFill('solid', fgColor='FCE4EC')
 OK_FILL = PatternFill('solid', fgColor='E2EFDA')
 MONEY = '#,##0.00'
+
+
+def detectar_outliers_estatisticos(des, lumpy_keys):
+    """Camada 1 da R3: deteccao estatistica de outliers dentro de cada classe lumpy.
+
+    Usa o metodo MAD (Median Absolute Deviation) que e robusto a distribuicoes
+    assimetricas — comum em classes de manutencao onde ha muitos itens pequenos
+    e alguns grandes.
+
+    Para cada classe, NFs com valor > mediana + 3*MAD*1.4826 sao consideradas
+    outliers (provavel extraordinario).
+
+    Retorna: {(grupo_norm, classe_norm): valor_total_outliers}
+    Requer minimo de 3 NFs na classe para ter significancia estatistica.
+    """
+    import statistics
+
+    # Agrupa NFs por (grupo, classe) para classes lumpy E genericas de Diversas
+    GENERIC_DIVERSAS = ['outras despesa', 'outros', 'estorno', 'diversas']
+    nfs_por_classe = defaultdict(list)
+    for it in des['itens']:
+        ng = _norm(it['grupo'] or '')
+        nc = _norm(it['classe'] or '')
+        if any(k in nc for k in lumpy_keys) or ('diversas' in ng and any(k in nc for k in GENERIC_DIVERSAS)):
+            nfs_por_classe[(ng, nc)].append(it['valor_pago'])
+
+    outliers = {}
+    for (ng, nc), valores in nfs_por_classe.items():
+        n = len(valores)
+        if n < 3:
+            continue  # poucos dados = sem significancia estatistica
+        try:
+            mediana = statistics.median(valores)
+        except Exception:
+            continue
+        if mediana < 0.01:
+            continue  # valores zerados
+        # MAD = median absolute deviation
+        desvios = [abs(v - mediana) for v in valores]
+        try:
+            mad = statistics.median(desvios)
+        except Exception:
+            continue
+        if mad < 0.01:
+            # MAD zero = valores identicos — usa media + 2*desvio padrao como fallback
+            try:
+                media = statistics.mean(valores)
+                std = statistics.stdev(valores)
+            except Exception:
+                continue
+            if std < 0.01:
+                continue
+            threshold = media + 2.0 * std
+        else:
+            # 1.4826 = fator de consistencia para distribuicao normal
+            threshold = mediana + 3.0 * mad * 1.4826
+
+        total_outliers = sum(v for v in valores if v > threshold)
+        if total_outliers > 0:
+            outliers[(ng, nc)] = round(total_outliers, 2)
+
+    return outliers
+
+
+IA_SISTEMA_LUMPY = """\
+Voce e um analista financeiro de condominios no Brasil especializado em previsao orcamentaria.
+
+TAREFA: Para cada classe de manutencao abaixo, analise o padrao de gastos e determine qual
+percentual do total deve ser considerado EXTRAORDINARIO (nao recorrente) para o orcamento.
+
+CONTEXTO — O QUE E EXTRAORDINARIO:
+- Reparos de grande porte: pintura externa completa, reforma de fachada, troca de sistema inteiro
+- Substituicao de equipamentos: bomba nova, motor de portao novo, central de cameras nova
+- Obras pontuais: impermeabilizacao, reconstrucao de calcada, troca de encanamento
+- Manutencoes corretivas de alto valor, claramente acima do padrao mensal da classe
+
+O QUE E RECORRENTE (manter na base):
+- Pequenos reparos e retoques mensais/bimestrais/trimestrais
+- Material de consumo para manutencao preventiva (tinta, rolo, lixa, conectores, lampadas)
+- Visitas tecnicas periodicas de rotina
+- Substituicao de pecas de desgaste normal (rolamentos, vedacoes, filtros)
+
+OUTLIERS ESTATISTICOS ja foram detectados e serao deduzidos automaticamente.
+Sua funcao e encontrar itens extraordinarios que o metodo estatistico NAO pegou
+(ex.: valores medios mas descricao indica evento pontual).
+
+IMPORTANTE: Seja conservador. Na duvida, mantenha como recorrente.
+Itens de baixo valor ou claramente rotineiros devem ficar na base.
+
+Responda APENAS com JSON: {"classes": {"nome da classe": {"pct": 0.XX, "justificativa": "<=25 palavras"}, ...}}
+"""
+
+
+def ia_analisar_classes_lumpy(itens, nome_condo, outliers_por_classe):
+    """Camada 2 da R3: IA analisa cada classe lumpy e recomenda % de deducao.
+
+    Diferente de ia_classificar_revisar() que classifica NF por NF,
+    esta funcao analisa a CLASSE INTEIRA e sugere um percentual de deducao,
+    exatamente como o especialista humano faz.
+
+    Retorna: {(grupo_norm, classe_norm): pct_deducao}
+    """
+    if not _ia_disponivel():
+        return {}
+
+    # Agrupa NFs por classe lumpy
+    classes = defaultdict(list)
+    for it in itens:
+        ng = _norm(it['grupo'] or '')
+        nc = _norm(it['classe'] or '')
+        if any(k in nc for k in LUMPY_KEYS):
+            classes[(ng, nc)].append(it)
+
+    if not classes:
+        return {}
+
+    print(f'   🤖 IA analisando {len(classes)} classes de manutencao ({_ia_modelo()})...')
+
+    # Monta o prompt com todas as classes
+    blocos = []
+    for (ng, nc), nfs in classes.items():
+        total_classe = sum(it['valor_pago'] for it in nfs)
+        n_nfs = len(nfs)
+        extra_est = outliers_por_classe.get((ng, nc), 0.0)
+        # Lista as NFs (ordenadas por valor decrescente, top 15)
+        nfs_ord = sorted(nfs, key=lambda x: x['valor_pago'], reverse=True)[:15]
+        nfs_txt = '\n'.join(
+            f"    R${it['valor_pago']:,.2f} | {it['data']} | "
+            f"{(it['descricao'] or it['fornecedor'] or '')[:100]}"
+            for it in nfs_ord)
+        blocos.append(
+            f"CLASSE: {nfs[0]['classe']} (grupo: {nfs[0]['grupo']})\n"
+            f"  Total 12 meses: R${total_classe:,.2f} | NFs: {n_nfs}\n"
+            f"  Outliers estatisticos ja detectados: R${extra_est:,.2f}\n"
+            f"  Lancamentos (maiores valores):\n{nfs_txt}"
+        )
+
+    prompt = (f'Condominio: {nome_condo}\n\n'
+              f'Analise cada classe de manutencao e determine o % extraordinario:\n\n'
+              + '\n\n'.join(blocos))
+
+    resp = _claude_chat(IA_SISTEMA_LUMPY, prompt, max_tokens=4000)
+    if not resp:
+        return {}
+
+    try:
+        data = _extrai_json(resp)
+    except Exception:
+        return {}
+
+    resultado = {}
+    for nome_classe, info in data.get('classes', {}).items():
+        try:
+            pct = float(info.get('pct', 0))
+        except (ValueError, TypeError):
+            pct = 0.0
+        pct = max(0.0, min(1.0, pct))  # clamp 0..1
+        # Busca o par (ng, nc) que casa com o nome da classe
+        nc_norm = _norm(nome_classe)
+        for (ng, nc) in classes:
+            if nc_norm in nc or nc in nc_norm:
+                resultado[(ng, nc)] = pct
+                break
+
+    return resultado
 
 
 def _ws_header(ws, row, headers, widths=None):
@@ -801,14 +970,36 @@ def analisar(folder):
         inad_path = os.path.join(folder, 'inad01.xls')
         ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
 
+    # --- Cross-check entre relatorios ---
+    tot_bal = bal.get('total_despesas', 0)
+    tot_des = des.get('grand_total', 0)
+    tot_sin = sin.get('grand_total', 0) if sin else 0
+    divergencias = []
+    if tot_bal > 0 and tot_des > 0:
+        pct = abs(tot_bal - tot_des) / max(tot_bal, tot_des)
+        if pct > 0.05:
+            divergencias.append(f'balanual (R${tot_bal:,.2f}) vs desbai06 (R${tot_des:,.2f}) = {pct:.1%}')
+    if tot_bal > 0 and tot_sin > 0:
+        pct = abs(tot_bal - tot_sin) / max(tot_bal, tot_sin)
+        if pct > 0.05:
+            divergencias.append(f'balanual (R${tot_bal:,.2f}) vs dessin02 (R${tot_sin:,.2f}) = {pct:.1%}')
+    if divergencias:
+        print(f'   ⚠️  DIVERGENCIA ENTRE RELATORIOS (>5%):')
+        for d in divergencias:
+            print(f'      {d}')
+
     prev_paths = glob.glob(os.path.join(folder, 'Previs*.xlsx'))
     manual = parse_previsao(prev_paths[0]) if prev_paths else None
 
     freq = {_norm(l['classe']): l['n_meses'] for l in bal['despesas']}
-    media_ult = {}   # ultimo valor mensal nao-zero por classe (p/ R6)
+    media_ult = {}   # media dos ultimos 3 meses nao-zero por classe (p/ R6)
     for l in bal['despesas']:
         nz = [v for v in l['monthly'] if abs(v) > 0.005]
-        media_ult[_norm(l['classe'])] = nz[-1] if nz else 0.0
+        if nz:
+            ultimos = nz[-3:]  # ate os ultimos 3 meses
+            media_ult[_norm(l['classe'])] = sum(ultimos) / len(ultimos)
+        else:
+            media_ult[_norm(l['classe'])] = 0.0
 
     # --- classificar lancamentos do desbai ---
     for it in des['itens']:
@@ -826,6 +1017,38 @@ def analisar(folder):
             it['cat'] = sug
             it['motivo'] = f'IA: {just}'
 
+    # --- R3 Camada 1: deteccao estatistica de outliers ---
+    outliers_estatisticos = detectar_outliers_estatisticos(des, LUMPY_KEYS)
+    if outliers_estatisticos:
+        print(f'   📊 Outliers estatisticos detectados em {len(outliers_estatisticos)} classes')
+        # Marca apenas as NFs que sao outliers individuais (para o frontend)
+        # Recalcula thresholds por classe para identificar quais NFs especificas
+        import statistics as _st
+        nfs_por_classe = defaultdict(list)
+        for it in des['itens']:
+            ng = _norm(it['grupo'] or ''); nc = _norm(it['classe'] or '')
+            if (ng, nc) in outliers_estatisticos:
+                nfs_por_classe[(ng, nc)].append(it)
+            # Tambem marca outliers em classes genericas de Diversas
+            elif 'diversas' in ng and any(k in nc for k in ('outras despesa', 'outros', 'estorno', 'diversas')):
+                nfs_por_classe[(ng, nc)].append(it)
+        for (ng, nc), nfs in nfs_por_classe.items():
+            valores = [it['valor_pago'] for it in nfs]
+            mediana = _st.median(valores)
+            mad = _st.median([abs(v - mediana) for v in valores])
+            if mad < 0.01:
+                continue
+            threshold = mediana + 3.0 * mad * 1.4826
+            for it in nfs:
+                if it['valor_pago'] > threshold and it['cat'] != 'Extraordinaria':
+                    it['cat'] = 'Extraordinaria'
+                    it['motivo'] = (f'Outlier estatistico (MAD): R${it["valor_pago"]:,.2f} > '
+                                    f'mediana + 3*MAD (R${threshold:,.2f}) na classe {it["classe"]}')
+
+    # --- R3 Camada 2: IA analisa cada classe lumpy e sugere % de deducao ---
+    pct_ia_por_classe = ia_analisar_classes_lumpy(des['itens'], nome, outliers_estatisticos)
+
+    # --- Acumula NFs classificadas como Extraordinaria (NF por NF, método tradicional) ---
     extra_por_classe = defaultdict(float)
     for it in des['itens']:
         if it['cat'] == 'Extraordinaria':
@@ -854,6 +1077,22 @@ def analisar(folder):
             # estão mal classificados no grupo. Manter na base (como os manuais fazem).
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
                 regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
+            elif any(k in nc for k in ('outras despesa', 'outros', 'estorno')):
+                # Classes genéricas (ex.: "Outras Despesas"): aplicar MAD + IA
+                # para classificar o que é extraordinário vs recorrente.
+                # A maioria são equipamentos/compras pontuais → extraordinário.
+                # Itens de consumo que caíram na conta errada → recorrente.
+                extra_est = outliers_estatisticos.get((ng, nc), 0.0)
+                ex_ia = extra_por_classe.get((ng, nc), 0.0)
+                ex = max(extra_est, ex_ia)
+                if ex > 0:
+                    ded = min(ex, base)
+                    prov_laudo += ded
+                    regra = f'R4: {ded/base:.0%} extraordinario (MAD+IA) — provisionado Laudo'
+                else:
+                    ded = 0.0
+                    regra = 'R4: sem itens extraordinarios — mantido integral'
+                final = base - ded
             else:
                 ded = base; final = 0.0
                 prov_laudo += base
@@ -876,18 +1115,36 @@ def analisar(folder):
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ded = base - final
-            regra = 'R6: ultimo valor mensal x 12'
-        # R3 lumpy — so deduz se IA identificou NFs extraordinarias
+            regra = 'R6: media ultimos 3 meses x 12'
+        # R3 lumpy — 2 camadas: outliers estatisticos + decisoes humanas
         elif any(k in nc for k in LUMPY_KEYS):
-            ex = extra_por_classe.get((ng, nc), 0.0)
+            # Camada 1: outliers estatisticos (NFs > media + 2σ na propria classe)
+            extra_est = outliers_estatisticos.get((ng, nc), 0.0)
+
+            # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF
+            extra_humano = extra_por_classe.get((ng, nc), 0.0)
+
+            # Camada 2: IA recomenda % de deducao para a classe inteira
+            pct_ia = pct_ia_por_classe.get((ng, nc), 0.0)
+            extra_ia = round(base * pct_ia, 2) if pct_ia > 0 else 0.0
+
+            # Combina: NF-por-NF tem prioridade; fallback para max(estatistica, IA)
+            ex = extra_humano if extra_humano > 0 else max(extra_est, extra_ia)
+
             if ex > 0:
                 ded = min(ex, base)
-                regra = f'R3: IA identificou NFs extraordinarias (R${ex:,.2f})'
+                if extra_humano > 0:
+                    regra = f'R3: decisoes humanas R${extra_humano:,.2f}'
+                else:
+                    partes = []
+                    if extra_est > 0:
+                        partes.append(f'outliers R${extra_est:,.2f}')
+                    if extra_ia > 0:
+                        partes.append(f'IA {pct_ia:.0%}')
+                    regra = 'R3: ' + ' + '.join(partes) if partes else 'R3: mantido integral'
             else:
-                # Sem NFs extraordinarias identificadas = mantem integral
-                # (os manuais da Quezia mostram que a deducao e manual, caso a caso)
                 ded = 0.0
-                regra = 'R3: sem NFs extraordinarias — mantido integral'
+                regra = 'R3: sem itens extraordinarios — mantido integral'
             final = base - ded
         else:
             regra = 'Recorrente: mantida integral'
@@ -982,7 +1239,10 @@ def analisar(folder):
             'manual': manual, 'linhas': linhas, 'sugestoes_ia': sugestoes_ia,
             'desconsideracoes': desconsider, 'prov_laudo': prov_laudo,
             'prov_incendio': prov_incendio, 'base_total': base_total,
-            'subtotal': subtotal, 'total_previsto': total_previsto}
+            'subtotal': subtotal, 'total_previsto': total_previsto,
+            'outliers_estatisticos': outliers_estatisticos,
+            'pct_ia_por_classe': pct_ia_por_classe,
+            'divergencias': divergencias}
 
 
 # ---------------------------------------------------------------------------
@@ -990,17 +1250,31 @@ def recalcular(R):
     """Reaplica as regras R1-R8 com a classificacao ja decidida pelo humano.
     Usado pelo webapp apos o usuario aprovar/reprovar itens na interface.
     Retorna o mesmo dict R, atualizado com as novas linhas e subtotais."""
+    # --- recalcular com as mesmas regras do analisar() ---
+    # extra_por_classe reflete as decisoes humanas (itens aprovados como Extraordinaria)
+    # keep_por_classe reflete NFs que o humano REPROVOU (decidiu manter na base)
     extra_por_classe = defaultdict(float)
+    keep_por_classe = defaultdict(float)
     for it in R['des']['itens']:
+        key = (_norm(it['grupo'] or ''), _norm(it['classe'] or ''))
         if it['cat'] == 'Extraordinaria':
-            extra_por_classe[(_norm(it['grupo'] or ''),
-                              _norm(it['classe'] or ''))] += it['valor_pago']
+            extra_por_classe[key] += it['valor_pago']
+        elif it['cat'] == 'Recorrente':
+            keep_por_classe[key] += it['valor_pago']
+
+    # Recupera dados da R3 em 2 camadas (calculados no analisar)
+    outliers_est = R.get('outliers_estatisticos', {})
+    pct_ia_classe = R.get('pct_ia_por_classe', {})
 
     bal = R['bal']
-    media_ult = {}
+    media_ult = {}   # media dos ultimos 3 meses nao-zero por classe (p/ R6)
     for l in bal['despesas']:
         nz = [v for v in l['monthly'] if abs(v) > 0.005]
-        media_ult[_norm(l['classe'])] = nz[-1] if nz else 0.0
+        if nz:
+            ultimos = nz[-3:]  # ate os ultimos 3 meses
+            media_ult[_norm(l['classe'])] = sum(ultimos) / len(ultimos)
+        else:
+            media_ult[_norm(l['classe'])] = 0.0
 
     linhas, desconsider, prov_laudo, prov_incendio = [], 0.0, 0.0, 0.0
     for l in bal['despesas']:
@@ -1009,24 +1283,71 @@ def recalcular(R):
         base = l['total']
         ded, regra, final = 0.0, '', base
         if 'obras' in ng or 'benfeitoria' in ng:
-            desconsider += base
-            ded, final, regra = base, 0.0, 'R1: Obras/Benfeitorias'
+            # R1: capital, excluído por padrão. Mas se o humano REPROVOU itens
+            # (decidiu manter), essa parte volta para a base (e aparece numa
+            # linha de Obras na PREVISÃO via gerador).
+            kept = min(keep_por_classe.get((ng, nc), 0.0), base)
+            final = round(kept, 2)
+            ded = base - final
+            desconsider += ded
+            regra = ('R1: Obras — parte mantida na revisão' if kept > 0.005
+                     else 'R1: Obras/Benfeitorias')
         elif 'diversas' in ng and 'seguro' not in nc:
-            ded, final = base, 0.0
-            prov_laudo += base
-            regra = 'R4: Diversas -> provisao Laudo'
+            # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
+            # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
+            # resto vira provisão de Laudo (R4).
+            if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
+                regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
+            elif any(k in nc for k in DIVERSAS_GENERICAS):
+                extra_est = outliers_est.get((ng, nc), 0.0)
+                ex_ia = extra_por_classe.get((ng, nc), 0.0)
+                ex = max(extra_est, ex_ia)
+                if ex > 0:
+                    ded = min(ex, base)
+                    prov_laudo += ded
+                    regra = f'R4: {ded/base:.0%} extraordinario — provisionado Laudo'
+                else:
+                    regra = 'R4: sem extraordinarios — mantido integral'
+                final = base - ded
+            else:
+                ded, final = base, 0.0
+                prov_laudo += base
+                regra = 'R4: Diversas -> provisao Laudo'
         elif 'cartoriais' in ng or 'honorarios' in ng:
             ded, final = base, 0.0
             prov_incendio += base
             regra = 'R5: Cartoriais -> provisao Incendio/Registro'
         elif any(k in nc for k in PESSOAL_PONTUAL):
             if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
-                regra = 'Recorrente: pensao continua (desconto em folha)'
+                regra = 'Pessoal pontual: pensao continua — revisar'
             else:
-                ded, final, regra = base, 0.0, 'R2: pessoal pontual'
+                ded, final, regra = base, 0.0, 'R2: pessoal pontual deduzido — revisar'
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
-            ded, regra = base - final, 'R6: ultimo mensal x 12'
+            ded, regra = base - final, 'R6: media ultimos 3 meses x 12'
+        elif any(k in nc for k in LUMPY_KEYS):
+            # R3 lumpy — 2 camadas: outliers estatisticos + decisoes humanas
+            extra_est = outliers_est.get((ng, nc), 0.0)
+            extra_humano = extra_por_classe.get((ng, nc), 0.0)
+            pct_ia = pct_ia_classe.get((ng, nc), 0.0)
+            extra_ia = round(base * pct_ia, 2) if pct_ia > 0 else 0.0
+            # Camada humana tem prioridade; fallback para estatistica e IA
+            ex = extra_humano if extra_humano > 0 else max(extra_est, extra_ia)
+            if ex > 0:
+                ded = min(ex, base)
+                if extra_humano > 0:
+                    regra = f'R3: decisoes humanas R${extra_humano:,.2f}'
+                else:
+                    partes = []
+                    if extra_est > 0:
+                        partes.append(f'outliers R${extra_est:,.2f}')
+                    if extra_ia > 0:
+                        partes.append(f'IA {pct_ia:.0%}')
+                    regra = 'R3: ' + ' + '.join(partes) if partes else 'R3: mantido integral'
+            else:
+                ded = 0.0
+                regra = 'R3: sem itens extraordinarios — mantido integral'
+            final = base - ded
         else:
             ex = extra_por_classe.get((ng, nc), 0.0)
             if ex > 0:

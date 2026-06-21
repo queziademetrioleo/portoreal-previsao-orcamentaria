@@ -1,4 +1,23 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: previsao_mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-previsao123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-previsao}
+      - MYSQL_USER=${MYSQL_USER:-previsao}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-previsao123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   previsao:
     build:
       context: .
@@ -13,8 +32,14 @@ services:
       - PREVISAO_IA_PROVEDOR=${PREVISAO_IA_PROVEDOR:-}
       - PREVISAO_IA_MODELO=${PREVISAO_IA_MODELO:-claude-opus-4-8}
       - PREVISAO_IA_MODELO_OPENAI=${PREVISAO_IA_MODELO_OPENAI:-gpt-5.4}
-    volumes:
-      - previsao_dados:/dados
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-previsao}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-previsao123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-previsao}
+    depends_on:
+      mysql:
+        condition: service_healthy
 
 volumes:
-  previsao_dados:
+  mysql_data:

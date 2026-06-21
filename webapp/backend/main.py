@@ -15,19 +15,22 @@ import os
 import sys
 import json
 import uuid
-import shutil
-import pickle
 import tempfile
 import datetime
+import logging
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import db
 import previsao as core
 from gerador_previsao import gerar_previsao_adaptativa
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title='Previsao Orcamentaria', version='2.0')
 
@@ -38,11 +41,6 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-# Sessoes persistidas em disco (JSON) — sobrevivem a restart do container
-SESSOES_DIR = os.environ.get('PREVISAO_SESSOES_DIR',
-                             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessoes'))
-os.makedirs(SESSOES_DIR, exist_ok=True)
-
 ARQUIVOS_ESPERADOS = {
     'balanual': 'balanual.xls',
     'desbai': 'desbai06.xls',
@@ -51,42 +49,38 @@ ARQUIVOS_ESPERADOS = {
 }
 
 
-def _sessao_path(sid):
-    return os.path.join(SESSOES_DIR, sid)
-
-
-def _salvar_estado(sid, estado):
-    with open(os.path.join(_sessao_path(sid), 'estado.json'), 'w', encoding='utf-8') as f:
-        json.dump(estado, f, ensure_ascii=False, default=str)
-
+# ---------------------------------------------------------------------------
+# Helpers de sessao  (persistencia via MySQL)
+# ---------------------------------------------------------------------------
 
 def _carregar_estado(sid):
-    p = os.path.join(_sessao_path(sid), 'estado.json')
-    if not os.path.exists(p):
+    """Carrega o estado JSON da sessao do MySQL."""
+    row = db.carregar_sessao(sid)
+    if not row or not row.get('estado_json'):
         raise HTTPException(404, 'Sessao nao encontrada')
-    with open(p, encoding='utf-8') as f:
-        return json.load(f)
-
-
-def _salvar_R(sid, R):
-    """Cacheia o resultado de core.analisar() para que preview/gerar nao precisem
-    re-parsear os .xls nem re-rodar a IA a cada clique."""
-    try:
-        with open(os.path.join(_sessao_path(sid), 'R.pkl'), 'wb') as f:
-            pickle.dump(R, f)
-    except Exception:
-        pass  # cache e best-effort; fallback re-analisa
+    return json.loads(row['estado_json'])
 
 
 def _obter_R(sid):
-    p = os.path.join(_sessao_path(sid), 'R.pkl')
-    if os.path.exists(p):
+    """Retorna o cache de analise (R) do MySQL; fallback para core.analisar()."""
+    row = db.carregar_sessao(sid)
+    if row is None:
+        raise HTTPException(404, 'Sessao nao encontrada')
+    if row.get('cache_analise'):
         try:
-            with open(p, 'rb') as f:
-                return pickle.load(f)
-        except Exception:
+            return json.loads(row['cache_analise'])
+        except (json.JSONDecodeError, TypeError):
             pass
-    return core.analisar(_sessao_path(sid))
+    # Fallback: reconstituir arquivos do MySQL e re-analisar
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for chave, fname in ARQUIVOS_ESPERADOS.items():
+            content = db.obter_arquivo(sid, chave)
+            if content:
+                with open(os.path.join(tmpdir, fname), 'wb') as f:
+                    f.write(content)
+        R = core.analisar(tmpdir)
+        db.salvar_cache_analise(sid, json.dumps(R, ensure_ascii=False, default=str))
+        return R
 
 
 def _aplicar_decisoes(estado, dec):
@@ -125,49 +119,6 @@ def _recalcular_com_decisoes(sid, estado):
     return R2, impacto
 
 
-# ---------------------------------------------------------------------------
-# 1) UPLOAD + ANALISE
-# ---------------------------------------------------------------------------
-@app.post('/api/sessao')
-async def criar_sessao(
-    nome_condominio: str = Form(...),
-    ano_previsao: int = Form(...),
-    balanual: UploadFile = File(...),
-    desbai: UploadFile = File(...),
-    dessin: UploadFile = File(None),
-    inad: UploadFile = File(None),
-):
-    sid = uuid.uuid4().hex[:12]
-    pasta = _sessao_path(sid)
-    os.makedirs(pasta, exist_ok=True)
-
-    uploads = {'balanual': balanual, 'desbai': desbai, 'dessin': dessin, 'inad': inad}
-    for chave, up in uploads.items():
-        if up is None:
-            continue
-        destino = os.path.join(pasta, ARQUIVOS_ESPERADOS[chave])
-        with open(destino, 'wb') as f:
-            shutil.copyfileobj(up.file, f)
-
-    obrigatorios = ['balanual.xls', 'desbai06.xls']
-    faltando = [a for a in obrigatorios if not os.path.exists(os.path.join(pasta, a))]
-    if faltando:
-        shutil.rmtree(pasta, ignore_errors=True)
-        raise HTTPException(400, f'Arquivos obrigatorios ausentes: {faltando}')
-
-    # O IA parser já lida com arquivos ausentes (retorna null para a seção)
-    try:
-        R = core.analisar(pasta)
-    except Exception as e:
-        shutil.rmtree(pasta, ignore_errors=True)
-        raise HTTPException(422, f'Falha ao analisar os relatorios: {e}')
-
-    estado = _montar_estado(sid, nome_condominio, ano_previsao, R)
-    _salvar_estado(sid, estado)
-    _salvar_R(sid, R)
-    return JSONResponse(estado)
-
-
 def _montar_estado(sid, nome, ano, R):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R['des']
@@ -190,14 +141,13 @@ def _montar_estado(sid, nome, ano, R):
             item['decisao'] = 'aprovada'        # default: remover da base
             extraordinarias.append(item)
         elif it['cat'] == 'Revisar':
-            item['origem'] = 'Regra'
+            item['origem'] = 'IA' if (it['motivo'] or '').startswith('IA:') else 'Regra'
             item['decisao'] = 'pendente'        # humano decide
             revisar.append(item)
 
     inad_itens = []
     if R['inad']:
         for i, it in enumerate(R['inad']['itens']):
-            # critica ja vem calculada pelo analisar() — >= 3 meses CONSECUTIVOS
             critica = it.get('critica', (it['meses_atraso'] or 0) >= 3)
             inad_itens.append({
                 'id': i,
@@ -252,6 +202,83 @@ def _montar_estado(sid, nome, ano, R):
 
 
 # ---------------------------------------------------------------------------
+# Modelo de decisoes
+# ---------------------------------------------------------------------------
+class Decisoes(BaseModel):
+    extraordinarias: dict = {}
+    revisar: dict = {}
+    inadimplencia: dict = {}
+
+
+# ---------------------------------------------------------------------------
+# Startup — limpeza de sessoes antigas
+# ---------------------------------------------------------------------------
+@app.on_event("startup")
+async def startup():
+    removidas = db.limpar_sessoes_antigas(7)
+    if removidas:
+        logger.info(f'{removidas} sessoes antigas removidas (TTL=7d)')
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+@app.get("/api/health")
+async def health():
+    db_ok = db.verificar_conexao()
+    return {"status": "ok" if db_ok else "degraded", "db": "connected" if db_ok else "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# 1) UPLOAD + ANALISE
+# ---------------------------------------------------------------------------
+@app.post('/api/sessao')
+async def criar_sessao(
+    nome_condominio: str = Form(...),
+    ano_previsao: int = Form(...),
+    balanual: UploadFile = File(...),
+    desbai: UploadFile = File(...),
+    dessin: UploadFile = File(None),
+    inad: UploadFile = File(None),
+):
+    sid = uuid.uuid4().hex[:12]
+
+    # Salvar arquivos no MySQL
+    uploads = {'balanual': balanual, 'desbai': desbai, 'dessin': dessin, 'inad': inad}
+    file_bytes = {}
+    for chave, up in uploads.items():
+        if up is None:
+            continue
+        conteudo = await up.read()
+        file_bytes[chave] = conteudo
+        db.salvar_arquivo(sid, chave, conteudo)
+
+    # Validar obrigatorios
+    if 'balanual' not in file_bytes or 'desbai' not in file_bytes:
+        raise HTTPException(400, 'Arquivos obrigatorios ausentes: balanual, desbai')
+
+    # Criar registro da sessao
+    db.criar_sessao(sid, nome_condominio, ano_previsao)
+
+    # Analisar arquivos (precisa de diretorio temporario)
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for chave, fname in ARQUIVOS_ESPERADOS.items():
+                content = file_bytes.get(chave)
+                if content:
+                    with open(os.path.join(tmpdir, fname), 'wb') as f:
+                        f.write(content)
+            R = core.analisar(tmpdir)
+    except Exception as e:
+        raise HTTPException(422, f'Falha ao analisar os relatorios: {e}')
+
+    estado = _montar_estado(sid, nome_condominio, ano_previsao, R)
+    db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
+    db.salvar_cache_analise(sid, json.dumps(R, ensure_ascii=False, default=str))
+    return JSONResponse(estado)
+
+
+# ---------------------------------------------------------------------------
 # 2) CONSULTA
 # ---------------------------------------------------------------------------
 @app.get('/api/sessao/{sid}')
@@ -261,29 +288,19 @@ def obter_sessao(sid: str):
 
 @app.get('/api/sessoes')
 def listar_sessoes():
-    out = []
-    for d in sorted(os.listdir(SESSOES_DIR)):
-        p = os.path.join(SESSOES_DIR, d, 'estado.json')
-        if os.path.exists(p):
-            with open(p, encoding='utf-8') as f:
-                e = json.load(f)
-            out.append({'sessao_id': e['sessao_id'], 'nome': e['nome_condominio'],
-                        'ano': e['ano_previsao'], 'criado_em': e['criado_em'],
-                        'status': e['status']})
-    return out
+    sessoes = db.listar_sessoes()
+    return [{
+        'sessao_id': s['id'],
+        'nome': s['nome_condominio'],
+        'ano': s['ano_previsao'],
+        'criado_em': str(s['criado_em']),
+        'status': s.get('status', 'em_revisao'),
+    } for s in sessoes]
 
 
 # ---------------------------------------------------------------------------
 # 3) DECISOES + GERACAO DO DOCUMENTO FINAL
 # ---------------------------------------------------------------------------
-class Decisoes(BaseModel):
-    # {"17": "aprovada"|"reprovada"} p/ extraordinarias; revisar idem;
-    # inadimplencia: {"0": "abater"|"ignorar"}
-    extraordinarias: dict = {}
-    revisar: dict = {}
-    inadimplencia: dict = {}
-
-
 @app.post('/api/sessao/{sid}/preview')
 def preview(sid: str, dec: Decisoes):
     """Recalcula subtotal/total/impacto com as decisoes atuais SEM gerar o xlsx.
@@ -300,30 +317,38 @@ def preview(sid: str, dec: Decisoes):
 @app.post('/api/sessao/{sid}/gerar')
 def gerar(sid: str, dec: Decisoes):
     estado = _carregar_estado(sid)
-    pasta = _sessao_path(sid)
 
     _aplicar_decisoes(estado, dec)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
 
-    out_xlsx = os.path.join(pasta, f"Previsão {estado['ano_previsao']}.xlsx")
-    modelo = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          'templates', 'modelo_previsao.xlsx')
-    gerar_previsao_adaptativa(
-        destino=out_xlsx,
-        R=R2,
-        nome_condominio=estado['nome_condominio'],
-        ano=estado['ano_previsao'],
-        impacto_receita_mensal=impacto_receita,
-        inad_detalhe=estado['inadimplencia'],
-        inad_meta=estado['inad_meta'],
-        referencia=modelo if os.path.exists(modelo) else None,
-    )
+    # Gerar xlsx em arquivo temporario e salvar bytes no MySQL
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        out_path = tmp.name
+    try:
+        modelo = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'templates', 'modelo_previsao.xlsx')
+        gerar_previsao_adaptativa(
+            destino=out_path,
+            R=R2,
+            nome_condominio=estado['nome_condominio'],
+            ano=estado['ano_previsao'],
+            impacto_receita_mensal=impacto_receita,
+            inad_detalhe=estado['inadimplencia'],
+            inad_meta=estado['inad_meta'],
+            referencia=modelo if os.path.exists(modelo) else None,
+        )
+        with open(out_path, 'rb') as f:
+            xlsx_bytes = f.read()
+    finally:
+        os.unlink(out_path)
+
+    db.salvar_arquivo(sid, 'xlsx', xlsx_bytes)
 
     estado['status'] = 'gerado'
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
-    _salvar_estado(sid, estado)
+    db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
 
     return {'ok': True, 'sessao_id': sid,
             'subtotal': round(R2['subtotal'], 2),
@@ -332,16 +357,28 @@ def gerar(sid: str, dec: Decisoes):
             'download': f'/api/sessao/{sid}/download'}
 
 
+@app.post('/api/sessao/{sid}/salvar-decisoes')
+async def salvar_decisoes(sid: str, decisoes: Decisoes):
+    """Salva decisoes parciais do usuario sem gerar o documento final.
+    Permite que o usuario retome a revisao depois."""
+    estado = _carregar_estado(sid)
+    _aplicar_decisoes(estado, decisoes)
+    db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
+    return {'ok': True, 'sessao_id': sid}
+
 
 @app.get('/api/sessao/{sid}/download')
 def download(sid: str):
     estado = _carregar_estado(sid)
-    p = os.path.join(_sessao_path(sid), f"Previsão {estado['ano_previsao']}.xlsx")
-    if not os.path.exists(p):
+    xlsx_bytes = db.obter_arquivo(sid, 'xlsx')
+    if not xlsx_bytes:
         raise HTTPException(404, 'Documento ainda nao gerado')
-    return FileResponse(
-        p, filename=f"Previsão {estado['ano_previsao']} - {estado['nome_condominio']}.xlsx",
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f"Previsão {estado['ano_previsao']} - {estado['nome_condominio']}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------

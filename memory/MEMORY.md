@@ -1,0 +1,7 @@
+- [R1 - Obras e Benfeitorias](r1-obras-benfeitorias.md) — Como a R1 decide que obras e benfeitorias são gastos extraordinários
+- [R2 - Pessoal Pontual](r2-pessoal-pontual.md) — Como a R2 identifica eventos pontuais de pessoal (rescisão, indenização) e os separa da folha recorrente
+- [R3 - Como Funciona](r3-como-funciona.md) — Explicação prática e visual de como a R3 funciona (Camada 1 estatística + Camada 2 IA)
+- [R4 e R5 - Provisões](r4-r5-provisoes.md) — Como R4 e R5 realocam gastos genéricos para provisões obrigatórias (Laudo e SCIP) sem alterar o total
+- [R6 - Anualização](r6-anualizacao.md) — Como a R6 projeta contratos usando a tarifa mensal atual em vez da média histórica
+- [R7 - Inflação](r7-inflacao.md) — Por que a R7 aplica 10% de inflação sobre o subtotal do orçamento
+- [R8 - Inadimplência](r8-inadimplencia.md) — Como a R8 detecta inadimplência crítica (3+ meses consecutivos) e alerta sobre risco de receita
