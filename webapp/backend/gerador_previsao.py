@@ -308,7 +308,10 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     nome_l = _norm(ws_p.cell(rr, 3).value)
                     if not nome_l:
                         ws_p.cell(rr, 3).value = 'Despesas com Obras/Benfeitorias'
-                        ws_p.cell(rr, 4).value = f"=' C O N T A S '!$I${r_obras}"
+                        # Usa valor direto (nao formula) — openpyxl nao recalcula
+                        obra_val = ws_c2.cell(r_obras, 9).value  # coluna I = final
+                        if isinstance(obra_val, (int, float)):
+                            ws_p.cell(rr, 4).value = round(float(obra_val), 2)
                         break
 
         # IMPORTANTE: nesta planilha a PREVISAO e inteiramente movida por
@@ -328,13 +331,14 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         _set_se_nao_formula = _set
 
         # Receitas — valores MENSAIS (nao anuais) na PREVISAO
+        # So processa linhas da secao de receitas (rows 10-18 no template)
         valores_rec = {}
         for ln in bal.get('receitas', []):
             val = _receita_mensal(ln)
             if val is not None and abs(val) > 0.005:
                 valores_rec[_norm(ln['classe'])] = val
         usados_rec = set()
-        for r in range(1, ws_p.max_row + 1):
+        for r in range(10, 19):  # apenas secao de receitas
             nome = str(ws_p.cell(r, 3).value or '').strip()
             if not nome:
                 continue
