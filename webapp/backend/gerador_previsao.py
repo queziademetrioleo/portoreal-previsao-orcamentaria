@@ -327,8 +327,12 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # compatibilidade: chamadas antigas a _set_se_nao_formula
         _set_se_nao_formula = _set
 
-        # Receitas — usa Jaccard (mesmo metodo das despesas)
-        valores_rec = {_norm(ln['classe']): ln['total'] for ln in bal.get('receitas', [])}
+        # Receitas — valores MENSAIS (nao anuais) na PREVISAO
+        valores_rec = {}
+        for ln in bal.get('receitas', []):
+            val = _receita_mensal(ln)
+            if val is not None and abs(val) > 0.005:
+                valores_rec[_norm(ln['classe'])] = val
         usados_rec = set()
         for r in range(1, ws_p.max_row + 1):
             nome = str(ws_p.cell(r, 3).value or '').strip()
