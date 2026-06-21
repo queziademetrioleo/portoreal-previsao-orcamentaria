@@ -319,6 +319,16 @@ def obter_sessao(sid: str):
     return _carregar_estado(sid)
 
 
+@app.delete("/api/sessao/{sid}")
+async def deletar_sessao(sid: str):
+    """Remove uma sessao e todos os seus dados."""
+    try:
+        db.deletar_sessao(sid)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao deletar sessao: {e}")
+
+
 @app.get('/api/sessoes')
 def listar_sessoes():
     sessoes = db.listar_sessoes()

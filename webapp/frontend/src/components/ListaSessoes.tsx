@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listarSessoes } from '../api'
+import { listarSessoes, deletarSessao } from '../api'
 import type { SessaoResumida } from '../api'
 
 export default function ListaSessoes({ onNova, onAbrir }: {
@@ -12,6 +12,17 @@ export default function ListaSessoes({ onNova, onAbrir }: {
   useEffect(() => {
     listarSessoes().then(setSessoes).catch(() => {}).finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(e: React.MouseEvent, sid: string) {
+    e.stopPropagation()
+    if (!confirm('Excluir esta previsão?')) return
+    try {
+      await deletarSessao(sid)
+      setSessoes(prev => prev.filter(s => s.sessao_id !== sid))
+    } catch {
+      alert('Erro ao excluir')
+    }
+  }
 
   return (
     <>
@@ -37,7 +48,15 @@ export default function ListaSessoes({ onNova, onAbrir }: {
         {!loading && sessoes.length > 0 && (
           <div className="sessions-grid" style={{marginTop:'var(--s-xl)'}}>
             {sessoes.map(s => (
-              <div key={s.sessao_id} className="session-card" onClick={() => onAbrir(s.sessao_id, s.status)}>
+              <div key={s.sessao_id} className="session-card" onClick={() => onAbrir(s.sessao_id, s.status)} style={{position:'relative'}}>
+                <button
+                  className="btn btn-ghost btn-xs"
+                  onClick={e => handleDelete(e, s.sessao_id)}
+                  style={{position:'absolute',top:'var(--s-sm)',right:'var(--s-sm)',padding:'2px 6px',lineHeight:1,zIndex:1}}
+                  title="Excluir"
+                >
+                  ✕
+                </button>
                 <h3>{s.nome}</h3>
                 <p>Previsão {s.ano}</p>
                 <span className={`badge ${s.status === 'gerado' ? 'badge-gerado' : 'badge-pendente'}`}>

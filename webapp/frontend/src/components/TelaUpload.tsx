@@ -38,7 +38,7 @@ export default function TelaUpload({ onCriada, onVoltar }: {
       <div className="container">
         <div className="upload-card card" style={{textAlign:'center'}}>
           <div className="spinner" />
-          <p className="spinner-text">Analisando os relatórios... Isso pode levar alguns segundos.</p>
+          <p className="spinner-text">Analisando os relatórios... Isso pode levar até 6 minutos.</p>
           <p className="spinner-text" style={{color:'var(--t3)',fontSize:'12px'}}>A IA está classificando as despesas.</p>
         </div>
       </div>

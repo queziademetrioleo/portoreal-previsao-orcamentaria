@@ -77,6 +77,11 @@ export interface SessaoResumida {
   status: string
 }
 
+export async function deletarSessao(sid: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/sessao/${sid}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error(`Erro ${r.status}`)
+}
+
 export async function listarSessoes(): Promise<SessaoResumida[]> {
   const r = await fetch(`${BASE}/api/sessoes`)
   if (!r.ok) throw new Error(`Erro ${r.status}`)

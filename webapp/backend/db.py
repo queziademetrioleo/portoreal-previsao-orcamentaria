@@ -185,6 +185,16 @@ def limpar_sessoes_antigas(dias=7):
         conn.close()
 
 
+def deletar_sessao(sid):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM sessoes WHERE id = %s", (sid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def verificar_conexao():
     try:
         conn = get_conn()
