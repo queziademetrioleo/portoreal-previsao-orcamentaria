@@ -40,9 +40,11 @@ A pasta deve conter os relatorios exportados do Condominio21:
     balanual.xls  desbai06.xls  [dessin02.xls]  [inad01.xls]  [Previsao XXXX.xlsx]
 (entre colchetes = opcionais)
 """
-import sys, os, glob, re, datetime, shlex
+import sys, os, glob, re, datetime, shlex, time
 import warnings
 warnings.filterwarnings('ignore')
+import logging
+logger = logging.getLogger('previsao')
 import xlrd, openpyxl, unicodedata
 from collections import defaultdict
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -170,8 +172,8 @@ def _claude_chat(system, user, max_tokens=4000, temperature=None):
             return fn(system, user, max_tokens, temperature)
         except Exception as e:
             _PROVEDOR_FALHOU.add(p)
-            print(f'   ⚠️  IA {p} falhou ({type(e).__name__}: {e}) — tentando alternativa...')
-    print('   ⚠️  Nenhum provedor de IA disponivel — seguindo so com as regras.')
+            logger.warning('IA %s falhou (%s: %s) — tentando alternativa...', p, type(e).__name__, e)
+    logger.warning('Nenhum provedor de IA disponivel — seguindo so com as regras.')
     return None
 
 def _extrai_json(texto):
@@ -238,7 +240,7 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
     rev = [(i, it) for i, it in enumerate(itens) if it['cat'] == 'Revisar']
     if not rev or not _ia_disponivel():
         return {}
-    print(f'   🤖 IA analisando {len(rev)} itens ambiguos ({_ia_modelo()})...')
+    logger.info('🤖 IA analisando %d itens ambiguos (%s)...', len(rev), _ia_modelo())
 
     # Contexto de referencia: valores de cada classe no calculo manual do especialista
     ref_ctx = ''
@@ -277,10 +279,11 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
             except Exception:
                 itens_lote = _recupera_itens_json(resp)  # JSON truncado -> recupera o que der
             if itens_lote:
+                logger.info('Lote %d/%d: %d sugestoes recebidas', nlote, n_lotes, len(itens_lote))
                 break
         if not itens_lote:
-            print(f'      ⚠️  lote {nlote}/{n_lotes} sem resposta valida apos 3 tentativas '
-                  f'({len(lote)} itens ficam para revisao humana).')
+            logger.warning('Lote %d/%d sem resposta valida apos 3 tentativas (%d itens ficam para revisao humana).',
+                           nlote, n_lotes, len(lote))
         for d in itens_lote:
             try:
                 j = int(d.get('id', -1))
@@ -298,7 +301,7 @@ def ia_parecer(R, nome_condo):
     """Parecer executivo escrito pela IA a partir dos numeros calculados."""
     if not _ia_disponivel():
         return None
-    print(f'   🤖 IA escrevendo parecer executivo...')
+    logger.info('🤖 IA escrevendo parecer executivo...')
     ex_top = defaultdict(float)
     for it in R['des']['itens']:
         if it['cat'] == 'Extraordinaria':
@@ -883,7 +886,11 @@ def ia_analisar_classes_lumpy(itens, nome_condo, outliers_por_classe):
     if not classes:
         return {}
 
-    print(f'   🤖 IA analisando {len(classes)} classes de manutencao ({_ia_modelo()})...')
+    logger.info('Enviando %d classes para IA...', len(classes))
+    logger.debug('Classes para IA:')
+    for (ng, nc), nfs in classes.items():
+        total_classe = sum(it['valor_pago'] for it in nfs)
+        logger.debug('  %s: %d NFs, total=R$ %.2f', nc, len(nfs), total_classe)
 
     # Monta o prompt com todas as classes
     blocos = []
@@ -915,8 +922,10 @@ def ia_analisar_classes_lumpy(itens, nome_condo, outliers_por_classe):
     try:
         data = _extrai_json(resp)
     except Exception:
+        logger.warning('Falha ao extrair JSON da resposta IA para classes lumpy')
         return {}
 
+    logger.info('IA retornou %% para %d classes', len(data.get('classes', {})))
     resultado = {}
     for nome_classe, info in data.get('classes', {}).items():
         try:
@@ -947,15 +956,18 @@ def _ws_header(ws, row, headers, widths=None):
 def analisar(folder):
     """Executa parsing + classificacao + regras; retorna dict com tudo.
     Usa IA (Claude API) como parser principal; fallback para parsers rigidos."""
+    t0 = time.time()
     nome = os.path.basename(folder.rstrip('/'))
+    logger.info('=== INICIO analisar(): %s ===', folder)
 
     # --- IA-powered parsing (substitui os 4 parsers rigidos) ---
+    logger.info('Passo 1/6: Carregando relatorios...')
     ia_dados = None
     try:
         from ia_parser import ia_parse_pasta
         ia_dados = ia_parse_pasta(folder)
     except Exception as e:
-        print(f'   ⚠️  ia_parser indisponivel ({e}) — usando parsers rigidos')
+        logger.warning('ia_parser indisponivel (%s) — usando parsers rigidos', e)
 
     if ia_dados:
         bal = ia_dados['bal']
@@ -969,6 +981,17 @@ def analisar(folder):
         sin = parse_dessin(os.path.join(folder, 'dessin02.xls'))
         inad_path = os.path.join(folder, 'inad01.xls')
         ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
+
+    logger.info('balanual: %d receitas, %d despesas, total=R$ %.2f',
+                len(bal['receitas']), len(bal['despesas']), bal.get('total_despesas', 0))
+    logger.info('desbai06: %d itens, periodo=%s a %s',
+                len(des['itens']),
+                des['periodo'][0] if des['periodo'][0] else '?',
+                des['periodo'][1] if des['periodo'][1] else '?')
+    logger.info('dessin02: total=R$ %.2f', sin['grand_total'] if sin and sin['grand_total'] else 0)
+    if ina and ina['itens']:
+        logger.info('inad01: %d unidades inadimplentes, total=R$ %.2f',
+                    len(set(i.get('unidade', '?') for i in ina['itens'])), ina['total'])
 
     # --- Cross-check entre relatorios ---
     tot_bal = bal.get('total_despesas', 0)
@@ -984,9 +1007,9 @@ def analisar(folder):
         if pct > 0.05:
             divergencias.append(f'balanual (R${tot_bal:,.2f}) vs dessin02 (R${tot_sin:,.2f}) = {pct:.1%}')
     if divergencias:
-        print(f'   ⚠️  DIVERGENCIA ENTRE RELATORIOS (>5%):')
+        logger.warning('DIVERGENCIA ENTRE RELATORIOS (>5%%):')
         for d in divergencias:
-            print(f'      {d}')
+            logger.warning('  %s', d)
 
     prev_paths = glob.glob(os.path.join(folder, 'Previs*.xlsx'))
     manual = parse_previsao(prev_paths[0]) if prev_paths else None
@@ -1002,15 +1025,23 @@ def analisar(folder):
             media_ult[_norm(l['classe'])] = 0.0
 
     # --- classificar lancamentos do desbai ---
+    logger.info('Passo 2/6: Classificando %d itens do desbai06...', len(des['itens']))
     for it in des['itens']:
         nm = freq.get(_norm(it['classe']))
         cat, mot = classify(it['grupo'], it['classe'], it['descricao'], nm, it['valor_pago'])
         it['cat'], it['motivo'], it['n_meses'] = cat, mot, nm
+    # Contagens
+    n_extra = sum(1 for it in des['itens'] if it['cat'] == 'Extraordinaria')
+    n_rec = sum(1 for it in des['itens'] if it['cat'] == 'Recorrente')
+    n_rev = sum(1 for it in des['itens'] if it['cat'] == 'Revisar')
+    logger.info('  Extraordinaria: %d | Recorrente: %d | Revisar: %d', n_extra, n_rec, n_rev)
 
     # --- IA: reclassifica itens "Revisar" ANTES de montar extra_por_classe ---
     # As sugestoes da IA alimentam o calculo do R3; nao sao so para exibicao.
     # O manual (quando presente) e passado como referencia de calibracao.
+    logger.info('Passo 3/6: IA — reclassificando itens Revisar...')
     sugestoes_ia = ia_classificar_revisar(des['itens'], nome, manual=manual)
+    logger.info('  IA sugeriu reclassificar %d itens', len(sugestoes_ia))
     for idx, (sug, just) in sugestoes_ia.items():
         it = des['itens'][idx]
         if sug in ('Extraordinaria', 'Recorrente'):
@@ -1018,9 +1049,12 @@ def analisar(folder):
             it['motivo'] = f'IA: {just}'
 
     # --- R3 Camada 1: deteccao estatistica de outliers ---
+    logger.info('Passo 4/6: R3 Camada 1 — deteccao estatistica (MAD)...')
     outliers_estatisticos = detectar_outliers_estatisticos(des, LUMPY_KEYS)
     if outliers_estatisticos:
-        print(f'   📊 Outliers estatisticos detectados em {len(outliers_estatisticos)} classes')
+        logger.info('  %d classes com outliers', len(outliers_estatisticos))
+        for (ng, nc), total in sorted(outliers_estatisticos.items()):
+            logger.debug('  %s: R$ %.2f em outliers', nc, total)
         # Marca apenas as NFs que sao outliers individuais (para o frontend)
         # Recalcula thresholds por classe para identificar quais NFs especificas
         import statistics as _st
@@ -1046,7 +1080,11 @@ def analisar(folder):
                                     f'mediana + 3*MAD (R${threshold:,.2f}) na classe {it["classe"]}')
 
     # --- R3 Camada 2: IA analisa cada classe lumpy e sugere % de deducao ---
+    logger.info('Passo 5/6: R3 Camada 2 — IA por classe...')
     pct_ia_por_classe = ia_analisar_classes_lumpy(des['itens'], nome, outliers_estatisticos)
+    n_classes_ia = len(pct_ia_por_classe)
+    n_com_deducao = sum(1 for v in pct_ia_por_classe.values() if v > 0)
+    logger.info('  IA analisou %d classes, %d com deducao recomendada', n_classes_ia, n_com_deducao)
 
     # --- Acumula NFs classificadas como Extraordinaria (NF por NF, método tradicional) ---
     extra_por_classe = defaultdict(float)
@@ -1055,6 +1093,7 @@ def analisar(folder):
             extra_por_classe[(_norm(it['grupo'] or ''), _norm(it['classe'] or ''))] += it['valor_pago']
 
     # --- montar plano de contas com deducoes (a partir do balanual) ---
+    logger.info('Passo 6/6: Aplicando regras R1-R8...')
     linhas = []          # uma por classe do balanual
     desconsider = 0.0    # R1 (obras)
     prov_laudo = 0.0     # R4
@@ -1155,6 +1194,40 @@ def analisar(folder):
     base_total = sum(l['base'] for l in linhas)
     subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
     total_previsto = subtotal * (1 + INFLACAO)
+
+    # Log R1-R8 summary
+    r1 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R1')]
+    r2 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R2')]
+    r3 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R3')]
+    r4 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R4')]
+    r5 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R5')]
+    r6 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R6')]
+    if r1:
+        logger.info('  R1 (Obras): %d classes, R$ %.2f desconsiderados', len(r1), sum(v for _, v in r1))
+    if r2:
+        logger.info('  R2 (Pessoal): %d classes, R$ %.2f deduzidos', len(r2), sum(v for _, v in r2))
+    if r3:
+        logger.info('  R3 (Manutencao): %d classes, R$ %.2f deduzidos', len(r3), sum(v for _, v in r3))
+    if r4:
+        logger.info('  R4 (Diversas/Laudo): R$ %.2f provisionados', prov_laudo)
+    if r5:
+        logger.info('  R5 (Cartoriais/SCIP): R$ %.2f provisionados', prov_incendio)
+    if r6:
+        logger.info('  R6 (Anualizacao): %d contratos anualizados', len(r6))
+
+    logger.info('=== RESULTADO ===')
+    logger.info('  Base total:    R$ %12.2f', base_total)
+    logger.info('  Desconsideracoes: R$ %10.2f', desconsider)
+    logger.info('  Subtotal:      R$ %12.2f', subtotal)
+    logger.info('  Inflacao (%.1f%%): R$ %10.2f', INFLACAO * 100, subtotal * INFLACAO)
+    logger.info('  Total previsto: R$ %12.2f', total_previsto)
+    logger.info('  Provisao Laudo:  R$ %10.2f', prov_laudo)
+    logger.info('  Provisao SCIP:   R$ %10.2f', prov_incendio)
+    if divergencias:
+        for d in divergencias:
+            logger.warning('  %s', d)
+    logger.info('Tempo total: %.1fs', time.time() - t0)
+    logger.info('=== FIM analisar() ===')
 
     # --- inadimplencia (R8) ---
     # Regra: unidade e critica se ficou >= 3 meses CONSECUTIVOS sem pagar.
@@ -1765,55 +1838,56 @@ def _valida_pasta(pasta):
 
 
 def processar(pasta):
-    print(f"\n📂 Processando: {pasta}")
+    logger.info('📂 Processando: %s', pasta)
     try:
         out, R = gerar_xlsx(pasta)
     except Exception as e:
-        print(f"   ❌ Erro: {e}")
+        logger.error('Erro: %s', e)
         return
-    print(f"   ✅ Gerado: {out}")
-    print(f"   Despesa 12m: R$ {R['base_total']:,.2f}")
-    print(f"   Base recorrente ajustada: R$ {R['subtotal']:,.2f}")
-    print(f"   Previsao anual (+{INFLACAO:.0%}): R$ {R['total_previsto']:,.2f}"
-          f"   |   mensal: R$ {R['total_previsto']/12:,.2f}")
+    logger.info('✅ Gerado: %s', out)
+    logger.info('Despesa 12m: R$ %.2f', R['base_total'])
+    logger.info('Base recorrente ajustada: R$ %.2f', R['subtotal'])
+    logger.info('Previsao anual (+%.0f%%): R$ %.2f   |   mensal: R$ %.2f',
+                INFLACAO * 100, R['total_previsto'], R['total_previsto'] / 12)
     if R['inad'] and R['inad']['critica'] > 0.005:
-        print(f"   ⚠️  Inadimplencia critica (>=3 meses): R$ {R['inad']['critica']:,.2f}"
-              f"  |  impacto mensal na receita: -R$ {R['inad']['impacto_mensal_receita']:,.2f}")
+        logger.warning('Inadimplencia critica (>=3 meses): R$ %.2f  |  impacto mensal na receita: -R$ %.2f',
+                       R['inad']['critica'], R['inad']['impacto_mensal_receita'])
     if R['manual']:
         cf = R['manual']['confronto']
         man = cf.get('subtotal atual') or cf.get('subtotal inicial') or 0
         if man:
             d = R['subtotal'] - man
-            print(f"   Comparacao c/ previsao manual: R$ {man:,.2f}  (dif {d:+,.2f} = {100*d/man:+.1f}%)")
+            logger.info('Comparacao c/ previsao manual: R$ %.2f  (dif %+.2f = %+.1f%%)',
+                        man, d, 100 * d / man)
 
 
 def main():
-    print('=' * 62)
-    print('  PREVISAO ORCAMENTARIA DE CONDOMINIOS  (Condominio21)')
-    print('=' * 62)
+    logger.info('%s', '=' * 62)
+    logger.info('  PREVISAO ORCAMENTARIA DE CONDOMINIOS  (Condominio21)')
+    logger.info('%s', '=' * 62)
     if _ia_disponivel():
-        print(f'  🤖 IA ativa ({_ia_provedor()}: {_ia_modelo()}) — sugestoes + parecer executivo')
+        logger.info('🤖 IA ativa (%s: %s) — sugestoes + parecer executivo', _ia_provedor(), _ia_modelo())
     else:
-        print('  ℹ️  IA desligada — para ativar, crie chave_claude.txt OU chave_openai.txt')
-        print('     (ao lado deste programa), ou defina ANTHROPIC_API_KEY / OPENAI_API_KEY.')
+        logger.info('ℹ️  IA desligada — para ativar, crie chave_claude.txt OU chave_openai.txt')
+        logger.info('     (ao lado deste programa), ou defina ANTHROPIC_API_KEY / OPENAI_API_KEY.')
     if len(sys.argv) > 1:
         entrada = ' '.join(sys.argv[1:])
     else:
-        print('\nArraste a pasta do condominio para esta janela e de Enter')
-        print('(pode ser a pasta de um condominio/ano, ou uma pasta-mae com varios):\n')
+        logger.info('Arraste a pasta do condominio para esta janela e de Enter')
+        logger.info('(pode ser a pasta de um condominio/ano, ou uma pasta-mae com varios):')
         try:
             entrada = input('Pasta: ')
         except (EOFError, KeyboardInterrupt):
-            print('\nCancelado.'); return
+            logger.info('Cancelado.'); return
     pasta = _limpa_caminho(entrada)
     pastas, erro = _valida_pasta(pasta)
     if erro:
-        print(f'\n❌ {erro}')
+        logger.error(erro)
         sys.exit(1)
     if len(pastas) > 1:
-        print(f'\nEncontrei {len(pastas)} pastas de condominio:')
+        logger.info('Encontrei %d pastas de condominio:', len(pastas))
         for p in pastas:
-            print(f'   • {os.path.relpath(p, pasta)}')
+            logger.info('   • %s', os.path.relpath(p, pasta))
         try:
             ok = input('\nProcessar todas? (s/n) ')
         except (EOFError, KeyboardInterrupt):
@@ -1822,7 +1896,7 @@ def main():
             return
     for p in pastas:
         processar(p)
-    print('\nConcluido. Os arquivos "Previsao AUTO - *.xlsx" estao junto de cada pasta.')
+    logger.info('Concluido. Os arquivos "Previsao AUTO - *.xlsx" estao junto de cada pasta.')
 
 
 if __name__ == '__main__':
