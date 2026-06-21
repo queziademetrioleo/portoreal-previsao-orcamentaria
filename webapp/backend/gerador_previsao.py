@@ -400,51 +400,103 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         if 'REVIS' in nome.upper().replace(' ', '') and '(2)' in nome:
             ws_p2 = wb[nome]
             ws_p2['E11'] = num_frac
-            ws_p2['F48'] = inflacao   # sobrescreve o 0.1 hardcoded do template
-            # A6 do template = VLOOKUP(Cadastro!A4,...) que resolvia para o nome
-            # do condominio do template (BARRAMARES XX). Sobrescreve com o nome
-            # real desta previsao. A8 = titulo com o ano correto.
+            ws_p2['F48'] = inflacao
             cab = str(ws_p2['A6'].value or '')
             if cab.startswith('=') or 'BARRAMARES' in cab.upper() or cab.upper().startswith('COND'):
                 ws_p2['A6'] = nome_condominio
             if isinstance(ws_p2['A8'].value, str) and 'PREVIS' in ws_p2['A8'].value.upper():
                 ws_p2['A8'] = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
 
-            # Sobrescreve VLOOKUPs com valores diretos (openpyxl nao recalcula)
-            # Colunas C e D da PREVISAO (2) usam VLOOKUP na PREVISAO
-            for r2 in range(1, ws_p2.max_row + 1):
-                n2 = _norm(ws_p2.cell(r2, 3).value)
-                if not n2 or n2 in ('subtotal', 'total', ''):
-                    continue
-                if 'aumento' in n2 or 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
-                    continue
-                # Procura valor correspondente na PREVISAO (ja preenchida)
-                for rp in range(1, ws_p.max_row + 1):
-                    np = _norm(ws_p.cell(rp, 3).value)
-                    if np == n2:
-                        val_d = ws_p.cell(rp, 4).value
-                        val_e = ws_p.cell(rp, 5).value
-                        if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
-                            ws_p2.cell(r2, 4).value = round(float(val_d), 2)
-                        if isinstance(val_e, (int, float)) and abs(val_e) > 0.005:
-                            ws_p2.cell(r2, 5).value = round(float(val_e), 2)
-                        break
+            # Constroi mapa da PREVISAO: B_code -> (nome, valor_D, valor_E)
+            prev_map = {}
+            for rp in range(1, ws_p.max_row + 1):
+                code_b = ws_p.cell(rp, 2).value
+                if isinstance(code_b, (int, float)) and code_b > 0:
+                    nome = str(ws_p.cell(rp, 3).value or '').strip()
+                    val_d = ws_p.cell(rp, 4).value
+                    val_e = ws_p.cell(rp, 5).value
+                    prev_map[int(code_b)] = (nome, val_d, val_e)
 
-            # Subtotal, inflacao, total, saldo na PREVISAO (2)
+            # Preenche PREVISAO (2) copiando da PREVISAO pelo codigo B
             for r2 in range(1, ws_p2.max_row + 1):
-                n2 = _norm(ws_p2.cell(r2, 3).value)
-                if 'subtotal' in n2:
-                    ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
-                elif 'infla' in n2 and 'aumento' in n2:
-                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
-                elif n2 == 'total':
-                    total = subtotal_val * (1 + inflacao)
-                    ws_p2.cell(r2, 4).value = round(total, 2)
-                    ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
-                elif 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
-                    rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
-                    ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
+                code_b2 = ws_p2.cell(r2, 2).value
+                if isinstance(code_b2, (int, float)) and int(code_b2) in prev_map:
+                    nome, val_d, val_e = prev_map[int(code_b2)]
+                    ws_p2.cell(r2, 3).value = nome      # sobrescreve VLOOKUP
+                    if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
+                        ws_p2.cell(r2, 4).value = round(float(val_d), 2)
+                    if isinstance(val_e, (int, float)) and abs(val_e) > 0.005:
+                        ws_p2.cell(r2, 5).value = round(float(val_e), 2)
+                else:
+                    # Linhas de totais: procura por nome normalizado
+                    n2 = _norm(ws_p2.cell(r2, 3).value)
+                    if not n2:
+                        continue
+                    if 'subtotal' in n2:
+                        ws_p2.cell(r2, 3).value = 'SUBTOTAL'
+                        ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
+                        ws_p2.cell(r2, 7).value = 'Inflação'
+                    elif 'infla' in n2 and 'aumento' in n2:
+                        ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
+                    elif n2 == 'total':
+                        ws_p2.cell(r2, 3).value = 'TOTAL'
+                        total = subtotal_val * (1 + inflacao)
+                        ws_p2.cell(r2, 4).value = round(total, 2)
+                        ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
+                    elif 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
+                        rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
+                        ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
+
+            # Limpa colunas G/H (formulas c/ FR e s/ FR — preserva cabecalhos)
+            for r2 in range(1, ws_p2.max_row + 1):
+                for c in (7, 8):
+                    val = ws_p2.cell(r2, c).value
+                    if isinstance(val, str) and val.startswith('='):
+                        ws_p2.cell(r2, c).value = None
             break
+
+    # ---------- Comp. Desp-Rec ----------
+    if 'Comp. Desp-Rec' in wb.sheetnames:
+        ws_cd = wb['Comp. Desp-Rec']
+        # Preenche com valores diretos (VLOOKUPs do template nao recalculam)
+        for r in range(1, ws_cd.max_row + 1):
+            code_b = ws_cd.cell(r, 2).value
+            if isinstance(code_b, (int, float)) and int(code_b) in prev_map:
+                nome, val_d, val_e = prev_map[int(code_b)]
+                ws_cd.cell(r, 3).value = nome
+                if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
+                    ws_cd.cell(r, 4).value = round(float(val_d), 2)
+                # Coluna E = percentual da receita (formula D/$D$16%)
+                # Escreve valor direto: D / receita_total * 100
+                rec_total = sum(ln['total'] for ln in bal.get('receitas', []))
+                if isinstance(val_d, (int, float)) and rec_total > 0:
+                    ws_cd.cell(r, 5).value = round(float(val_d) / rec_total * 100, 1)
+            else:
+                n = _norm(ws_cd.cell(r, 3).value)
+                if 'subtotal' in n:
+                    ws_cd.cell(r, 4).value = round(subtotal_val, 2)
+                elif 'aumento' in n:
+                    ws_cd.cell(r, 4).value = round(subtotal_val * inflacao, 2)
+                elif n == 'total':
+                    ws_cd.cell(r, 4).value = round(subtotal_val * (1 + inflacao), 2)
+            # Limpa formulas remanescentes
+            for c in (3, 4, 5):
+                val = ws_cd.cell(r, c).value
+                if isinstance(val, str) and val.startswith('='):
+                    ws_cd.cell(r, c).value = None
+
+    # ---------- Limpeza final: remove TODAS as formulas ----------
+    # Isso garante que o arquivo abra com valores corretos sem recalculo
+    for sn in wb.sheetnames:
+        try:
+            ws = wb[sn]
+            for r in range(1, ws.max_row + 1):
+                for c in range(1, ws.max_column + 1):
+                    val = ws.cell(r, c).value
+                    if isinstance(val, str) and val.startswith('='):
+                        ws.cell(r, c).value = None
+        except Exception:
+            pass  # sheets de grafico, etc.
 
     # ---------- Inadimplencia ----------
     if inad_detalhe:
