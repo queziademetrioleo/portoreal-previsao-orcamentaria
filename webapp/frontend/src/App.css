@@ -5,11 +5,11 @@
 
 /* ---------- Design Tokens ---------- */
 :root {
-  /* Canvas (superfícies) */
+  /* Canvas (superfícies) — contraste visível entre níveis */
   --canvas: #000000;
-  --surface-1: #131316;
-  --surface-2: #1c1c21;
-  --surface-3: #26262b;
+  --surface-1: #1a1a22;
+  --surface-2: #25252f;
+  --surface-3: #33333d;
 
   /* Texto */
   --ink: #ffffff;
