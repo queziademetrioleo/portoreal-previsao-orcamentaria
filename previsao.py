@@ -953,7 +953,7 @@ def _ws_header(ws, row, headers, widths=None):
             ws.column_dimensions[get_column_letter(j)].width = w
 
 
-def analisar(folder):
+def analisar(folder, progress_callback=None):
     """Executa parsing + classificacao + regras; retorna dict com tudo.
     Usa IA (Claude API) como parser principal; fallback para parsers rigidos."""
     t0 = time.time()
@@ -1024,6 +1024,9 @@ def analisar(folder):
         else:
             media_ult[_norm(l['classe'])] = 0.0
 
+    if progress_callback:
+        progress_callback({'fase': 'Relatórios carregados', 'passo': 1, 'total': 6, 'detalhe': f'{len(des["itens"])} itens encontrados'})
+
     # --- classificar lancamentos do desbai ---
     logger.info('Passo 2/6: Classificando %d itens do desbai06...', len(des['itens']))
     for it in des['itens']:
@@ -1036,6 +1039,9 @@ def analisar(folder):
     n_rev = sum(1 for it in des['itens'] if it['cat'] == 'Revisar')
     logger.info('  Extraordinaria: %d | Recorrente: %d | Revisar: %d', n_extra, n_rec, n_rev)
 
+    if progress_callback:
+        progress_callback({'fase': 'Classificação inicial concluída', 'passo': 2, 'total': 6, 'detalhe': f'{n_extra} extraordinários, {n_rev} em revisão'})
+
     # --- IA: reclassifica itens "Revisar" ANTES de montar extra_por_classe ---
     # As sugestoes da IA alimentam o calculo do R3; nao sao so para exibicao.
     # O manual (quando presente) e passado como referencia de calibracao.
@@ -1047,6 +1053,9 @@ def analisar(folder):
         if sug in ('Extraordinaria', 'Recorrente'):
             it['cat'] = sug
             it['motivo'] = f'IA: {just}'
+
+    if progress_callback:
+        progress_callback({'fase': 'IA analisando itens ambíguos', 'passo': 3, 'total': 6, 'detalhe': f'{len(sugestoes_ia)} sugestões recebidas'})
 
     # --- R3 Camada 1: deteccao estatistica de outliers ---
     logger.info('Passo 4/6: R3 Camada 1 — deteccao estatistica (MAD)...')
@@ -1079,12 +1088,18 @@ def analisar(folder):
                     it['motivo'] = (f'Outlier estatistico (MAD): R${it["valor_pago"]:,.2f} > '
                                     f'mediana + 3*MAD (R${threshold:,.2f}) na classe {it["classe"]}')
 
+    if progress_callback:
+        progress_callback({'fase': 'Detectando outliers estatísticos', 'passo': 4, 'total': 6, 'detalhe': f'{len(outliers_estatisticos)} classes com outliers'})
+
     # --- R3 Camada 2: IA analisa cada classe lumpy e sugere % de deducao ---
     logger.info('Passo 5/6: R3 Camada 2 — IA por classe...')
     pct_ia_por_classe = ia_analisar_classes_lumpy(des['itens'], nome, outliers_estatisticos)
     n_classes_ia = len(pct_ia_por_classe)
     n_com_deducao = sum(1 for v in pct_ia_por_classe.values() if v > 0)
     logger.info('  IA analisou %d classes, %d com deducao recomendada', n_classes_ia, n_com_deducao)
+
+    if progress_callback:
+        progress_callback({'fase': 'IA analisando classes de manutenção', 'passo': 5, 'total': 6, 'detalhe': f'{len(pct_ia_por_classe)} classes avaliadas'})
 
     # --- Acumula NFs classificadas como Extraordinaria (NF por NF, método tradicional) ---
     extra_por_classe = defaultdict(float)
@@ -1307,6 +1322,9 @@ def analisar(folder):
                     'unidades_criticas': len(unidades_criticas),
                     'unidades_criticas_detalhe': unidades_criticas,
                     'impacto_mensal_receita': impacto_mensal}
+
+    if progress_callback:
+        progress_callback({'fase': 'Cálculos finalizados', 'passo': 6, 'total': 6, 'detalhe': f'Total previsto: R$ {total_previsto:,.2f}'})
 
     return {'bal': bal, 'des': des, 'sin': sin, 'inad': inad_res,
             'manual': manual, 'linhas': linhas, 'sugestoes_ia': sugestoes_ia,

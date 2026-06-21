@@ -15,6 +15,8 @@ import os
 import sys
 import json
 import uuid
+import asyncio
+import threading
 import tempfile
 import datetime
 import logging
@@ -276,7 +278,7 @@ async def criar_sessao(
 ):
     sid = uuid.uuid4().hex[:12]
 
-    # Salvar arquivos no MySQL
+    # Salvar arquivos
     uploads = {'balanual': balanual, 'desbai': desbai, 'dessin': dessin, 'inad': inad}
     file_bytes = {}
     for chave, up in uploads.items():
@@ -286,29 +288,81 @@ async def criar_sessao(
         file_bytes[chave] = conteudo
         db.salvar_arquivo(sid, chave, conteudo)
 
-    # Validar obrigatorios
     if 'balanual' not in file_bytes or 'desbai' not in file_bytes:
-        raise HTTPException(400, 'Arquivos obrigatorios ausentes: balanual, desbai')
+        raise HTTPException(400, 'Arquivos obrigatorios ausentes')
 
-    # Criar registro da sessao
     db.criar_sessao(sid, nome_condominio, ano_previsao)
+    logger.info(f'Sessao {sid} criada: {nome_condominio} ({ano_previsao})')
 
-    # Analisar arquivos (precisa de diretorio temporario)
-    try:
+    return {'sessao_id': sid, 'nome_condominio': nome_condominio,
+            'ano_previsao': ano_previsao, 'status': 'pendente'}
+
+
+@app.get('/api/sessao/{sid}/analisar')
+async def analisar_sse(sid: str):
+    """SSE endpoint: executa analise e transmite progresso em tempo real."""
+    from fastapi.responses import StreamingResponse
+
+    row = db.carregar_sessao(sid)
+    if not row:
+        raise HTTPException(404, 'Sessao nao encontrada')
+
+    eventos = []
+    lock = threading.Lock()
+
+    def on_progress(p):
+        with lock:
+            eventos.append(p)
+
+    async def gerar():
+        loop = asyncio.get_event_loop()
+
+        # Reconstitui arquivos do MySQL para diretorio temporario
         with tempfile.TemporaryDirectory() as tmpdir:
             for chave, fname in ARQUIVOS_ESPERADOS.items():
-                content = file_bytes.get(chave)
+                content = db.obter_arquivo(sid, chave)
                 if content:
                     with open(os.path.join(tmpdir, fname), 'wb') as f:
                         f.write(content)
-            R = core.analisar(tmpdir)
-    except Exception as e:
-        raise HTTPException(422, f'Falha ao analisar os relatorios: {e}')
 
-    estado = _montar_estado(sid, nome_condominio, ano_previsao, R)
+            # Inicia analise em thread
+            future = loop.run_in_executor(None, core.analisar, tmpdir, on_progress)
+
+            # Stream progress enquanto analise roda
+            last_idx = 0
+            while not future.done():
+                await asyncio.sleep(0.3)
+                with lock:
+                    while last_idx < len(eventos):
+                        ev = eventos[last_idx]
+                        last_idx += 1
+                        yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                yield ": keepalive\n\n"
+
+            # Pega ultimos eventos
+            with lock:
+                while last_idx < len(eventos):
+                    ev = eventos[last_idx]
+                    last_idx += 1
+                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+
+            # Resultado final
+            R = future.result()
+            db.salvar_cache_analise(sid, _json_dumps(R))
+
+            nome = row['nome_condominio']
+            ano = row['ano_previsao']
+            estado = _montar_estado(sid, nome, ano, R)
+            _salvar_estado_sync(sid, estado)
+
+            yield f"data: {json.dumps({'done': True, 'sessao_id': sid}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gerar(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+def _salvar_estado_sync(sid, estado):
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
-    db.salvar_cache_analise(sid, _json_dumps(R))
-    return JSONResponse(estado)
 
 
 # ---------------------------------------------------------------------------

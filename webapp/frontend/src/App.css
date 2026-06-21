@@ -183,6 +183,9 @@ body{background:var(--bg);color:var(--t1);min-height:100vh}
   .app-header{padding:0 var(--s-md)}
 }
 
+.scan-line{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(124,92,252,0.4),transparent);animation:scan 2s ease-in-out infinite;pointer-events:none}
+@keyframes scan{0%{top:0;opacity:0}20%{opacity:1}80%{opacity:1}100%{top:100%;opacity:0}}
+
 @media(max-width:480px){
   .title{font-size:20px}
   .section-title{font-size:15px}
