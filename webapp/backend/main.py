@@ -278,7 +278,9 @@ async def criar_sessao(
 ):
     sid = uuid.uuid4().hex[:12]
 
-    # Salvar arquivos
+    # Criar registro PRIMEIRO (INSERT), depois salvar arquivos (UPDATE)
+    db.criar_sessao(sid, nome_condominio, ano_previsao)
+
     uploads = {'balanual': balanual, 'desbai': desbai, 'dessin': dessin, 'inad': inad}
     file_bytes = {}
     for chave, up in uploads.items():
@@ -289,9 +291,8 @@ async def criar_sessao(
         db.salvar_arquivo(sid, chave, conteudo)
 
     if 'balanual' not in file_bytes or 'desbai' not in file_bytes:
+        db.deletar_sessao(sid)
         raise HTTPException(400, 'Arquivos obrigatorios ausentes')
-
-    db.criar_sessao(sid, nome_condominio, ano_previsao)
     logger.info(f'Sessao {sid} criada: {nome_condominio} ({ano_previsao})')
 
     return {'sessao_id': sid, 'nome_condominio': nome_condominio,
