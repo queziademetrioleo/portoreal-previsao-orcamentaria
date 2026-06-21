@@ -327,18 +327,23 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # compatibilidade: chamadas antigas a _set_se_nao_formula
         _set_se_nao_formula = _set
 
-        # Receitas
-        for ln in bal.get('receitas', []):
-            val = _receita_mensal(ln)
-            if val is None:
+        # Receitas — usa Jaccard (mesmo metodo das despesas)
+        valores_rec = {_norm(ln['classe']): ln['total'] for ln in bal.get('receitas', [])}
+        usados_rec = set()
+        for r in range(1, ws_p.max_row + 1):
+            nome = str(ws_p.cell(r, 3).value or '').strip()
+            if not nome:
                 continue
-            nc = _norm(ln['classe'])
-            for r in range(1, ws_p.max_row + 1):
-                nn = _norm(ws_p.cell(r, 3).value)
-                if nn == nc:
-                    _set_se_nao_formula(r, 4, val)
-                    _set_se_nao_formula(r, 5, val)
-                    break
+            nn = _norm(nome)
+            if nn in ('receitas', 'total'):
+                continue
+            if 'total' in nn:
+                continue
+            chave, val = _achar_valor(nn, valores_rec, usados_rec)
+            if val is not None and abs(val) > 0.005:
+                _set(r, 4, round(val, 2))
+                _set(r, 5, round(val, 2))
+                usados_rec.add(chave)
 
         # Despesas — atualiza linhas existentes com valores calculados
         usados_p = set()
@@ -396,6 +401,41 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 ws_p2['A6'] = nome_condominio
             if isinstance(ws_p2['A8'].value, str) and 'PREVIS' in ws_p2['A8'].value.upper():
                 ws_p2['A8'] = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
+
+            # Sobrescreve VLOOKUPs com valores diretos (openpyxl nao recalcula)
+            # Colunas C e D da PREVISAO (2) usam VLOOKUP na PREVISAO
+            for r2 in range(1, ws_p2.max_row + 1):
+                n2 = _norm(ws_p2.cell(r2, 3).value)
+                if not n2 or n2 in ('subtotal', 'total', ''):
+                    continue
+                if 'aumento' in n2 or 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
+                    continue
+                # Procura valor correspondente na PREVISAO (ja preenchida)
+                for rp in range(1, ws_p.max_row + 1):
+                    np = _norm(ws_p.cell(rp, 3).value)
+                    if np == n2:
+                        val_d = ws_p.cell(rp, 4).value
+                        val_e = ws_p.cell(rp, 5).value
+                        if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
+                            ws_p2.cell(r2, 4).value = round(float(val_d), 2)
+                        if isinstance(val_e, (int, float)) and abs(val_e) > 0.005:
+                            ws_p2.cell(r2, 5).value = round(float(val_e), 2)
+                        break
+
+            # Subtotal, inflacao, total, saldo na PREVISAO (2)
+            for r2 in range(1, ws_p2.max_row + 1):
+                n2 = _norm(ws_p2.cell(r2, 3).value)
+                if 'subtotal' in n2:
+                    ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
+                elif 'infla' in n2 and 'aumento' in n2:
+                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
+                elif n2 == 'total':
+                    total = subtotal_val * (1 + inflacao)
+                    ws_p2.cell(r2, 4).value = round(total, 2)
+                    ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
+                elif 'saldo' in n2 or 'deficit' in n2 or 'superavit' in n2:
+                    rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
+                    ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
             break
 
     # ---------- Inadimplencia ----------
