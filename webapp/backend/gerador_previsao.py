@@ -383,6 +383,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         if 'REVIS' in nome.upper().replace(' ', '') and '(2)' in nome:
             ws_p2 = wb[nome]
             ws_p2['E11'] = num_frac
+            ws_p2['F48'] = inflacao   # sobrescreve o 0.1 hardcoded do template
             # A6 do template = VLOOKUP(Cadastro!A4,...) que resolvia para o nome
             # do condominio do template (BARRAMARES XX). Sobrescreve com o nome
             # real desta previsao. A8 = titulo com o ano correto.
