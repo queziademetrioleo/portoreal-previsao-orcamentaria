@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # backend completo (inclui previsao.py e ia_parser.py copiados)
 COPY webapp/backend/ ./
 
+# modulo raiz (previsao.py) — a ponte em webapp/backend/previsao.py importa dele
+COPY previsao.py /previsao.py
+
 # frontend buildado
 COPY --from=front /app/dist/ ./static/
 
