@@ -48,11 +48,118 @@ _STOPWORDS = {'de', 'do', 'da', 'dos', 'das', 'e', 'ou', 'com', 'para', 'p',
 # (jardim/eta/elevador/...), nunca so as categoricas — senao o generico
 # "Contrato de Manutencao" cairia em "...do Jardim" (a 1a linha que aparece).
 _GENERICAS = {'contrato', 'manutencao', 'manut', 'despesas', 'taxa', 'geral'}
+_TOKENS_CURTOS = {'tv', 'oi', 'oii', 'eta', 'gas', 'fgts', 'inss', 'pis',
+                  'csll', 'irrf', 'iptu', 'net'}
 
 
 def _tokens(nome):
+    nome = _norm(nome)
     brutos = re.split(r'[^a-z0-9]+', nome)
-    return {t for t in brutos if len(t) >= 3 and t not in _STOPWORDS}
+    tokens = []
+    i = 0
+    while i < len(brutos):
+        tok = brutos[i]
+        if len(tok) == 1 and tok.isalnum():
+            j = i
+            sigla = ''
+            while j < len(brutos) and len(brutos[j]) == 1 and brutos[j].isalnum():
+                sigla += brutos[j]
+                j += 1
+            if len(sigla) >= 2:
+                tokens.append(sigla)
+            i = j
+            continue
+        tokens.append(tok)
+        i += 1
+    return {t for t in tokens
+            if ((len(t) >= 3) or t in _TOKENS_CURTOS) and t not in _STOPWORDS}
+
+
+def _linhas_contratuais(linhas):
+    """Linhas contratuais/pro-labore em ordem util para exibicao no template."""
+    out = []
+    for idx, linha in enumerate(linhas):
+        ng = _norm(linha.get('grupo'))
+        nc = _norm(linha.get('classe'))
+        if not (('contrato' in ng) or ('pro-labore' in ng) or ('prolabore' in ng)
+                or ('sindico' in ng and 'reembolso' in ng)):
+            continue
+        if abs(linha.get('base', 0) or 0) <= 0.005 and abs(linha.get('final', 0) or 0) <= 0.005:
+            continue
+        out.append({
+            'idx': idx,
+            'grupo': linha.get('grupo') or '',
+            'classe': linha.get('classe') or '',
+            'base': float(linha.get('base') or 0),
+            'final': float(linha.get('final') or 0),
+            'norm': nc,
+        })
+
+    def _ordem(item):
+        nc = item['norm']
+        tk = _tokens(nc)
+        if 'elevador' in nc:
+            return (0, item['idx'])
+        if 'jardim' in nc:
+            return (1, item['idx'])
+        if ('tv' in tk) or ('cabo' in tk):
+            return (2, item['idx'])
+        if ('eta' in tk) or ('piscina' in tk):
+            return (3, item['idx'])
+        if ('hidraul' in nc) or ('eletric' in nc):
+            return (4, item['idx'])
+        if any(k in nc for k in ('interf', 'camera', 'portao', 'antena')):
+            return (5, item['idx'])
+        if 'vigia' in nc:
+            return (6, item['idx'])
+        if 'contab' in nc:
+            return (7, item['idx'])
+        if ('internet' in nc) or (tk & {'net', 'oi', 'vivo', 'claro', 'fibra'}):
+            return (8, item['idx'])
+        if 'administr' in nc:
+            return (9, item['idx'])
+        if ('sindico' in nc) or ('pro-labore' in nc) or ('prolabore' in nc) or ('ajuda de custo' in nc):
+            return (10, item['idx'])
+        return (11, item['idx'])
+
+    return sorted(out, key=_ordem)
+
+
+def _aplicar_previsao_manual(ws_p, R):
+    """Aplica a PREVISAO manual aprovada quando o corpus historico a fornece."""
+    manual_rows = (R.get('manual') or {}).get('previsao') or []
+    if not manual_rows:
+        return None
+
+    for rr in range(20, 56):
+        for cc in (3, 4, 5, 6):
+            ws_p.cell(rr, cc).value = None
+
+    refs = {}
+    for item in manual_rows:
+        rr = int(item.get('row') or 0)
+        if rr < 20 or rr > 55:
+            continue
+        label = item.get('label') or ''
+        anual = item.get('anual')
+        ws_p.cell(rr, 3).value = label
+        ws_p.cell(rr, 4).value = round(float(anual), 2) if isinstance(anual, (int, float)) else anual
+        rateio = item.get('rateio')
+        mensal = item.get('mensal')
+        if isinstance(rateio, (int, float)):
+            ws_p.cell(rr, 5).value = round(float(rateio), 2)
+        if isinstance(mensal, (int, float)):
+            ws_p.cell(rr, 6).value = round(float(mensal), 2)
+        nlabel = _norm(label)
+        if 'subtotal' in nlabel and isinstance(anual, (int, float)):
+            refs['subtotal'] = float(anual)
+        elif nlabel == 'total' and isinstance(anual, (int, float)):
+            refs['total'] = float(anual)
+        elif 'infla' in nlabel and isinstance(anual, (int, float)):
+            refs['inflacao'] = float(anual)
+        elif ('saldo' in nlabel or 'deficit' in nlabel or 'superavit' in nlabel) and isinstance(anual, (int, float)):
+            refs['saldo'] = float(anual)
+    return refs
 
 
 def _achar_valor(nn, valores, usados):
@@ -129,6 +236,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     wb = openpyxl.load_workbook(destino)
     bal = R['bal']
     linhas = R['linhas']
+    linhas_contratuais = _linhas_contratuais(linhas)
     num_frac = num_fracoes if num_fracoes is not None else 12
     hoje = datetime.date.today()
     data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
@@ -270,6 +378,34 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 ws_c.cell(r_inc, 4).value = 0
             ws_c.cell(r_inc, 5).value = -round(R['prov_incendio'], 2)
 
+        # Secoes de contratos e pro-labore variam bastante entre condominios.
+        # Em vez de manter rotulos fixos do modelo, reescrevemos essas linhas com
+        # as classes reais do balanco para evitar numeros em contas erradas.
+        contratos = [ln for ln in linhas_contratuais if 'contrato' in _norm(ln['grupo'])]
+        prolabore = [ln for ln in linhas_contratuais if 'contrato' not in _norm(ln['grupo'])]
+
+        for rr in range(193, 204):
+            ws_c.cell(rr, 3).value = None
+            ws_c.cell(rr, 4).value = None
+            ws_c.cell(rr, 9).value = None
+            for cc in (5, 6, 7, 8):
+                ws_c.cell(rr, cc).value = None
+        for rr, ln in zip(range(193, 204), contratos):
+            ws_c.cell(rr, 3).value = ln['classe']
+            ws_c.cell(rr, 4).value = round(ln['base'], 2)
+            ws_c.cell(rr, 9).value = round(ln['final'], 2)
+
+        for rr in (256, 257):
+            ws_c.cell(rr, 3).value = None
+            ws_c.cell(rr, 4).value = None
+            ws_c.cell(rr, 9).value = None
+            for cc in (5, 6, 7, 8):
+                ws_c.cell(rr, cc).value = None
+        for rr, ln in zip((256, 257), prolabore):
+            ws_c.cell(rr, 3).value = ln['classe']
+            ws_c.cell(rr, 4).value = round(ln['base'], 2)
+            ws_c.cell(rr, 9).value = round(ln['final'], 2)
+
     # ---------- PREVISAO ----------
     ws_p = None
     for nome in wb.sheetnames:
@@ -321,10 +457,12 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # quando a celula NAO for formula (templates sem formula / do-zero),
         # nunca sobrescrevendo as formulas do modelo.
         def _set(r, c, valor):
-            """Sempre sobrescreve o valor — formulas do template nao sao
-            confiaveis porque o openpyxl nao recalcula, e as referencias
-            (ex.: =' C O N T A S '!$I$64) apontam para linhas fixas que
-            podem nao corresponder ao condominio atual."""
+            """Sobrescreve valores quando o dado calculado e confiavel.
+
+            Linhas nao cobertas pelo match textual continuam com a formula do
+            template, para que Excel/LibreOffice recalculem a partir da aba
+            CONTAS e evitem lacunas em contas como Agua/Luz/Gas.
+            """
             ws_p.cell(r, c).value = valor
 
         # compatibilidade: chamadas antigas a _set_se_nao_formula
@@ -377,6 +515,18 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 _set_se_nao_formula(r, 6, round(val / 12, 2))
                 usados_p.add(chave)
 
+        # A area de contratos/pro-labore precisa refletir as classes reais de cada
+        # condominio; o modelo fixo tem rotulos de outro empreendimento.
+        for rr in range(32, 43):
+            for cc in (3, 4, 5, 6):
+                ws_p.cell(rr, cc).value = None
+        for rr, ln in zip(range(32, 43), linhas_contratuais):
+            anual = round(ln['final'], 2)
+            ws_p.cell(rr, 3).value = ln['classe']
+            ws_p.cell(rr, 4).value = anual
+            ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
+            ws_p.cell(rr, 6).value = round(anual / 12, 2)
+
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
         subtotal_val = R.get('subtotal', 0)
         total_rec = sum(valores_rec.values())
@@ -399,6 +549,14 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 rec_anual = total_rec * 12
                 total = subtotal_val * (1 + inflacao)
                 _set_se_nao_formula(r, 4, round(rec_anual - total, 2))
+
+        manual_refs = _aplicar_previsao_manual(ws_p, R)
+        if manual_refs and 'subtotal' in manual_refs:
+            subtotal_val = manual_refs['subtotal']
+        if manual_refs and 'total' in manual_refs:
+            R['total_previsto'] = manual_refs['total']
+        if manual_refs and 'subtotal' in manual_refs:
+            R['subtotal'] = manual_refs['subtotal']
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:
@@ -528,18 +686,19 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 if isinstance(val, str) and val.startswith('='):
                     ws_cd.cell(r, c).value = None
 
-    # ---------- Limpeza final: remove TODAS as formulas ----------
-    # Isso garante que o arquivo abra com valores corretos sem recalculo
-    for sn in wb.sheetnames:
-        try:
-            ws = wb[sn]
-            for r in range(1, ws.max_row + 1):
-                for c in range(1, ws.max_column + 1):
-                    val = ws.cell(r, c).value
-                    if isinstance(val, str) and val.startswith('='):
-                        ws.cell(r, c).value = None
-        except Exception:
-            pass  # sheets de grafico, etc.
+    # ---------- Recalculo ----------
+    # Nao apagar formulas do template: varias linhas (ex.: Agua/Luz/Gas) usam
+    # referencias corretas para a CONTAS, mesmo quando o match textual nao
+    # encontra a conta equivalente. Marcamos o workbook para recalc completo ao
+    # abrir, evitando manter os caches antigos do modelo.
+    try:
+        wb.calculation.calcMode = 'auto'
+        wb.calculation.fullCalcOnLoad = True
+        wb.calculation.forceFullCalc = True
+        wb.calculation.calcOnSave = True
+        wb.calculation.calcCompleted = False
+    except Exception:
+        pass
 
     # ---------- Inadimplencia ----------
     if inad_detalhe:

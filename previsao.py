@@ -639,7 +639,29 @@ def parse_previsao(path):
         if re.match(r'^\d{2}\.\d{2}$', code):
             contas.append({'codigo': code, 'nome': str(c3).strip() if c3 else '',
                            'base': _num(c4), 'ajuste': (None if c5 is None else _num(c5))})
-    return {'contas': contas, 'confronto': confronto}
+
+    previsao = []
+    ws_prev = None
+    for name in wb.sheetnames:
+        nn = _norm(name).replace(' ', '')
+        if 'previs' in nn and '(2)' not in name:
+            ws_prev = wb[name]
+            break
+    if ws_prev is not None:
+        for r in range(1, ws_prev.max_row + 1):
+            label = ws_prev.cell(r, 3).value
+            anual = ws_prev.cell(r, 4).value
+            if not label or not isinstance(anual, (int, float)):
+                continue
+            previsao.append({
+                'row': r,
+                'label': str(label).strip(),
+                'anual': float(anual),
+                'rateio': _num(ws_prev.cell(r, 5).value),
+                'mensal': _num(ws_prev.cell(r, 6).value),
+            })
+
+    return {'contas': contas, 'confronto': confronto, 'previsao': previsao}
 
 # ----------------------------------------------------------------------------
 # CLASSIFICACAO  (conservadora)
