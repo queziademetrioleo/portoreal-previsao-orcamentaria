@@ -29,7 +29,8 @@ export default function App() {
     return <TelaResultado sessao={sessaoResultado} onVoltar={() => setTela('lista')} />
   }
   if (tela === 'revisao' && sessao) {
-    return <TelaRevisao sessao={sessao} onVoltar={() => setTela('lista')} />
+    return <TelaRevisao sessao={sessao} onVoltar={() => setTela('lista')}
+      onGerado={(s) => { setSessaoResultado(s); setTela('resultado') }} />
   }
   if (tela === 'upload') {
     return <TelaUpload onCriada={(s) => { setSessao(s); setTela('revisao') }} onVoltar={() => setTela('lista')} />

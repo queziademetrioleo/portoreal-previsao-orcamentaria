@@ -9,9 +9,10 @@ function fmt(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function TelaRevisao({ sessao, onVoltar }: {
+export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
   sessao: Sessao
   onVoltar: () => void
+  onGerado: (s: Sessao) => void
 }) {
   const { extra, setExtra, revisar, setRevisar, inad, setInad, vivo, buildPayload } = useDecisoes(sessao)
   const [gerando, setGerando] = useState(false)
@@ -24,7 +25,10 @@ export default function TelaRevisao({ sessao, onVoltar }: {
     setErro('')
     try {
       await gerarDocumento(sessao.sessao_id, buildPayload())
-      window.location.assign(`/api/sessao/${sessao.sessao_id}/download`)
+      // Busca a sessao atualizada (status=gerado) e navega para resultado
+      const r = await fetch(`/api/sessao/${sessao.sessao_id}`)
+      const s = await r.json()
+      onGerado(s)
     } catch (err: any) {
       setErro(err.message || 'Erro ao gerar documento.')
     } finally {
