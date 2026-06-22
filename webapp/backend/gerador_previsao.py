@@ -10,6 +10,7 @@ Conteudo dinamico = contas preenchidas conforme os dados reais
 """
 
 import os, re, datetime, unicodedata, warnings, shutil
+from copy import copy
 warnings.filterwarnings('ignore')
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -169,6 +170,31 @@ def _receita_mensal(ln):
     if nm <= 1:
         return None
     return round(ln['total'] / nm, 2)
+
+
+def _copy_row_style(ws, src_row, dst_row, cols):
+    """Replica estilo/altura de uma linha visual do template."""
+    if src_row < 1 or dst_row < 1:
+        return
+    ws.row_dimensions[dst_row].height = ws.row_dimensions[src_row].height
+    for col in cols:
+        src = ws.cell(src_row, col)
+        dst = ws.cell(dst_row, col)
+        if src.has_style:
+            dst._style = copy(src._style)
+        if src.number_format:
+            dst.number_format = src.number_format
+        if src.alignment:
+            dst.alignment = copy(src.alignment)
+
+
+def _insert_rows_for_dynamic_section(ws, before_row, amount, style_row, cols):
+    """Abre espaco antes de uma linha de total sem depender do tamanho fixo do modelo."""
+    if amount <= 0:
+        return
+    ws.insert_rows(before_row, amount)
+    for row in range(before_row, before_row + amount):
+        _copy_row_style(ws, style_row, row, cols)
 
 
 def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
@@ -488,10 +514,26 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             usados_receita.add(nlabel)
         receitas_prev.sort(key=_ordem_receita)
 
-        for r in range(10, 19):
+        total_rec_row = None
+        for rr in range(10, 25):
+            if _norm(ws_p.cell(rr, 3).value) == 'total':
+                total_rec_row = rr
+                break
+        if total_rec_row is None:
+            total_rec_row = 19
+
+        rec_ini = 10
+        rec_slots = max(total_rec_row - rec_ini, 0)
+        if len(receitas_prev) > rec_slots:
+            extra = len(receitas_prev) - rec_slots
+            _insert_rows_for_dynamic_section(ws_p, total_rec_row, extra,
+                                             max(total_rec_row - 1, rec_ini), (3, 4, 5, 6))
+            total_rec_row += extra
+
+        for r in range(rec_ini, total_rec_row):
             for c in (3, 4, 5, 6):
                 ws_p.cell(r, c).value = None
-        for r, (label, val) in zip(range(10, 19), receitas_prev):
+        for r, (label, val) in zip(range(rec_ini, total_rec_row), receitas_prev):
             ws_p.cell(r, 3).value = label
             ws_p.cell(r, 4).value = val
             ws_p.cell(r, 5).value = val
@@ -500,13 +542,16 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # Nao reaproveitamos formulas/rotulos do template aqui: elas podem apontar
         # para linhas antigas da CONTAS e gerar duplicidades ou subtotais falsos.
         subtotal_row = None
+        despesas_header_row = None
         for rr in range(22, ws_p.max_row + 1):
+            if _norm(ws_p.cell(rr, 3).value) == 'despesas':
+                despesas_header_row = rr
             if 'subtotal' in _norm(ws_p.cell(rr, 3).value):
                 subtotal_row = rr
                 break
         if subtotal_row is None:
             subtotal_row = 48
-        desp_ini = 22
+        desp_ini = (despesas_header_row + 1) if despesas_header_row else 22
         desp_fim = subtotal_row - 1
         for rr in range(desp_ini, desp_fim + 1):
             for cc in (3, 4, 5, 6):
@@ -604,10 +649,18 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         if abs(prov_incendio) > 0.005:
             linhas_prev.append(('Provisão Sistema de Incêndio/Registro', prov_incendio))
 
-        demais = sum(_valor_linha(ln) for idx, ln in despesas_ativas
-                     if idx not in consumidos)
-        if abs(demais) > 0.005:
-            linhas_prev.append(('Demais despesas', demais))
+        labels_existentes = {_norm(label) for label, _ in linhas_prev}
+        for idx, ln in despesas_ativas:
+            if idx in consumidos:
+                continue
+            label = str(ln.get('classe') or ln.get('grupo') or 'Despesa sem classificação').strip()
+            nlabel = _norm(label)
+            if nlabel in labels_existentes:
+                label = f"{ln.get('grupo') or 'Outros'} - {label}"
+                nlabel = _norm(label)
+            linhas_prev.append((label, _valor_linha(ln)))
+            labels_existentes.add(nlabel)
+            consumidos.add(idx)
 
         alvo_subtotal = float(R.get('subtotal') or 0)
         soma_prev = sum(valor for _, valor in linhas_prev)
@@ -616,11 +669,12 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             linhas_prev.append(('Ajustes de previsão', diferenca))
 
         slots = max(desp_fim - desp_ini + 1, 0)
-        if len(linhas_prev) > slots and slots > 0:
-            cabem = max(slots - 1, 0)
-            mantidas = linhas_prev[:cabem]
-            agregado = sum(valor for _, valor in linhas_prev[cabem:])
-            linhas_prev = mantidas + [('Demais despesas', agregado)]
+        if len(linhas_prev) > slots:
+            extra = len(linhas_prev) - slots
+            _insert_rows_for_dynamic_section(ws_p, subtotal_row, extra,
+                                             max(subtotal_row - 1, desp_ini), (3, 4, 5, 6))
+            subtotal_row += extra
+            desp_fim += extra
 
         for rr, (label, anual) in zip(range(desp_ini, desp_fim + 1), linhas_prev):
             anual = round(float(anual), 2)
@@ -632,7 +686,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         subtotal_val = round(sum(valor for _, valor in linhas_prev), 2)
 
         total_rec = sum(float(ws_p.cell(rr, 4).value or 0)
-                        for rr in range(10, 19)
+                        for rr in range(rec_ini, total_rec_row)
                         if isinstance(ws_p.cell(rr, 4).value, (int, float)))
 
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
@@ -648,7 +702,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
                 _set_se_nao_formula(r, 5, round(inflacao, 4))
             elif n3 == 'total':
-                if r <= 20:
+                if r == total_rec_row:
                     _set_se_nao_formula(r, 4, round(total_rec, 2))
                     _set_se_nao_formula(r, 5, round(total_rec, 2))
                 else:
@@ -663,6 +717,47 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 ws_p.cell(r, 3).value = 'SALDO ( SUPERÁVIT )' if saldo >= 0 else 'SALDO ( DÉFICIT )'
                 _set_se_nao_formula(r, 4, saldo)
                 _set_se_nao_formula(r, 5, round(saldo / 12, 2))
+
+        def _num_cell(row, col):
+            val = ws_p.cell(row, col).value
+            return float(val) if isinstance(val, (int, float)) else 0.0
+
+        vis_rec = [
+            _norm(ws_p.cell(rr, 3).value)
+            for rr in range(rec_ini, total_rec_row)
+            if str(ws_p.cell(rr, 3).value or '').strip()
+        ]
+        vis_desp = [
+            _norm(ws_p.cell(rr, 3).value)
+            for rr in range(desp_ini, subtotal_row)
+            if str(ws_p.cell(rr, 3).value or '').strip()
+        ]
+        if len(vis_rec) != len(receitas_prev):
+            raise ValueError(
+                f'PREVISAO inconsistente: {len(receitas_prev)} receitas calculadas, '
+                f'{len(vis_rec)} renderizadas'
+            )
+        if len(vis_desp) != len(linhas_prev):
+            raise ValueError(
+                f'PREVISAO inconsistente: {len(linhas_prev)} despesas calculadas, '
+                f'{len(vis_desp)} renderizadas'
+            )
+        if len(set(vis_rec)) != len(vis_rec):
+            raise ValueError('PREVISAO inconsistente: receitas com rotulos duplicados')
+        if len(set(vis_desp)) != len(vis_desp):
+            raise ValueError('PREVISAO inconsistente: despesas com rotulos duplicados')
+        soma_rec_visivel = sum(_num_cell(rr, 4) for rr in range(rec_ini, total_rec_row))
+        if abs(soma_rec_visivel - _num_cell(total_rec_row, 4)) > 0.05:
+            raise ValueError(
+                f'PREVISAO inconsistente: receitas visiveis={soma_rec_visivel:.2f}, '
+                f'total={_num_cell(total_rec_row, 4):.2f}'
+            )
+        soma_desp_visivel = sum(_num_cell(rr, 4) for rr in range(desp_ini, subtotal_row))
+        if abs(soma_desp_visivel - _num_cell(subtotal_row, 4)) > 0.05:
+            raise ValueError(
+                f'PREVISAO inconsistente: despesas visiveis={soma_desp_visivel:.2f}, '
+                f'subtotal={_num_cell(subtotal_row, 4):.2f}'
+            )
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:
@@ -679,6 +774,18 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             # que openpyxl nao calcula). A PREVISAO (2) tem a mesma ordem.
             prev_rec = []   # (nome, val_d, val_e) em ordem
             prev_desp = []
+            receita_total_row = None
+            despesas_header_row = None
+            subtotal_prev_row = None
+            for rp in range(1, ws_p.max_row + 1):
+                nn = _norm(ws_p.cell(rp, 3).value)
+                if nn == 'despesas':
+                    despesas_header_row = rp
+                elif nn == 'total' and despesas_header_row is None:
+                    receita_total_row = rp
+                elif 'subtotal' in nn and despesas_header_row is not None:
+                    subtotal_prev_row = rp
+                    break
             for rp in range(1, ws_p.max_row + 1):
                 nome = str(ws_p.cell(rp, 3).value or '').strip()
                 if not nome:
@@ -693,28 +800,62 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 val_d = ws_p.cell(rp, 4).value
                 val_e = ws_p.cell(rp, 5).value
                 if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
-                    if 10 <= rp <= 19:
+                    if receita_total_row and 10 <= rp < receita_total_row:
                         prev_rec.append((nome, val_d, val_e))
-                    elif rp >= 22:
+                    elif (despesas_header_row and subtotal_prev_row and
+                          despesas_header_row < rp < subtotal_prev_row):
                         prev_desp.append((nome, val_d, val_e))
 
-            # Preenche PREVISAO (2) na mesma ordem: receitas rows 10-18, despesas rows 22+
+            # Preenche PREVISAO (2) na mesma ordem, abrindo linhas quando a
+            # PREVISAO dinamica tiver mais itens que o modelo antigo.
+            rec_ini2 = 11
+            rec_total_row2 = None
+            for rr in range(rec_ini2, 30):
+                if _norm(ws_p2.cell(rr, 3).value) == 'total':
+                    rec_total_row2 = rr
+                    break
+            if rec_total_row2 is None:
+                rec_total_row2 = 19
+            rec_slots2 = max(rec_total_row2 - rec_ini2, 0)
+            if len(prev_rec) > rec_slots2:
+                extra = len(prev_rec) - rec_slots2
+                _insert_rows_for_dynamic_section(ws_p2, rec_total_row2, extra,
+                                                 max(rec_total_row2 - 1, rec_ini2), (3, 4, 5, 6, 7, 8))
+                rec_total_row2 += extra
+            for rr in range(rec_ini2, rec_total_row2):
+                for cc in (3, 4, 5, 6, 7, 8):
+                    ws_p2.cell(rr, cc).value = None
             for i, (nome, val_d, val_e) in enumerate(prev_rec):
-                r2 = 11 + i
-                if r2 <= 18:
-                    ws_p2.cell(r2, 3).value = nome
-                    ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
-                    ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
+                r2 = rec_ini2 + i
+                ws_p2.cell(r2, 3).value = nome
+                ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
+                ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
 
             ws_p2['E11'] = num_frac
 
+            desp_ini2 = 22
+            subtotal_row2 = None
+            for rr in range(desp_ini2, ws_p2.max_row + 1):
+                if 'subtotal' in _norm(ws_p2.cell(rr, 3).value):
+                    subtotal_row2 = rr
+                    break
+            if subtotal_row2 is None:
+                subtotal_row2 = 48
+            desp_slots2 = max(subtotal_row2 - desp_ini2, 0)
+            if len(prev_desp) > desp_slots2:
+                extra = len(prev_desp) - desp_slots2
+                _insert_rows_for_dynamic_section(ws_p2, subtotal_row2, extra,
+                                                 max(subtotal_row2 - 1, desp_ini2), (3, 4, 5, 6, 7, 8))
+                subtotal_row2 += extra
+            for rr in range(desp_ini2, subtotal_row2):
+                for cc in (3, 4, 5, 6, 7, 8):
+                    ws_p2.cell(rr, cc).value = None
             for i, (nome, val_d, val_e) in enumerate(prev_desp):
-                r2 = 22 + i
-                if r2 <= 46:
-                    ws_p2.cell(r2, 3).value = nome
-                    val_d_div = round(float(val_d) / 12, 2) if isinstance(val_d, (int, float)) else val_d
-                    ws_p2.cell(r2, 4).value = val_d_div
-                    ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
+                r2 = desp_ini2 + i
+                ws_p2.cell(r2, 3).value = nome
+                val_d_div = round(float(val_d) / 12, 2) if isinstance(val_d, (int, float)) else val_d
+                ws_p2.cell(r2, 4).value = val_d_div
+                ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
 
             # Linhas de totais: identifica pelo texto da FORMULA (antes de ser limpa)
             # A formula contem "SUBTOTAL", "TOTAL", "SALDO" etc.
