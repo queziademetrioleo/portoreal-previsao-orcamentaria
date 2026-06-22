@@ -4,16 +4,20 @@ import type { Sessao } from './types'
 import ListaSessoes from './components/ListaSessoes'
 import TelaUpload from './components/TelaUpload'
 import TelaRevisao from './components/TelaRevisao'
+import TelaResultado from './components/TelaResultado'
 
-type Tela = 'lista' | 'upload' | 'revisao'
+type Tela = 'lista' | 'upload' | 'revisao' | 'resultado'
 
 export default function App() {
   const [tela, setTela] = useState<Tela>('lista')
   const [sessao, setSessao] = useState<Sessao | null>(null)
+  const [sessaoResultado, setSessaoResultado] = useState<Sessao | null>(null)
 
   const abrirSessao = async (id: string, status: string) => {
     if (status === 'gerado') {
-      window.location.assign(`/api/sessao/${id}/download`)
+      const r = await fetch(`/api/sessao/${id}`)
+      setSessaoResultado(await r.json())
+      setTela('resultado')
       return
     }
     const r = await fetch(`/api/sessao/${id}`)
@@ -21,6 +25,9 @@ export default function App() {
     setTela('revisao')
   }
 
+  if (tela === 'resultado' && sessaoResultado) {
+    return <TelaResultado sessao={sessaoResultado} onVoltar={() => setTela('lista')} />
+  }
   if (tela === 'revisao' && sessao) {
     return <TelaRevisao sessao={sessao} onVoltar={() => setTela('lista')} />
   }

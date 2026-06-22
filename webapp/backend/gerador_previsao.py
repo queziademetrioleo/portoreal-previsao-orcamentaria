@@ -129,7 +129,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     wb = openpyxl.load_workbook(destino)
     bal = R['bal']
     linhas = R['linhas']
-    num_frac = num_fracoes or 1
+    num_frac = num_fracoes if num_fracoes is not None else 12
     hoje = datetime.date.today()
     data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
 
@@ -379,6 +379,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
         subtotal_val = R.get('subtotal', 0)
+        total_rec = sum(valores_rec.values())
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
@@ -387,11 +388,15 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             elif 'infla' in n3 and 'previsao' in n3:
                 _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
             elif n3 == 'total':
-                total = subtotal_val * (1 + inflacao)
-                _set_se_nao_formula(r, 4, round(total, 2))
-                _set_se_nao_formula(r, 5, round(total / num_frac, 2))
+                if r <= 20:
+                    _set_se_nao_formula(r, 4, round(total_rec, 2))
+                    _set_se_nao_formula(r, 5, round(total_rec, 2))
+                else:
+                    total = subtotal_val * (1 + inflacao)
+                    _set_se_nao_formula(r, 4, round(total, 2))
+                    _set_se_nao_formula(r, 5, round(total / num_frac, 2))
             elif 'saldo' in n3 or 'deficit' in n3 or 'superavit' in n3:
-                rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
+                rec_anual = total_rec * 12
                 total = subtotal_val * (1 + inflacao)
                 _set_se_nao_formula(r, 4, round(rec_anual - total, 2))
 
@@ -399,7 +404,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     for nome in wb.sheetnames:
         if 'REVIS' in nome.upper().replace(' ', '') and '(2)' in nome:
             ws_p2 = wb[nome]
-            ws_p2['E11'] = num_frac
             ws_p2['F48'] = inflacao
             cab = str(ws_p2['A6'].value or '')
             if cab.startswith('=') or 'BARRAMARES' in cab.upper() or cab.upper().startswith('COND'):
@@ -432,17 +436,20 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
             # Preenche PREVISAO (2) na mesma ordem: receitas rows 10-18, despesas rows 22+
             for i, (nome, val_d, val_e) in enumerate(prev_rec):
-                r2 = 10 + i
+                r2 = 11 + i
                 if r2 <= 18:
                     ws_p2.cell(r2, 3).value = nome
                     ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
                     ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
 
+            ws_p2['E11'] = num_frac
+
             for i, (nome, val_d, val_e) in enumerate(prev_desp):
                 r2 = 22 + i
                 if r2 <= 46:
                     ws_p2.cell(r2, 3).value = nome
-                    ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
+                    val_d_div = round(float(val_d) / 12, 2) if isinstance(val_d, (int, float)) else val_d
+                    ws_p2.cell(r2, 4).value = val_d_div
                     ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
 
             # Linhas de totais: identifica pelo texto da FORMULA (antes de ser limpa)
@@ -463,8 +470,12 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     ws_p2.cell(r2, 4).value = round(total, 2)
                     ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
                 elif 'SALDO' in val_text.upper() or 'DEFICIT' in val_text.upper() or 'SUPERAVIT' in val_text.upper():
-                    rec_anual = sum(ln['total'] for ln in bal.get('receitas', []))
-                    ws_p2.cell(r2, 4).value = round(rec_anual - subtotal_val * (1 + inflacao), 2)
+                    rec_mensal = sum(v for _, v, _ in prev_rec if isinstance(v, (int, float)))
+                    rec_anual = rec_mensal * 12
+                    total_anual = subtotal_val * (1 + inflacao)
+                    saldo_val = rec_anual - total_anual
+                    ws_p2.cell(r2, 4).value = round(saldo_val, 2)
+                    ws_p2.cell(r2, 5).value = round(saldo_val / 12, 2)
                 # Fallback: identifica pelo valor na coluna B (99 = inflacao)
                 val_b = ws_p2.cell(r2, 2).value
                 if val_b == 99:
@@ -482,18 +493,27 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     if 'Comp. Desp-Rec' in wb.sheetnames:
         ws_cd = wb['Comp. Desp-Rec']
         # Preenche com valores diretos (VLOOKUPs do template nao recalculam)
-        for r in range(1, ws_cd.max_row + 1):
-            code_b = ws_cd.cell(r, 2).value
-            if isinstance(code_b, (int, float)) and int(code_b) in prev_desp:
-                nome, val_d, val_e = prev_desp[int(code_b)]
+        # Preenche receitas
+        for i, (nome, val_d, _) in enumerate(prev_rec):
+            r = 13 + i
+            if r <= 14:
                 ws_cd.cell(r, 3).value = nome
                 if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
                     ws_cd.cell(r, 4).value = round(float(val_d), 2)
-                # Coluna E = percentual da receita (formula D/$D$16%)
-                # Escreve valor direto: D / receita_total * 100
-                rec_total = sum(ln['total'] for ln in bal.get('receitas', []))
-                if isinstance(val_d, (int, float)) and rec_total > 0:
-                    ws_cd.cell(r, 5).value = round(float(val_d) / rec_total * 100, 1)
+        for r in range(1, ws_cd.max_row + 1):
+            code_b = ws_cd.cell(r, 2).value
+            if isinstance(code_b, (int, float)):
+                idx = int(code_b) - 1
+                if 0 <= idx < len(prev_desp):
+                    nome, val_d, val_e = prev_desp[idx]
+                    ws_cd.cell(r, 3).value = nome
+                    if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
+                        ws_cd.cell(r, 4).value = round(float(val_d), 2)
+                    # Coluna E = percentual da receita (formula D/$D$16%)
+                    # Escreve valor direto: D / receita_total * 100
+                    rec_total = sum(ln['total'] for ln in bal.get('receitas', []))
+                    if isinstance(val_d, (int, float)) and rec_total > 0:
+                        ws_cd.cell(r, 5).value = round(float(val_d) / rec_total * 100, 1)
             else:
                 n = _norm(ws_cd.cell(r, 3).value)
                 if 'subtotal' in n:
@@ -539,7 +559,7 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     linhas = R['linhas']
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
-    num_frac = num_fracoes or 1
+    num_frac = num_fracoes if num_fracoes is not None else 12
     hoje = datetime.date.today()
     data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
 
