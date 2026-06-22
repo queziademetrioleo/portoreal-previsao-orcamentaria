@@ -11,6 +11,10 @@ export interface ItemRevisao {
   decisao: 'aprovada' | 'reprovada' | 'pendente'
   valor_editado?: number
   nota?: string
+  explicacao?: {
+    resumo: string
+    evidencias: string[]
+  }
 }
 
 export interface ItemInad {
@@ -25,6 +29,10 @@ export interface ItemInad {
   decisao: 'abater' | 'ignorar'
   valor_editado?: number
   nota?: string
+  explicacao?: {
+    resumo: string
+    evidencias: string[]
+  }
 }
 
 export interface LinhaConta {

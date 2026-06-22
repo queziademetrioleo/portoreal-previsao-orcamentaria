@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 import db
 import previsao as core
 from gerador_previsao import gerar_previsao_adaptativa
+from diagnostico_contas import extrair_contas, gerar_markdown
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -146,6 +147,105 @@ def _valor_revisado(item):
         return float(item.get('valor', 0) or 0)
 
 
+def _explicacao_deterministica_despesa(item):
+    decisao = item.get('decisao')
+    if decisao == 'aprovada':
+        resumo = 'Retirado da previsão por ter indício de gasto pontual ou extraordinário.'
+    elif decisao == 'reprovada':
+        resumo = 'Mantido na previsão por ter sido considerado parte da rotina do condomínio.'
+    else:
+        resumo = 'Item aguardando decisão humana.'
+    evidencias = []
+    origem = item.get('origem')
+    if origem:
+        evidencias.append(f'Origem da classificação: {origem}.')
+    if item.get('n_meses') is not None:
+        evidencias.append(f'Frequência observada: {item.get("n_meses")}/12 meses.')
+    if item.get('motivo'):
+        evidencias.append(f'Motivo técnico: {item.get("motivo")}.')
+    if item.get('nota'):
+        evidencias.append(f'Nota humana: {item.get("nota")}.')
+    return {'resumo': resumo, 'evidencias': evidencias}
+
+
+def _explicacao_deterministica_inad(item):
+    if item.get('decisao') == 'abater':
+        resumo = 'Abatido da leitura de receita por reduzir a arrecadação provável.'
+    else:
+        resumo = 'Ignorado no abatimento porque não foi considerado crítico para a projeção.'
+    evidencias = [
+        'Inadimplência crítica.' if item.get('critica') else 'Inadimplência recente.',
+        f'{item.get("meses_atraso", 0)} mês(es) em atraso.',
+    ]
+    if item.get('nota'):
+        evidencias.append(f'Nota humana: {item.get("nota")}.')
+    return {'resumo': resumo, 'evidencias': evidencias}
+
+
+def _enriquecer_explicacoes_ia(estado):
+    """Gera explicacoes curtas e humanas para o relatório final.
+
+    A IA é opcional: se não houver chave/resposta válida, mantemos explicações
+    determinísticas para não bloquear a geração.
+    """
+    despesas = [
+        item for item in (estado.get('extraordinarias', []) + estado.get('revisar', []))
+        if item.get('decisao') != 'pendente'
+    ]
+    inad = estado.get('inadimplencia', [])
+    for item in despesas:
+        item['explicacao'] = _explicacao_deterministica_despesa(item)
+    for item in inad:
+        item['explicacao'] = _explicacao_deterministica_inad(item)
+
+    if not core._ia_disponivel() or not despesas:
+        return
+
+    payload = []
+    for item in despesas[:80]:
+        payload.append({
+            'id': item['id'],
+            'decisao': 'removido' if item.get('decisao') == 'aprovada' else 'mantido',
+            'grupo': item.get('grupo'),
+            'classe': item.get('classe'),
+            'descricao': item.get('descricao'),
+            'valor': _valor_revisado(item),
+            'frequencia_12m': item.get('n_meses'),
+            'motivo_tecnico': item.get('motivo'),
+            'nota_humana': item.get('nota'),
+            'origem': item.get('origem'),
+        })
+    sistema = (
+        'Você é um analista financeiro de condomínios. Explique decisões de revisão '
+        'orçamentária para um síndico idoso, com linguagem simples, respeitosa e direta. '
+        'Não invente fatos. Use apenas os dados recebidos.'
+    )
+    user = (
+        'Para cada item, retorne JSON no formato '
+        '{"itens":[{"id":1,"resumo":"frase curta","evidencias":["ponto 1","ponto 2"]}]}. '
+        'Explique por que foi removido ou mantido, destacando pontualidade, frequência, '
+        'parcelas, regra/IA e nota humana quando houver.\n\n'
+        f'Itens: {json.dumps(payload, ensure_ascii=False)}'
+    )
+    try:
+        resp = core._claude_chat(sistema, user, max_tokens=5000, temperature=0)
+        if not resp:
+            return
+        data = core._extrai_json(resp)
+        por_id = {int(i.get('id')): i for i in data.get('itens', []) if i.get('id') is not None}
+        for item in despesas:
+            exp = por_id.get(int(item['id']))
+            if not exp:
+                continue
+            resumo = str(exp.get('resumo') or '').strip()
+            evidencias = exp.get('evidencias') if isinstance(exp.get('evidencias'), list) else []
+            evidencias = [str(e).strip() for e in evidencias if str(e).strip()][:5]
+            if resumo:
+                item['explicacao'] = {'resumo': resumo[:500], 'evidencias': evidencias}
+    except Exception as exc:
+        logger.warning('Falha ao gerar explicacoes IA: %s', exc)
+
+
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
     for item in estado['extraordinarias']:
@@ -188,14 +288,20 @@ def _recalcular_com_decisoes(sid, estado):
 
 
 def _extrair_previsao_final(path):
-    """Extrai a área visível da aba PREVISÃO do XLSX final gerado."""
+    """Extrai a área visível da aba PREVISÃO (2), fonte oficial do resultado."""
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = None
     for name in wb.sheetnames:
         nn = core._norm(name).replace(' ', '')
-        if 'previs' in nn and '(2)' not in name:
+        if 'previs' in nn and '(2)' in name:
             ws = wb[name]
             break
+    if ws is None:
+        for name in wb.sheetnames:
+            nn = core._norm(name).replace(' ', '')
+            if 'previs' in nn:
+                ws = wb[name]
+                break
     if ws is None:
         return []
 
@@ -326,6 +432,22 @@ async def startup():
 async def health():
     db_ok = db.verificar_conexao()
     return {"status": "ok" if db_ok else "degraded", "db": "connected" if db_ok else "disconnected"}
+
+
+@app.post('/api/diagnostico-contas')
+async def diagnostico_contas(previsao_manual: UploadFile = File(...)):
+    """Extrai formulas, valores e dependencias da aba CONTAS de uma previsao manual."""
+    conteudo = await previsao_manual.read()
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        tmp.write(conteudo)
+        tmp_path = tmp.name
+    try:
+        diag = extrair_contas(tmp_path)
+        diag['arquivo'] = previsao_manual.filename
+        diag['markdown'] = gerar_markdown(diag)
+        return diag
+    finally:
+        os.unlink(tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +618,7 @@ def gerar(sid: str, dec: Decisoes):
             f'Existem {len(pendentes)} itens pendentes de revisão. '
             'Decida se cada item deve ser removido ou mantido antes de gerar.'
         )
+    _enriquecer_explicacoes_ia(estado)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
 
     # Gerar xlsx em arquivo temporario e salvar bytes no MySQL

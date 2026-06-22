@@ -76,6 +76,85 @@ def _tokens(nome):
             if ((len(t) >= 3) or t in _TOKENS_CURTOS) and t not in _STOPWORDS}
 
 
+def _data_extenso(dt=None):
+    dt = dt or datetime.date.today()
+    return f'{dt.day} de {MESES_PT[dt.month - 1]} de {dt.year}'
+
+
+def _adicionar_consideracoes(ws, ano):
+    """Insere ou substitui a nota final exigida abaixo da tabela da PREVISAO (2)."""
+    start = None
+    for r in range(1, ws.max_row + 1):
+        for c in range(1, 9):
+            if 'consideracoes importantes' in _norm(ws.cell(r, c).value):
+                start = r
+                break
+        if start:
+            break
+
+    if start is None:
+        last_row = 1
+        for r in range(1, ws.max_row + 1):
+            if any(ws.cell(r, c).value not in (None, '') for c in range(1, 9)):
+                last_row = r
+        start = last_row + 3
+
+    # Remove conteudo/mesclas antigas da área de considerações para não duplicar
+    # datas do template manual.
+    end = start + 34
+    for rng in list(ws.merged_cells.ranges):
+        if rng.min_row <= end and rng.max_row >= start:
+            ws.unmerge_cells(str(rng))
+    for r in range(start, min(end, ws.max_row + 40) + 1):
+        for c in range(1, 9):
+            ws.cell(r, c).value = None
+
+    ws.cell(start, 3).value = 'CONSIDERAÇÕES IMPORTANTES'
+    ws.cell(start, 3).font = Font(bold=True, underline='single', size=12)
+    ws.cell(start, 3).alignment = Alignment(horizontal='center')
+    try:
+        ws.merge_cells(start_row=start, start_column=3, end_row=start, end_column=6)
+    except ValueError:
+        pass
+
+    nota_row = start + 2
+    ws.cell(nota_row, 1).value = (
+        '1) Para o cálculo desta previsão, levamos em consideração a média '
+        'aritmética dos últimos 12 meses'
+    )
+    ws.cell(nota_row, 1).font = Font(bold=True, size=9)
+    try:
+        ws.merge_cells(start_row=nota_row, start_column=1, end_row=nota_row, end_column=8)
+    except ValueError:
+        pass
+
+    assinatura_row = nota_row + 28
+    ws.cell(assinatura_row, 2).value = 'Cabo Frio,'
+    ws.cell(assinatura_row, 3).value = _data_extenso()
+    ws.cell(assinatura_row, 5).value = 'PORTO REAL IMÓVEIS'
+    for c in (2, 3, 5):
+        ws.cell(assinatura_row, c).font = Font(size=10)
+        ws.cell(assinatura_row, c).alignment = Alignment(horizontal='center')
+
+
+def _manter_apenas_previsao2(wb):
+    """O arquivo entregue ao usuário deve conter somente PREVISÃO (2)."""
+    alvo = None
+    for nome in wb.sheetnames:
+        nn = _norm(nome).replace(' ', '')
+        if 'previsao' in nn and '(2)' in nome:
+            alvo = nome
+            break
+    if alvo is None:
+        return
+    ws = wb[alvo]
+    ws.title = 'PREVISÃO (2)'
+    for nome in list(wb.sheetnames):
+        if nome != ws.title:
+            wb.remove(wb[nome])
+    wb.active = 0
+
+
 def _linhas_contratuais(linhas):
     """Linhas contratuais/pro-labore em ordem util para exibicao no template."""
     out = []
@@ -227,8 +306,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     linhas = R['linhas']
     linhas_contratuais = _linhas_contratuais(linhas)
     num_frac = num_fracoes if num_fracoes is not None else 12
-    hoje = datetime.date.today()
-    data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
+    data_ext = _data_extenso()
 
     # Mapas separados: por CLASSE e por GRUPO. Manter separados evita que uma
     # chave de grupo (ex.: "despesas diversas") seja substring de uma linha de
@@ -892,6 +970,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     val = ws_p2.cell(r2, c).value
                     if isinstance(val, str) and val.startswith('='):
                         ws_p2.cell(r2, c).value = None
+            _adicionar_consideracoes(ws_p2, ano)
             break
 
     # ---------- Comp. Desp-Rec ----------
@@ -951,6 +1030,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     if inad_detalhe:
         _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio)
 
+    _manter_apenas_previsao2(wb)
     wb.save(destino)
     return {'ok': True, 'modo': 'template'}
 
@@ -966,8 +1046,7 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     num_frac = num_fracoes if num_fracoes is not None else 12
-    hoje = datetime.date.today()
-    data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
+    data_ext = _data_extenso()
 
     ORDEM_GRUPOS = [
         'Despesas com Pessoal', 'Tarifas Publicas', 'Conservacao',
@@ -1048,14 +1127,14 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     ws_c.cell(r, 3, 'Subtotal Atual').font = Font(bold=True, size=12)
     ws_c.cell(r, 4, round(R['subtotal'], 2)).number_format = MONEY
 
-    # PREVISAO
-    ws_p = wb.create_sheet(' P R E V I S A O ')
+    # PREVISAO (2) — no fallback tambem entregamos somente a aba final.
+    ws_p = wb.create_sheet('PREVISÃO (2)')
     for col, w in zip('ABCDEF', [5, 8, 52, 18, 18, 18]):
         ws_p.column_dimensions[col].width = w
     r = 6
     ws_p.cell(r, 1, nome_condominio).font = Font(bold=True, size=13)
     r += 1
-    ws_p.cell(r, 1, f'PREVISAO ORCAMENTARIA PARA {ano}').font = Font(bold=True, size=13)
+    ws_p.cell(r, 1, f'PREVISÃO ORÇAMENTÁRIA PARA {ano}').font = Font(bold=True, size=13)
     r += 1
     ws_p.cell(r, 1, data_ext).font = Font(italic=True)
     r = 9
@@ -1110,7 +1189,7 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 1
     inflacao_val = despesa_total * inflacao
     ws_p.cell(r, 2, 99)
-    ws_p.cell(r, 3, f'PREVISAO DE INFLACAO - {inflacao*100:.0f}%')
+    ws_p.cell(r, 3, f'PREVISÃO DE INFLAÇÃO - {inflacao*100:.0f}%')
     ws_p.cell(r, 4, round(inflacao_val, 2)).number_format = MONEY
     r += 2
     total = despesa_total + inflacao_val
@@ -1119,18 +1198,14 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 2
     rec_anual = rec_total * 12
     saldo = rec_anual - total
-    ws_p.cell(r, 3, 'SALDO (DEFICIT)' if saldo < 0 else 'SALDO (SUPERAVIT)').font = Font(bold=True, size=12)
+    ws_p.cell(r, 3, 'SALDO ( DÉFICIT )' if saldo < 0 else 'SALDO ( SUPERÁVIT )').font = Font(bold=True, size=12)
     ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
-
-    # Demais abas
-    wb.create_sheet(' P R E V I S A O  (2)')
-    wb.create_sheet('Cadastro')
-    wb.create_sheet(' G R A F I C O')
-    wb.create_sheet('Comp. Desp-Rec')
+    _adicionar_consideracoes(ws_p, ano)
 
     if inad_detalhe:
         _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio)
 
+    _manter_apenas_previsao2(wb)
     wb.save(destino)
     return {'ok': True, 'modo': 'zero'}
 

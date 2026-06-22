@@ -340,8 +340,7 @@ export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
                     </div>
                   </div>
                   <div className="audit-summary-grid">
-                    <div><span>Classificação por IA</span><strong>{sessao.ia_ativa ? 'Ativa' : 'Inativa'}</strong></div>
-                    <div><span>Modelo</span><strong>{sessao.modelo_ia || 'Regras locais'}</strong></div>
+                    <div><span>Análise inteligente</span><strong>{sessao.ia_ativa ? 'Ativa' : 'Regras locais'}</strong></div>
                     <div><span>Extraordinários removidos</span><strong>{removidos.length}</strong></div>
                     <div><span>Itens mantidos</span><strong>{mantidos.length}</strong></div>
                     <div><span>Inadimplências abatidas</span><strong>{abatidos.length}</strong></div>
