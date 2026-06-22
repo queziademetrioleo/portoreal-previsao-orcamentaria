@@ -106,9 +106,17 @@ def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
                                impacto_receita_mensal=0.0,
                                inad_detalhe=None, inad_meta=None,
                                referencia=None):
-    """Gera Previsao.xlsx do zero com layout padrao (PDF)."""
-    return _gerar_do_zero(destino, R, nome_condominio, ano,
-                          num_fracoes, inflacao, inad_detalhe, inad_meta)
+    """
+    Gera Previsao.xlsx:
+    1. Se tem referencia, clona o layout e substitui valores
+    2. Senao, gera do zero com layout padrao
+    """
+    if referencia and os.path.exists(referencia):
+        return _gerar_via_template(referencia, destino, R, nome_condominio, ano,
+                                   num_fracoes, inflacao, inad_detalhe, inad_meta)
+    else:
+        return _gerar_do_zero(destino, R, nome_condominio, ano,
+                              num_fracoes, inflacao, inad_detalhe, inad_meta)
 
 
 # ===========================================================================
@@ -541,264 +549,184 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
     return {'ok': True, 'modo': 'template'}
 
 
-def _is_receita(linha):
-    """Determina se uma linha do plano de contas e uma receita."""
-    g = _norm(linha.get('grupo', '') or '')
-    c = _norm(linha.get('classe', '') or '')
-    # Palavras-chave de receita no nome do grupo
-    if 'receita' in g:
-        return True
-    # Classes tipicas de receita
-    receita_kw = ['taxa de condominio', 'taxa condominio', 'fundo de reserva',
-                  'fundo verao', 'fundo de obras', 'taxa extra', 'aluguel',
-                  'credito', 'rendimento', 'aplicacao', 'multa', 'juros']
-    return any(kw in c for kw in receita_kw)
-
-
 # ===========================================================================
-# Geração do zero (layout PDF-like)
+# Geração do zero (fallback sem template)
 # ===========================================================================
 def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
                     inad_detalhe, inad_meta):
-    """Gera Previsao do zero com layout identico ao PDF."""
+    """Gera Previsao do zero com layout padrao."""
     bal = R['bal']
     linhas = R['linhas']
     wb = openpyxl.Workbook()
-
-    # Remove default sheet
     wb.remove(wb.active)
-
     num_frac = num_fracoes if num_fracoes is not None else 12
     hoje = datetime.date.today()
     data_ext = f'{hoje.day} de {MESES_PT[hoje.month - 1]} de {hoje.year}'
 
-    # ============================================================
-    # Aba: PREVISAO
-    # ============================================================
-    ws = wb.create_sheet('PREVISAO')
+    ORDEM_GRUPOS = [
+        'Despesas com Pessoal', 'Tarifas Publicas', 'Conservacao',
+        'Tarifas Bancarias', 'Despesas Diversas', 'Contratos',
+        'Despesas Cartoriais e Honorarios', 'Despesas Administrativas',
+        'Reembolso/Pro-labore ao Sindico', 'Despesas com Obras/Benfeitorias',
+    ]
 
-    # Column widths
-    ws.column_dimensions['A'].width = 5
-    ws.column_dimensions['B'].width = 52
-    ws.column_dimensions['C'].width = 18
-    ws.column_dimensions['D'].width = 18
-
-    r = 1  # current row
-
-    # --- CABECALHO ---
-    ws.cell(r, 1).value = 'PORTO REAL IMÓVEIS'
-    ws.cell(r, 1).font = Font(bold=True, size=14, color='1F3864')
+    # CONTAS
+    ws_c = wb.create_sheet(' C O N T A S ')
+    for col, w in zip('ABCDEFGHI', [5, 12, 48, 16, 16, 14, 14, 14, 16]):
+        ws_c.column_dimensions[col].width = w
+    r = 1
+    ws_c.cell(r, 3, 'Confronto Inicial').font = Font(bold=True, size=13)
+    r += 2
+    ws_c.cell(r, 3, 'Valor Transportado')
+    ws_c.cell(r, 4, round(R['base_total'], 2)).number_format = MONEY
     r += 1
-    ws.cell(r, 1).value = nome_condominio
-    ws.cell(r, 1).font = Font(bold=True, size=12)
+    ws_c.cell(r, 3, 'Desconsideracoes')
+    ws_c.cell(r, 4, round(R['desconsideracoes'], 2)).number_format = MONEY
     r += 1
-    ws.cell(r, 1).value = f'PREVISÃO ORÇAMENTÁRIA PARA {ano}'
-    ws.cell(r, 1).font = Font(bold=True, size=12, color='1F3864')
+    ws_c.cell(r, 3, 'Subtotal Inicial').font = Font(bold=True)
+    ws_c.cell(r, 4, round(R['base_total'] - R['desconsideracoes'], 2)).number_format = MONEY
     r += 2
 
-    # --- RECEITAS ---
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
-    ws.cell(r, 1).value = 'RECEITAS'
-    ws.cell(r, 1).font = Font(bold=True, size=11, color='1F3864')
-    ws.cell(r, 3).value = 'VALOR MENSAL'
-    ws.cell(r, 3).font = Font(bold=True, size=10, color='1F3864')
-    for c in range(1, 4):
-        ws.cell(r, c).border = Border(bottom=Side(style='thin', color='1F3864'))
-    r += 1
-
-    receitas = [l for l in linhas if l['final'] > 0.005 and _is_receita(l)]
-    total_rec_mensal = 0
-    for i, rec in enumerate(receitas, 1):
-        mensal = round(rec['final'] / 12, 2) if rec['n_meses'] >= 2 else 0
-        if mensal < 0.01:
+    # Receitas no CONTAS
+    r_ini = r
+    cod = 1
+    for ln in bal.get('receitas', []):
+        val = _receita_mensal(ln)
+        if val is None:
             continue
-        ws.cell(r, 1).value = i
-        ws.cell(r, 2).value = rec['classe']
-        ws.cell(r, 3).value = mensal
-        ws.cell(r, 3).number_format = MONEY
-        total_rec_mensal += mensal
+        ws_c.cell(r, 2, f'01.{cod:02d}')
+        ws_c.cell(r, 3, ln['classe'])
+        ws_c.cell(r, 4, val).number_format = MONEY
+        ws_c.cell(r, 9, val).number_format = MONEY
+        cod += 1
         r += 1
-
-    # TOTAL receitas
-    ws.cell(r, 1).value = 'TOTAL'
-    ws.cell(r, 1).font = Font(bold=True)
-    ws.cell(r, 3).value = round(total_rec_mensal, 2)
-    ws.cell(r, 3).number_format = MONEY
-    ws.cell(r, 3).font = Font(bold=True)
-    for c in range(1, 4):
-        ws.cell(r, c).border = Border(top=Side(style='thin', color='1F3864'))
-    r += 2
-
-    # --- DESPESAS ---
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
-    ws.cell(r, 1).value = 'DESPESAS'
-    ws.cell(r, 1).font = Font(bold=True, size=11, color='1F3864')
-    ws.cell(r, 3).value = 'VALOR ANUAL'
-    ws.cell(r, 3).font = Font(bold=True, size=10, color='1F3864')
-    ws.cell(r, 4).value = 'VALOR MENSAL'
-    ws.cell(r, 4).font = Font(bold=True, size=10, color='1F3864')
-    for c in range(1, 5):
-        ws.cell(r, c).border = Border(bottom=Side(style='thin', color='1F3864'))
     r += 1
 
-    # Group despesas by grupo
-    despesas = [l for l in linhas if l['final'] > 0.005 and not _is_receita(l)]
-    grupos = {}
-    for d in despesas:
-        g = d['grupo'] or 'Outros'
-        grupos.setdefault(g, []).append(d)
-
-    # Order: keep original order from linhas
-    grupos_ordenados = []
-    seen = set()
-    for d in despesas:
-        g = d['grupo'] or 'Outros'
-        if g not in seen:
-            seen.add(g)
-            grupos_ordenados.append(g)
-
-    subtotal = R.get('subtotal', 0)
-    total_previsto = R.get('total_previsto', 0)
-    item_num = 0
-
-    for grupo_nome in grupos_ordenados:
-        items = grupos[grupo_nome]
-        total_grupo = sum(it['final'] for it in items)
-        if total_grupo < 0.01:
+    # Despesas
+    por_grupo = defaultdict(list)
+    for l in linhas:
+        por_grupo[l['grupo'] or 'Outros'].append(l)
+    cod_grupo = 2
+    for grupo_nome in ORDEM_GRUPOS:
+        match_key = None
+        for g in por_grupo:
+            if _norm(grupo_nome) in _norm(g) or _norm(g) in _norm(grupo_nome):
+                match_key = g
+                break
+        if match_key is None:
             continue
-
-        # Group header
-        ws.cell(r, 2).value = grupo_nome
-        ws.cell(r, 2).font = Font(bold=True, size=10)
+        linhas_grupo = por_grupo.pop(match_key)
+        base_g = sum(l['base'] for l in linhas_grupo)
+        final_g = sum(l['final'] for l in linhas_grupo)
+        ws_c.cell(r, 2, f'{cod_grupo:02d}')
+        ws_c.cell(r, 3, grupo_nome).font = Font(bold=True)
+        ws_c.cell(r, 4, round(base_g, 2)).number_format = MONEY
+        ws_c.cell(r, 9, round(final_g, 2)).number_format = MONEY
+        for c in range(1, 10):
+            ws_c.cell(r, c).fill = SUB_FILL
         r += 1
-
-        for it in items:
-            item_num += 1
-            anual = round(it['final'], 2)
-            mensal = round(anual / 12, 2)
-            ws.cell(r, 1).value = item_num
-            ws.cell(r, 2).value = it['classe']
-            ws.cell(r, 3).value = anual
-            ws.cell(r, 3).number_format = MONEY
-            ws.cell(r, 4).value = mensal
-            ws.cell(r, 4).number_format = MONEY
-            if it['deducao'] > 0:
-                ws.cell(r, 2).font = Font(color='999999', size=9)
-                ws.cell(r, 3).font = Font(color='999999')
-                ws.cell(r, 4).font = Font(color='999999')
+        cod_classe = 1
+        for l in linhas_grupo:
+            ws_c.cell(r, 2, f'{cod_grupo:02d}.{cod_classe:02d}')
+            ws_c.cell(r, 3, l['classe'])
+            ws_c.cell(r, 4, round(l['base'], 2)).number_format = MONEY
+            if abs(l['deducao']) > 0.005:
+                ws_c.cell(r, 5, round(l['deducao'], 2)).number_format = MONEY
+            ws_c.cell(r, 9, round(l['final'], 2)).number_format = MONEY
+            ws_c.cell(r, 6, l['n_meses'])
+            cod_classe += 1
             r += 1
+        cod_grupo += 1
 
-        # Group total
-        ws.cell(r, 2).value = f'Total {grupo_nome}'
-        ws.cell(r, 2).font = Font(bold=True, size=9)
-        ws.cell(r, 3).value = round(total_grupo, 2)
-        ws.cell(r, 3).number_format = MONEY
-        ws.cell(r, 3).font = Font(bold=True)
-        ws.cell(r, 4).value = round(total_grupo / 12, 2)
-        ws.cell(r, 4).number_format = MONEY
-        ws.cell(r, 4).font = Font(bold=True)
-        for c in range(1, 5):
-            ws.cell(r, c).border = Border(top=Side(style='thin', color='CCCCCC'))
+    r += 1
+    ws_c.cell(r, 3, 'Subtotal Atual').font = Font(bold=True, size=12)
+    ws_c.cell(r, 4, round(R['subtotal'], 2)).number_format = MONEY
+
+    # PREVISAO
+    ws_p = wb.create_sheet(' P R E V I S A O ')
+    for col, w in zip('ABCDEF', [5, 8, 52, 18, 18, 18]):
+        ws_p.column_dimensions[col].width = w
+    r = 6
+    ws_p.cell(r, 1, nome_condominio).font = Font(bold=True, size=13)
+    r += 1
+    ws_p.cell(r, 1, f'PREVISAO ORCAMENTARIA PARA {ano}').font = Font(bold=True, size=13)
+    r += 1
+    ws_p.cell(r, 1, data_ext).font = Font(italic=True)
+    r = 9
+    ws_p.cell(r, 3, 'RECEITAS').font = Font(bold=True)
+    ws_p.cell(r, 4, 'VALOR MENSAL').font = Font(bold=True)
+    r += 1
+    rec_total = 0
+    for ln in bal.get('receitas', []):
+        val = _receita_mensal(ln)
+        if val is None:
+            continue
+        ws_p.cell(r, 3, ln['classe'])
+        ws_p.cell(r, 4, val).number_format = MONEY
+        ws_p.cell(r, 5, val).number_format = MONEY
+        rec_total += val
         r += 1
-
     r += 1
-
-    # --- SUBTOTAL ---
-    ws.cell(r, 2).value = 'SUBTOTAL'
-    ws.cell(r, 2).font = Font(bold=True, size=11)
-    ws.cell(r, 3).value = round(subtotal, 2)
-    ws.cell(r, 3).number_format = MONEY
-    ws.cell(r, 3).font = Font(bold=True)
-    ws.cell(r, 4).value = round(subtotal / 12, 2)
-    ws.cell(r, 4).number_format = MONEY
-    ws.cell(r, 4).font = Font(bold=True)
-    for c in range(1, 5):
-        ws.cell(r, c).border = Border(top=Side(style='medium', color='1F3864'), bottom=Side(style='medium', color='1F3864'))
-    r += 1
-
-    # --- INFLACAO ---
-    if total_previsto <= 0:
-        total_previsto = round(subtotal * (1 + inflacao), 2)
-    inflacao_val = round(subtotal * inflacao, 2)
-    ws.cell(r, 2).value = f'PREVISÃO DE INFLAÇÃO - {inflacao*100:.1f}%'
-    ws.cell(r, 3).value = inflacao_val
-    ws.cell(r, 3).number_format = MONEY
-    ws.cell(r, 4).value = round(inflacao_val / 12, 2)
-    ws.cell(r, 4).number_format = MONEY
-    r += 1
-
-    # --- TOTAL ---
-    ws.cell(r, 2).value = 'TOTAL'
-    ws.cell(r, 2).font = Font(bold=True, size=11)
-    ws.cell(r, 3).value = round(total_previsto, 2)
-    ws.cell(r, 3).number_format = MONEY
-    ws.cell(r, 3).font = Font(bold=True)
-    ws.cell(r, 4).value = round(total_previsto / 12, 2)
-    ws.cell(r, 4).number_format = MONEY
-    ws.cell(r, 4).font = Font(bold=True)
-    for c in range(1, 5):
-        ws.cell(r, c).border = Border(top=Side(style='thin', color='1F3864'))
-    r += 1
-
-    # --- SALDO ---
-    rec_anual = total_rec_mensal * 12
-    saldo = round(rec_anual - total_previsto, 2)
-    saldo_label = 'SALDO (DÉFICIT)' if saldo < 0 else 'SALDO (SUPERÁVIT)'
-    ws.cell(r, 2).value = saldo_label
-    ws.cell(r, 2).font = Font(bold=True, size=11, color='CC0000' if saldo < 0 else '006600')
-    ws.cell(r, 3).value = saldo
-    ws.cell(r, 3).number_format = MONEY
-    ws.cell(r, 3).font = Font(bold=True, color='CC0000' if saldo < 0 else '006600')
-    ws.cell(r, 4).value = round(saldo / 12, 2)
-    ws.cell(r, 4).number_format = MONEY
-    ws.cell(r, 4).font = Font(bold=True, color='CC0000' if saldo < 0 else '006600')
+    ws_p.cell(r, 3, 'TOTAL').font = Font(bold=True)
+    ws_p.cell(r, 4, round(rec_total, 2)).number_format = MONEY
     r += 2
-
-    # --- PROVISOES (se existirem) ---
-    if R.get('prov_laudo', 0) > 0 or R.get('prov_incendio', 0) > 0:
-        ws.cell(r, 2).value = 'PROVISÕES'
-        ws.cell(r, 2).font = Font(bold=True, size=10, color='1F3864')
+    ws_p.cell(r, 3, 'DESPESAS').font = Font(bold=True)
+    ws_p.cell(r, 4, 'VALOR ANUAL').font = Font(bold=True)
+    r += 1
+    por_grupo2 = defaultdict(list)
+    for l in linhas:
+        por_grupo2[l['grupo'] or 'Outros'].append(l)
+    despesa_total = 0
+    idx = 1
+    for grupo_nome in ORDEM_GRUPOS:
+        match_key = None
+        for g in por_grupo2:
+            if _norm(grupo_nome) in _norm(g) or _norm(g) in _norm(grupo_nome):
+                match_key = g
+                break
+        if match_key is None:
+            continue
+        linhas_grupo = por_grupo2.pop(match_key)
+        final_g = sum(l['final'] for l in linhas_grupo)
+        if abs(final_g) < 0.005:
+            continue
+        ws_p.cell(r, 2, idx)
+        ws_p.cell(r, 3, grupo_nome)
+        ws_p.cell(r, 4, round(final_g, 2)).number_format = MONEY
+        ws_p.cell(r, 5, round(final_g / num_frac, 2)).number_format = MONEY
+        ws_p.cell(r, 6, round(final_g / 12, 2)).number_format = MONEY
+        despesa_total += final_g
+        idx += 1
         r += 1
-        if R.get('prov_laudo', 0) > 0:
-            ws.cell(r, 2).value = 'Provisão Laudo Autovistoria (R4)'
-            ws.cell(r, 3).value = round(R['prov_laudo'], 2)
-            ws.cell(r, 3).number_format = MONEY
-            r += 1
-        if R.get('prov_incendio', 0) > 0:
-            ws.cell(r, 2).value = 'Provisão Sist. Incêndio/Registro (R5)'
-            ws.cell(r, 3).value = round(R['prov_incendio'], 2)
-            ws.cell(r, 3).number_format = MONEY
-            r += 1
-        r += 1
+    r += 1
+    ws_p.cell(r, 3, 'SUBTOTAL').font = Font(bold=True)
+    ws_p.cell(r, 4, round(despesa_total, 2)).number_format = MONEY
+    r += 1
+    inflacao_val = despesa_total * inflacao
+    ws_p.cell(r, 2, 99)
+    ws_p.cell(r, 3, f'PREVISAO DE INFLACAO - {inflacao*100:.0f}%')
+    ws_p.cell(r, 4, round(inflacao_val, 2)).number_format = MONEY
+    r += 2
+    total = despesa_total + inflacao_val
+    ws_p.cell(r, 3, 'TOTAL').font = Font(bold=True, size=12)
+    ws_p.cell(r, 4, round(total, 2)).number_format = MONEY
+    r += 2
+    rec_anual = rec_total * 12
+    saldo = rec_anual - total
+    ws_p.cell(r, 3, 'SALDO (DEFICIT)' if saldo < 0 else 'SALDO (SUPERAVIT)').font = Font(bold=True, size=12)
+    ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
 
-    # --- RODAPE ---
-    ws.cell(r, 1).value = f'Cabo Frio, {data_ext}'
-    ws.cell(r, 1).font = Font(italic=True, size=9)
-    ws.cell(r, 3).value = 'PORTO REAL IMÓVEIS'
-    ws.cell(r, 3).font = Font(bold=True, size=9, color='1F3864')
-    ws.cell(r, 3).alignment = Alignment(horizontal='right')
-    r += 1
+    # Demais abas
+    wb.create_sheet(' P R E V I S A O  (2)')
+    wb.create_sheet('Cadastro')
+    wb.create_sheet(' G R A F I C O')
+    wb.create_sheet('Comp. Desp-Rec')
 
-    ws.cell(r, 1).value = 'CONSIDERAÇÕES IMPORTANTES'
-    ws.cell(r, 1).font = Font(bold=True, size=9)
-    r += 1
-    ws.cell(r, 1).value = '1) Para o cálculo desta previsão, levamos em consideração a média aritmética dos valores dos últimos 12 meses (ou número de meses em que houve despesa).'
-    ws.cell(r, 1).font = Font(size=8)
-    r += 1
-    ws.cell(r, 1).value = '2) Os valores extraordinários foram deduzidos conforme análise do sistema (regras R1-R8 + IA).'
-    ws.cell(r, 1).font = Font(size=8)
-    r += 1
-    ws.cell(r, 1).value = f'3) Inflação projetada: {inflacao*100:.1f}%'
-    ws.cell(r, 1).font = Font(size=8)
-
-    # ============================================================
-    # Aba: Inadimplencia (se houver dados)
-    # ============================================================
     if inad_detalhe:
         _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio)
 
     wb.save(destino)
-    return {'ok': True, 'modo': 'do-zero'}
+    return {'ok': True, 'modo': 'zero'}
 
 
 def _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio):
