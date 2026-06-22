@@ -33,6 +33,14 @@ export interface LinhaConta {
   n_meses: number
 }
 
+export interface LinhaPrevisaoFinal {
+  row: number
+  label: string
+  anual: number | string | null
+  rateio: number | string | null
+  mensal: number | string | null
+}
+
 export interface Resumo {
   base_total: number
   desconsideracoes: number
@@ -60,5 +68,6 @@ export interface Sessao {
   inadimplencia: ItemInad[]
   inad_meta: { total: number; critica: number; data_base: string } | null
   linhas_contas: LinhaConta[]
+  previsao_final?: LinhaPrevisaoFinal[]
   status: 'em_revisao' | 'gerado'
 }

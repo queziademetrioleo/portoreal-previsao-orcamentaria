@@ -134,6 +134,43 @@ body{background:var(--bg);color:var(--t1);min-height:100vh}
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s-md);flex-wrap:wrap;gap:var(--s-sm)}
 .section-count{font-size:13px;color:var(--t3)}
 
+/* ===== RESULTADO ===== */
+.result-page{max-width:1080px}
+.result-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-lg);margin-bottom:var(--s-xl)}
+.segmented{display:inline-flex;padding:4px;background:var(--s2);border:1px solid var(--b1);border-radius:999px}
+.segmented button{border:0;background:transparent;color:var(--t2);padding:7px 16px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.segmented button.active{background:var(--s1);color:var(--t1);box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.result-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-md);margin-bottom:var(--s-xl)}
+.kpi-card{background:var(--s1);border:1px solid var(--b1);border-left:4px solid var(--rec);border-radius:var(--r-card);padding:var(--s-lg)}
+.kpi-card span{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.kpi-card strong{display:block;font-size:24px;line-height:1.15;color:var(--t1)}
+.kpi-card.emphasis{border-left-color:#1a1d23}
+.kpi-card.danger{border-left-color:var(--inad)}
+.kpi-card.danger strong{color:var(--inad)}
+.result-grid{display:grid;grid-template-columns:1fr 1.35fr;gap:var(--s-md);align-items:start;margin-bottom:var(--s-xl)}
+.result-card{padding:var(--s-lg)}
+.table-card{overflow:auto}
+.result-table{width:100%;border-collapse:collapse;font-size:13px}
+.result-table th{padding:9px 10px;color:var(--t3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--b2);text-align:left;white-space:nowrap}
+.result-table td{padding:10px;border-bottom:1px solid var(--b1);color:var(--t1);vertical-align:top}
+.result-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.result-table tbody tr:last-child td{border-bottom:0}
+.danger-row td:first-child,.danger-row .num{color:var(--inad);font-weight:600}
+.total-line{display:flex;align-items:center;justify-content:space-between;gap:var(--s-md);padding:12px 4px;border-top:1px solid var(--b1);font-size:14px}
+.total-line span{color:var(--t2)}
+.total-line strong{font-variant-numeric:tabular-nums;color:var(--t1)}
+.total-line.muted span,.total-line.muted strong{color:var(--t2)}
+.total-line.strong{border-top:2px solid var(--b2);font-size:16px}
+.total-line.strong span,.total-line.strong strong{color:var(--t1);font-weight:800}
+.result-empty{font-size:13px;color:var(--t3);padding:var(--s-md);background:var(--s2);border-radius:var(--r-card)}
+.result-audit{display:flex;align-items:center;justify-content:space-between;gap:var(--s-lg);margin-bottom:var(--s-xl)}
+.result-audit p{font-size:13px;color:var(--t2);max-width:620px}
+.audit-balance{min-width:190px;text-align:right}
+.audit-balance span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3)}
+.audit-balance strong{display:block;font-size:22px;font-variant-numeric:tabular-nums;color:var(--rec)}
+.audit-balance.negative strong{color:var(--inad)}
+.result-actions{text-align:center;margin:var(--s-2xl) 0}
+
 /* ===== BULK ACTIONS ===== */
 .bulk-actions{display:flex;gap:var(--s-xs);margin-bottom:var(--s-md)}
 .bulk-actions .btn{font-size:12px;padding:5px 12px}
@@ -174,6 +211,13 @@ body{background:var(--bg);color:var(--t1);min-height:100vh}
 /* ===== RESPONSIVE ===== */
 @media(max-width:720px){
   .container{padding:var(--s-lg) var(--s-md)}
+  .result-hero{flex-direction:column}
+  .segmented{width:100%}
+  .segmented button{flex:1}
+  .result-kpis{grid-template-columns:1fr}
+  .result-grid{grid-template-columns:1fr}
+  .result-audit{align-items:flex-start;flex-direction:column}
+  .audit-balance{text-align:left}
   .file-grid{grid-template-columns:1fr}
   .item{flex-direction:column}
   .item-actions{flex-direction:row;min-width:0}

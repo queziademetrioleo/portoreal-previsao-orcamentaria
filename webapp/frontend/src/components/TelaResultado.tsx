@@ -1,28 +1,83 @@
-import type { Sessao } from '../types'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import type { LinhaPrevisaoFinal, Sessao } from '../types'
 import { urlDownload } from '../api'
+
+type Visao = 'anual' | 'mensal'
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function money(v: unknown) {
+  return typeof v === 'number' ? `R$ ${fmt(v)}` : '—'
+}
+
+function norm(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function isTotal(label: string) {
+  const n = norm(label).trim()
+  return n === 'total' || n.includes('subtotal') || n.includes('saldo') || n.includes('deficit') || n.includes('superavit') || n.includes('inflacao')
+}
+
+function valorReceita(row: LinhaPrevisaoFinal, visao: Visao) {
+  const mensal = typeof row.anual === 'number' ? row.anual : 0
+  return visao === 'mensal' ? mensal : mensal * 12
+}
+
+function valorDespesa(row: LinhaPrevisaoFinal, visao: Visao) {
+  if (visao === 'anual') return typeof row.anual === 'number' ? row.anual : 0
+  if (typeof row.rateio === 'number') return row.rateio
+  if (typeof row.mensal === 'number') return row.mensal
+  return typeof row.anual === 'number' ? row.anual / 12 : 0
+}
+
+function valorTotal(row: LinhaPrevisaoFinal, visao: Visao) {
+  if (visao === 'anual') return typeof row.anual === 'number' ? row.anual : 0
+  if (norm(row.label).includes('inflacao')) {
+    return typeof row.anual === 'number' ? row.anual / 12 : 0
+  }
+  if (typeof row.rateio === 'number') return row.rateio
+  if (typeof row.mensal === 'number') return row.mensal
+  return typeof row.anual === 'number' ? row.anual / 12 : 0
+}
+
+function fallbackRows(sessao: Sessao): LinhaPrevisaoFinal[] {
+  const r = sessao.resumo
+  const inflacao = r.inflacao || 0
+  const saldo = r.receita_anual - r.total_previsto
+  return [
+    { row: 9, label: 'RECEITAS', anual: 'VALOR MENSAL', rateio: null, mensal: null },
+    { row: 10, label: 'Receita média do período', anual: r.receita_mensal, rateio: null, mensal: null },
+    { row: 19, label: 'TOTAL', anual: r.receita_mensal, rateio: null, mensal: null },
+    { row: 21, label: 'DESPESAS', anual: 'VALOR ANUAL', rateio: null, mensal: null },
+    { row: 47, label: 'SUBTOTAL', anual: r.subtotal, rateio: null, mensal: r.subtotal / 12 },
+    { row: 48, label: `PREVISÃO DE INFLAÇÃO - ${(inflacao * 100).toFixed(1)} %`, anual: r.subtotal * inflacao, rateio: null, mensal: null },
+    { row: 50, label: 'TOTAL', anual: r.total_previsto, rateio: r.total_previsto / 12, mensal: null },
+    { row: 52, label: saldo < 0 ? 'SALDO ( DÉFICIT )' : 'SALDO ( SUPERÁVIT )', anual: saldo, rateio: saldo / 12, mensal: null },
+  ]
 }
 
 export default function TelaResultado({ sessao, onVoltar }: {
   sessao: Sessao
   onVoltar: () => void
 }) {
-  const r = sessao.resumo
-  const linhas = sessao.linhas_contas
-  const receitas = linhas.filter(l => l.grupo?.toLowerCase().includes('receita') || l.classe?.toLowerCase().includes('taxa') || l.classe?.toLowerCase().includes('fundo'))
+  const [visao, setVisao] = useState<Visao>('anual')
+  const rows = (sessao.previsao_final?.length ? sessao.previsao_final : fallbackRows(sessao))
 
-  // Group despesas by grupo
-  const grupos = new Map<string, typeof linhas>()
-  for (const l of linhas) {
-    if (receitas.includes(l)) continue
-    const g = l.grupo || 'Outros'
-    if (!grupos.has(g)) grupos.set(g, [])
-    grupos.get(g)!.push(l)
-  }
+  const receitas = rows.filter(r => r.row >= 10 && r.row <= 18 && r.label && !isTotal(r.label))
+  const totalReceitas = rows.find(r => r.row <= 20 && norm(r.label) === 'total')
+  const despesas = rows.filter(r => r.row >= 22 && r.row <= 46 && r.label && !isTotal(r.label))
+  const subtotal = rows.find(r => norm(r.label).includes('subtotal'))
+  const inflacao = rows.find(r => norm(r.label).includes('inflacao'))
+  const totalDespesas = rows.find(r => r.row > 20 && norm(r.label) === 'total')
 
-  const saldo = r.receita_anual - r.total_previsto
+  const totalReceitaValor = totalReceitas ? valorReceita(totalReceitas, visao) : sessao.resumo.receita_mensal * (visao === 'anual' ? 12 : 1)
+  const totalDespesaValor = totalDespesas ? valorTotal(totalDespesas, visao) : sessao.resumo.total_previsto / (visao === 'mensal' ? 12 : 1)
+  const saldoValor = totalReceitaValor - totalDespesaValor
+  const sinalSaldo = saldoValor < 0 ? 'Déficit' : 'Superávit'
 
   return (
     <>
@@ -33,192 +88,162 @@ export default function TelaResultado({ sessao, onVoltar }: {
         <button className="btn btn-ghost btn-sm" onClick={onVoltar}>← Voltar</button>
       </header>
 
-      <div className="container">
-        {/* Header info */}
-        <div className="eyebrow">Previsão Orçamentária</div>
-        <h1 className="title">{sessao.nome_condominio} — {sessao.ano_previsao}</h1>
-        {r.periodo && <p className="subtitle">Período base: {r.periodo[0]} a {r.periodo[1]}</p>}
-
-        {/* Summary cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--s-md)', marginBottom: 'var(--s-xl)' }}>
-          <SummaryCard label="Base 12 meses" value={r.base_total} />
-          <SummaryCard label="Desconsiderações" value={r.desconsideracoes} muted />
-          <SummaryCard label="Subtotal" value={r.subtotal} />
-          <SummaryCard label={`Inflação (${((r.inflacao || 0.0472)*100).toFixed(1)}%)`} value={r.subtotal * (r.inflacao || 0.0472)} muted />
-          <SummaryCard label="Total Previsto" value={r.total_previsto} highlight />
-          <SummaryCard label="Receita Anual" value={r.receita_anual} />
-          <SummaryCard label={saldo < 0 ? 'Déficit' : 'Superávit'} value={Math.abs(saldo)} highlight={saldo < 0} />
-        </div>
-
-        {/* Receitas */}
-        <div className="section">
-          <div className="eyebrow">Receitas</div>
-          <div className="card" style={{ overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--b1)' }}>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--t2)', fontWeight: 500 }}>Conta</th>
-                  <th style={{ textAlign: 'right', padding: '8px 12px', color: 'var(--t2)', fontWeight: 500 }}>Mensal</th>
-                  <th style={{ textAlign: 'right', padding: '8px 12px', color: 'var(--t2)', fontWeight: 500 }}>Anual</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receitas.map((l, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--b1)' }}>
-                    <td style={{ padding: '8px 12px', color: 'var(--t1)' }}>{l.classe}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(l.final / 12)}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(l.final)}</td>
-                  </tr>
-                ))}
-                <tr style={{ fontWeight: 600 }}>
-                  <td style={{ padding: '8px 12px', color: 'var(--t1)' }}>TOTAL RECEITAS</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(r.receita_mensal)}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(r.receita_anual)}</td>
-                </tr>
-              </tbody>
-            </table>
+      <main className="container result-page">
+        <div className="result-hero">
+          <div>
+            <div className="eyebrow">Documento final</div>
+            <h1 className="title">{sessao.nome_condominio} — {sessao.ano_previsao}</h1>
+            {sessao.resumo.periodo && (
+              <p className="subtitle">Base: {sessao.resumo.periodo[0]} a {sessao.resumo.periodo[1]}</p>
+            )}
+          </div>
+          <div className="segmented" aria-label="Alternar visão">
+            <button className={visao === 'anual' ? 'active' : ''} onClick={() => setVisao('anual')}>Anual</button>
+            <button className={visao === 'mensal' ? 'active' : ''} onClick={() => setVisao('mensal')}>Mensal</button>
           </div>
         </div>
 
-        {/* Despesas by group */}
-        <div className="section">
-          <div className="eyebrow">Despesas</div>
-          {[...grupos.entries()].map(([grupo, items]) => {
-            const totalGrupo = items.reduce((s, l) => s + l.final, 0)
-            if (totalGrupo < 0.01) return null
-            return (
-              <div key={grupo} className="card" style={{ marginBottom: 'var(--s-md)', overflow: 'auto' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: 'var(--s-sm)' }}>{grupo}</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--b1)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Conta</th>
-                      <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Base</th>
-                      <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Dedução</th>
-                      <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Final</th>
-                      <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Mensal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((l, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--b1)' }}>
-                        <td style={{ padding: '6px 12px', color: 'var(--t1)' }}>
-                          {l.classe}
-                          {l.deducao > 0 && <span style={{ fontSize: '10px', color: 'var(--t3)', marginLeft: '6px' }}>{l.regra}</span>}
-                        </td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--t2)' }}>R$ {fmt(l.base)}</td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', color: l.deducao > 0 ? 'var(--inad)' : 'var(--t2)' }}>{l.deducao > 0 ? `-R$ ${fmt(l.deducao)}` : '—'}</td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--t1)' }}>R$ {fmt(l.final)}</td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--t2)' }}>R$ {fmt(l.final / 12)}</td>
-                      </tr>
-                    ))}
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--b2)' }}>
-                      <td style={{ padding: '8px 12px', color: 'var(--t1)' }}>Total {grupo}</td>
-                      <td></td>
-                      <td></td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(totalGrupo)}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(totalGrupo / 12)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+        <div className="result-kpis">
+          <Kpi label={`Receitas ${visao === 'anual' ? 'anuais' : 'mensais'}`} value={totalReceitaValor} />
+          <Kpi label={`Despesas ${visao === 'anual' ? 'anuais' : 'mensais'}`} value={totalDespesaValor} emphasis />
+          <Kpi label={sinalSaldo} value={Math.abs(saldoValor)} danger={saldoValor < 0} />
+        </div>
+
+        <section className="result-grid">
+          <ResultCard title="Receitas">
+            <ResultTable
+              rows={receitas}
+              valueFor={r => valorReceita(r, visao)}
+              empty="Nenhuma receita detalhada no documento final."
+            />
+            {totalReceitas && <TotalLine label="Total receitas" value={totalReceitaValor} />}
+          </ResultCard>
+
+          <ResultCard title="Despesas">
+            <ResultTable
+              rows={despesas}
+              valueFor={r => valorDespesa(r, visao)}
+              empty="Nenhuma despesa detalhada no documento final."
+            />
+            {subtotal && <TotalLine label="Subtotal" value={valorTotal(subtotal, visao)} muted />}
+            {inflacao && <TotalLine label={inflacao.label} value={valorTotal(inflacao, visao)} muted />}
+            {totalDespesas && <TotalLine label="Total previsto" value={totalDespesaValor} strong />}
+          </ResultCard>
+        </section>
+
+        <section className="card result-audit">
+          <div>
+            <div className="eyebrow">Conferência</div>
+            <p>
+              Esta tela usa os valores da aba final <strong>PREVISÃO</strong> do XLSX gerado.
+              O saldo é sempre calculado como receitas menos despesas na visão selecionada.
+            </p>
+          </div>
+          <div className={`audit-balance ${saldoValor < 0 ? 'negative' : 'positive'}`}>
+            <span>{sinalSaldo}</span>
+            <strong>{money(Math.abs(saldoValor))}</strong>
+          </div>
+        </section>
+
+        {sessao.inadimplencia?.length > 0 && (
+          <section className="section">
+            <div className="section-header">
+              <div>
+                <div className="eyebrow">Inadimplência</div>
+                <span className="section-count">{sessao.inadimplencia.length} lançamento(s)</span>
               </div>
-            )
-          })}
-        </div>
-
-        {/* Totals */}
-        <div className="card" style={{ marginBottom: 'var(--s-xl)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <tbody>
-              <TotalsRow label="Subtotal" value={r.subtotal} />
-              {r.prov_laudo > 0 && <TotalsRow label="(+) Provisão Laudo Autovistoria (R4)" value={r.prov_laudo} muted />}
-              {r.prov_incendio > 0 && <TotalsRow label="(+) Provisão Sist. Incêndio (R5)" value={r.prov_incendio} muted />}
-              <TotalsRow label={`(+) Inflação (${((r.inflacao || 0.0472)*100).toFixed(1)}%)`} value={r.subtotal * (r.inflacao || 0.0472)} muted />
-              <TotalsRow label="TOTAL PREVISTO" value={r.total_previsto} bold />
-              <TotalsRow label="Receita Anual" value={r.receita_anual} />
-              <TotalsRow label={saldo < 0 ? 'DÉFICIT' : 'SUPERÁVIT'} value={Math.abs(saldo)} bold={saldo < 0} negative={saldo < 0} />
-            </tbody>
-          </table>
-        </div>
-
-        {/* Inadimplencia */}
-        {sessao.inadimplencia && sessao.inadimplencia.length > 0 && (
-          <div className="section">
-            <div className="eyebrow">Inadimplência</div>
-            <div className="card" style={{ overflow: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            </div>
+            <div className="card table-card">
+              <table className="result-table">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--b1)' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Unidade</th>
-                    <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Classe</th>
-                    <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Ref.</th>
-                    <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Valor</th>
-                    <th style={{ textAlign: 'right', padding: '6px 12px', color: 'var(--t2)', fontWeight: 500 }}>Meses</th>
+                  <tr>
+                    <th>Unidade</th>
+                    <th>Classe</th>
+                    <th>Ref.</th>
+                    <th className="num">Valor</th>
+                    <th className="num">Meses</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sessao.inadimplencia.map((item, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--b1)' }}>
-                      <td style={{ padding: '6px 12px', color: item.critica ? 'var(--inad)' : 'var(--t1)', fontWeight: item.critica ? 600 : 400 }}>
-                        {item.unidade}
-                      </td>
-                      <td style={{ padding: '6px 12px', color: 'var(--t2)' }}>{item.classe}</td>
-                      <td style={{ padding: '6px 12px', color: 'var(--t2)' }}>{item.mes_ref}</td>
-                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--t1)' }}>R$ {fmt(item.valor)}</td>
-                      <td style={{ padding: '6px 12px', textAlign: 'right', color: item.critica ? 'var(--inad)' : 'var(--t1)' }}>{item.meses_atraso}</td>
+                    <tr key={i} className={item.critica ? 'danger-row' : ''}>
+                      <td>{item.unidade}</td>
+                      <td>{item.classe}</td>
+                      <td>{item.mes_ref}</td>
+                      <td className="num">{money(item.valor)}</td>
+                      <td className="num">{item.meses_atraso}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Download button */}
-        <div style={{ textAlign: 'center', margin: 'var(--s-2xl) 0' }}>
-          <a href={urlDownload(sessao.sessao_id)} className="btn btn-primary" style={{ padding: '12px 32px', fontSize: '15px', textDecoration: 'none' }}>
-            📥 Baixar Previsão {sessao.ano_previsao} - {sessao.nome_condominio}.xlsx
+        <div className="result-actions">
+          <a href={urlDownload(sessao.sessao_id)} className="btn btn-primary">
+            Baixar Previsão {sessao.ano_previsao} - {sessao.nome_condominio}.xlsx
           </a>
         </div>
-      </div>
+      </main>
     </>
   )
 }
 
-function SummaryCard({ label, value, muted, highlight }: { label: string; value: number; muted?: boolean; highlight?: boolean }) {
+function Kpi({ label, value, emphasis, danger }: { label: string; value: number; emphasis?: boolean; danger?: boolean }) {
   return (
-    <div className="card" style={{
-      textAlign: 'center',
-      borderLeft: highlight ? '3px solid var(--inad)' : muted ? undefined : '3px solid var(--rec)',
-    }}>
-      <div style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{label}</div>
-      <div style={{ fontSize: '20px', fontWeight: 700, color: muted ? 'var(--t2)' : highlight ? 'var(--inad)' : 'var(--t1)' }}>
-        R$ {fmt(value)}
-      </div>
+    <div className={`kpi-card ${emphasis ? 'emphasis' : ''} ${danger ? 'danger' : ''}`}>
+      <span>{label}</span>
+      <strong>{money(value)}</strong>
     </div>
   )
 }
 
-function TotalsRow({ label, value, muted, bold, negative }: { label: string; value: number; muted?: boolean; bold?: boolean; negative?: boolean }) {
+function ResultCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <tr style={{ borderBottom: '1px solid var(--b1)' }}>
-      <td style={{
-        padding: '10px 16px',
-        fontWeight: bold ? 700 : 400,
-        fontSize: bold ? '15px' : '14px',
-        color: negative ? 'var(--inad)' : muted ? 'var(--t2)' : 'var(--t1)'
-      }}>
-        {label}
-      </td>
-      <td style={{
-        padding: '10px 16px',
-        textAlign: 'right',
-        fontWeight: bold ? 700 : 400,
-        fontSize: bold ? '15px' : '14px',
-        color: negative ? 'var(--inad)' : muted ? 'var(--t2)' : 'var(--t1)'
-      }}>
-        R$ {fmt(value)}
-      </td>
-    </tr>
+    <section className="card result-card">
+      <div className="section-header">
+        <h2 className="section-title">{title}</h2>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function ResultTable({ rows, valueFor, empty }: {
+  rows: LinhaPrevisaoFinal[]
+  valueFor: (row: LinhaPrevisaoFinal) => number
+  empty: string
+}) {
+  const visible = rows.filter(row => Math.abs(valueFor(row)) > 0.005)
+  if (!visible.length) return <p className="result-empty">{empty}</p>
+  return (
+    <div className="table-card">
+      <table className="result-table">
+        <thead>
+          <tr>
+            <th>Conta</th>
+            <th className="num">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map(row => (
+            <tr key={`${row.row}-${row.label}`}>
+              <td>{row.label}</td>
+              <td className="num">{money(valueFor(row))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TotalLine({ label, value, muted, strong }: { label: string; value: number; muted?: boolean; strong?: boolean }) {
+  return (
+    <div className={`total-line ${muted ? 'muted' : ''} ${strong ? 'strong' : ''}`}>
+      <span>{label}</span>
+      <strong>{money(value)}</strong>
+    </div>
   )
 }

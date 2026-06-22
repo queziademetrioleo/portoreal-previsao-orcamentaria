@@ -20,6 +20,7 @@ import threading
 import tempfile
 import datetime
 import logging
+import openpyxl
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, Response
@@ -155,6 +156,36 @@ def _recalcular_com_decisoes(sid, estado):
     return R2, impacto
 
 
+def _extrair_previsao_final(path):
+    """Extrai a área visível da aba PREVISÃO do XLSX final gerado."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = None
+    for name in wb.sheetnames:
+        nn = core._norm(name).replace(' ', '')
+        if 'previs' in nn and '(2)' not in name:
+            ws = wb[name]
+            break
+    if ws is None:
+        return []
+
+    rows = []
+    for r in range(9, 56):
+        label = ws.cell(r, 3).value
+        anual = ws.cell(r, 4).value
+        rateio = ws.cell(r, 5).value
+        mensal = ws.cell(r, 6).value
+        if label is None and anual is None and rateio is None and mensal is None:
+            continue
+        rows.append({
+            'row': r,
+            'label': str(label).strip() if label is not None else '',
+            'anual': round(float(anual), 2) if isinstance(anual, (int, float)) else anual,
+            'rateio': round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio,
+            'mensal': round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal,
+        })
+    return rows
+
+
 def _montar_estado(sid, nome, ano, R):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R['des']
@@ -233,6 +264,7 @@ def _montar_estado(sid, nome, ano, R):
             'data_base': str(R['inad']['data_base']),
         } if R['inad'] else None),
         'linhas_contas': linhas,
+        'previsao_final': (R.get('manual') or {}).get('previsao') or [],
         'status': 'em_revisao',
     }
 
@@ -443,6 +475,7 @@ def gerar(sid: str, dec: Decisoes):
             inad_meta=estado['inad_meta'],
             referencia=modelo if os.path.exists(modelo) else None,
         )
+        previsao_final = _extrair_previsao_final(out_path)
         with open(out_path, 'rb') as f:
             xlsx_bytes = f.read()
     finally:
@@ -454,6 +487,7 @@ def gerar(sid: str, dec: Decisoes):
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
+    estado['previsao_final'] = previsao_final
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
 
     return {'ok': True, 'sessao_id': sid,
