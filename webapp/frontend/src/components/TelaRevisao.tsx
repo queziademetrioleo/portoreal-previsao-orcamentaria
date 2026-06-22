@@ -73,8 +73,8 @@ export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
               count={pendentes(extra).length}
               onApproveAll={() => setExtra(prev => prev.map(i => i.decisao === 'pendente' ? {...i, decisao:'aprovada'} : i))}
               onRejectAll={() => setExtra(prev => prev.map(i => i.decisao === 'pendente' ? {...i, decisao:'reprovada'} : i))}
-              approveLabel="Aprovar todos"
-              rejectLabel="Manter todos"
+              approveLabel="Remover todos da previsão"
+              rejectLabel="Manter todos na previsão"
             />
             {extra.filter(i => i.decisao === 'pendente').map(i => (
               <CartaoRevisao key={i.id} item={i}
@@ -98,8 +98,8 @@ export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
               count={pendentes(revisar).length}
               onApproveAll={() => setRevisar(prev => prev.map(i => i.decisao === 'pendente' ? {...i, decisao:'aprovada'} : i))}
               onRejectAll={() => setRevisar(prev => prev.map(i => i.decisao === 'pendente' ? {...i, decisao:'reprovada'} : i))}
-              approveLabel="Aprovar todos"
-              rejectLabel="Manter todos"
+              approveLabel="Remover todos da previsão"
+              rejectLabel="Manter todos na previsão"
             />
             {revisar.filter(i => i.decisao === 'pendente').map(i => (
               <CartaoRevisao key={i.id} item={i}

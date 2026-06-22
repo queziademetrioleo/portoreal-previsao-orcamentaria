@@ -454,6 +454,16 @@ def gerar(sid: str, dec: Decisoes):
     estado = _carregar_estado(sid)
 
     _aplicar_decisoes(estado, dec)
+    pendentes = [
+        item for item in (estado['extraordinarias'] + estado['revisar'])
+        if item.get('decisao') == 'pendente'
+    ]
+    if pendentes:
+        raise HTTPException(
+            400,
+            f'Existem {len(pendentes)} itens pendentes de revisão. '
+            'Decida se cada item deve ser removido ou mantido antes de gerar.'
+        )
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
 
     # Gerar xlsx em arquivo temporario e salvar bytes no MySQL

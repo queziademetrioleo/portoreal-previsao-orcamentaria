@@ -40,8 +40,8 @@ export function CartaoRevisao({ item, onApprove, onReject, onReset }: {
           onReset && <button className="btn btn-ghost btn-xs" onClick={onReset}>↩ Reabrir</button>
         ) : (
           <>
-            <button className="btn btn-approve btn-xs" onClick={onApprove}>✓ Extraordinário</button>
-            <button className="btn btn-reject btn-xs" onClick={onReject}>✗ Recorrente</button>
+            <button className="btn btn-approve btn-xs" onClick={onApprove}>✓ Remover da previsão</button>
+            <button className="btn btn-reject btn-xs" onClick={onReject}>↺ Manter na previsão</button>
           </>
         )}
       </div>
