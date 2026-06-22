@@ -125,41 +125,6 @@ def _linhas_contratuais(linhas):
     return sorted(out, key=_ordem)
 
 
-def _aplicar_previsao_manual(ws_p, R):
-    """Aplica a PREVISAO manual aprovada quando o corpus historico a fornece."""
-    manual_rows = (R.get('manual') or {}).get('previsao') or []
-    if not manual_rows:
-        return None
-
-    for rr in range(9, 56):
-        for cc in (3, 4, 5, 6):
-            ws_p.cell(rr, cc).value = None
-
-    refs = {}
-    for item in manual_rows:
-        rr = int(item.get('row') or 0)
-        if rr < 9 or rr > 55:
-            continue
-        label = item.get('label')
-        anual = item.get('anual')
-        ws_p.cell(rr, 3).value = label
-        ws_p.cell(rr, 4).value = round(float(anual), 2) if isinstance(anual, (int, float)) else anual
-        rateio = item.get('rateio')
-        mensal = item.get('mensal')
-        ws_p.cell(rr, 5).value = round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio
-        ws_p.cell(rr, 6).value = round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal
-        nlabel = _norm(label)
-        if 'subtotal' in nlabel and isinstance(anual, (int, float)):
-            refs['subtotal'] = float(anual)
-        elif nlabel == 'total' and isinstance(anual, (int, float)):
-            refs['total'] = float(anual)
-        elif 'infla' in nlabel and isinstance(anual, (int, float)):
-            refs['inflacao'] = float(anual)
-        elif ('saldo' in nlabel or 'deficit' in nlabel or 'superavit' in nlabel) and isinstance(anual, (int, float)):
-            refs['saldo'] = float(anual)
-    return refs
-
-
 def _achar_valor(nn, valores, usados):
     """Encontra o melhor valor para a conta normalizada 'nn'.
 
@@ -483,6 +448,9 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 continue
             if 'total' in nn:
                 continue
+            ws_p.cell(r, 4).value = 0
+            ws_p.cell(r, 5).value = 0
+            ws_p.cell(r, 6).value = None
             chave, val = _achar_valor(nn, valores_rec, usados_rec)
             if val is not None and abs(val) > 0.005:
                 _set(r, 4, round(val, 2))
@@ -491,7 +459,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
         # Despesas — atualiza linhas existentes com valores calculados
         usados_p = set()
-        for r in range(1, ws_p.max_row + 1):
+        for r in range(22, ws_p.max_row + 1):
             nome = str(ws_p.cell(r, 3).value or '').strip()
             if not nome:
                 continue
@@ -525,9 +493,12 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
             ws_p.cell(rr, 6).value = round(anual / 12, 2)
 
+        total_rec = sum(float(ws_p.cell(rr, 4).value or 0)
+                        for rr in range(10, 19)
+                        if isinstance(ws_p.cell(rr, 4).value, (int, float)))
+
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
         subtotal_val = R.get('subtotal', 0)
-        total_rec = sum(valores_rec.values())
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
@@ -547,14 +518,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 rec_anual = total_rec * 12
                 total = subtotal_val * (1 + inflacao)
                 _set_se_nao_formula(r, 4, round(rec_anual - total, 2))
-
-        manual_refs = _aplicar_previsao_manual(ws_p, R)
-        if manual_refs and 'subtotal' in manual_refs:
-            subtotal_val = manual_refs['subtotal']
-        if manual_refs and 'total' in manual_refs:
-            R['total_previsto'] = manual_refs['total']
-        if manual_refs and 'subtotal' in manual_refs:
-            R['subtotal'] = manual_refs['subtotal']
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:

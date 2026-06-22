@@ -15,7 +15,7 @@ Classifica cada linha de despesa como:
 Uso:
     python3 validar_corpus.py "/caminho/para/Quezia - Previsao Orcamentaria 3"
 """
-import sys, os, re, warnings, unicodedata
+import sys, os, re, warnings, unicodedata, tempfile, shutil
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -156,7 +156,12 @@ def main(root):
             ano = (re.search(r'(\d{4})', yd) or [None, '2026'])[1]
             tmp = f"/tmp/_val_{_norm(condo)}_{ano}.xlsx".replace(" ", "_")
             try:
-                R = core.analisar(yp)
+                with tempfile.TemporaryDirectory() as workdir:
+                    for fname in ('balanual.xls', 'desbai06.xls', 'dessin02.xls', 'inad01.xls'):
+                        src = os.path.join(yp, fname)
+                        if os.path.exists(src):
+                            shutil.copy2(src, os.path.join(workdir, fname))
+                    R = core.analisar(workdir)
                 gerar_previsao_adaptativa(tmp, R, condo, int(ano), num_fracoes=None,
                                           inflacao=0.10, referencia=MODELO)
                 mine, manu = previsao_gerada(tmp), previsao_manual(man[0])

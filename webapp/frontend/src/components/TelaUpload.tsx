@@ -12,7 +12,6 @@ export default function TelaUpload({ onCriada, onVoltar }: {
   const [desbai, setDesbai] = useState<File | null>(null)
   const [dessin, setDessin] = useState<File | null>(null)
   const [inad, setInad] = useState<File | null>(null)
-  const [previsao, setPrevisao] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [progresso, setProgresso] = useState({fase:'Conectando...', passo:0, total:6, detalhe:''})
@@ -26,7 +25,7 @@ export default function TelaUpload({ onCriada, onVoltar }: {
     setErro('')
     setLoading(true)
     try {
-      const { sessao_id } = await criarSessao({ nome: nome.trim(), ano, balanual, desbai, dessin, inad, previsao })
+      const { sessao_id } = await criarSessao({ nome: nome.trim(), ano, balanual, desbai, dessin, inad })
       setLoading(true)
 
       // Connect to SSE for progress
@@ -148,9 +147,8 @@ export default function TelaUpload({ onCriada, onVoltar }: {
                 <FileZone label="desbai06.xls" file={desbai} setFile={setDesbai} required />
                 <FileZone label="dessin02.xls" file={dessin} setFile={setDessin} />
                 <FileZone label="inad01.xls" file={inad} setFile={setInad} />
-                <FileZone label="Previsão XXXX.xlsx" file={previsao} setFile={setPrevisao} />
               </div>
-              <p className="file-hint">* balanual.xls e desbai06.xls são obrigatórios. Envie o XLSX manual quando houver referência aprovada.</p>
+              <p className="file-hint">* balanual.xls e desbai06.xls são obrigatórios. O sistema gera a previsão sem usar planilha manual.</p>
             </div>
 
             <button type="submit" className="btn btn-primary btn-full" style={{marginTop:'var(--s-lg)'}}>

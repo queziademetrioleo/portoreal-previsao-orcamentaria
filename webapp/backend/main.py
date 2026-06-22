@@ -49,7 +49,6 @@ ARQUIVOS_ESPERADOS = {
     'desbai': 'desbai06.xls',
     'dessin': 'dessin02.xls',
     'inad': 'inad01.xls',
-    'previsao': 'Previsao referencia.xlsx',
 }
 
 
@@ -264,7 +263,7 @@ def _montar_estado(sid, nome, ano, R):
             'data_base': str(R['inad']['data_base']),
         } if R['inad'] else None),
         'linhas_contas': linhas,
-        'previsao_final': (R.get('manual') or {}).get('previsao') or [],
+        'previsao_final': [],
         'status': 'em_revisao',
     }
 
@@ -308,7 +307,6 @@ async def criar_sessao(
     desbai: UploadFile = File(...),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
-    previsao: UploadFile = File(None),
 ):
     sid = uuid.uuid4().hex[:12]
 
@@ -320,7 +318,6 @@ async def criar_sessao(
         'desbai': desbai,
         'dessin': dessin,
         'inad': inad,
-        'previsao': previsao,
     }
     file_bytes = {}
     for chave, up in uploads.items():

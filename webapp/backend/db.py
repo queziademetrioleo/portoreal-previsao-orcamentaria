@@ -48,7 +48,6 @@ CREATE TABLE IF NOT EXISTS sessoes (
     arquivo_desbai LONGBLOB,
     arquivo_dessin LONGBLOB,
     arquivo_inad LONGBLOB,
-    arquivo_previsao LONGBLOB,
     arquivo_xlsx LONGBLOB
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
@@ -60,11 +59,6 @@ def _init_schema():
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute(_BOOTSTRAP_SQL)
-        try:
-            cursor.execute("ALTER TABLE sessoes ADD COLUMN arquivo_previsao LONGBLOB AFTER arquivo_inad")
-        except mysql.connector.Error as exc:
-            if exc.errno != 1060:  # duplicate column
-                raise
         conn.commit()
         cursor.close()
         conn.close()
@@ -137,7 +131,6 @@ def salvar_arquivo(sid, campo, conteudo_bytes):
             'desbai': 'arquivo_desbai',
             'dessin': 'arquivo_dessin',
             'inad': 'arquivo_inad',
-            'previsao': 'arquivo_previsao',
             'xlsx': 'arquivo_xlsx',
         }
         col = colunas_validas.get(campo)
@@ -158,7 +151,6 @@ def obter_arquivo(sid, campo):
             'desbai': 'arquivo_desbai',
             'dessin': 'arquivo_dessin',
             'inad': 'arquivo_inad',
-            'previsao': 'arquivo_previsao',
             'xlsx': 'arquivo_xlsx',
         }
         col = colunas_validas.get(campo)

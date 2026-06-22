@@ -9,7 +9,6 @@ export async function criarSessao(form: {
   desbai: File
   dessin?: File | null
   inad?: File | null
-  previsao?: File | null
 }): Promise<Sessao> {
   const fd = new FormData()
   fd.append('nome_condominio', form.nome)
@@ -18,7 +17,6 @@ export async function criarSessao(form: {
   fd.append('desbai', form.desbai)
   if (form.dessin) fd.append('dessin', form.dessin)
   if (form.inad) fd.append('inad', form.inad)
-  if (form.previsao) fd.append('previsao', form.previsao)
   const r = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })
   if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
   return r.json()
