@@ -472,3 +472,345 @@ body{background:var(--bg);color:var(--t1);min-height:100vh}
   .item-valor{font-size:14px}
   .btn{font-size:13px;padding:6px 12px}
 }
+
+/* ===== CORPORATE RESULT OVERRIDES ===== */
+.executive-page,
+.executive-page *{
+  font-family: Helvetica, 'Helvetica Neue', Arial, sans-serif;
+}
+.executive-page{
+  max-width:1180px;
+  padding:24px clamp(18px,3vw,36px) 48px;
+  background:#f3f4f6;
+}
+.executive-hero{
+  margin-bottom:16px;
+  padding-bottom:14px;
+  border-bottom:1px solid #d9dce1;
+}
+.executive-hero h1{
+  font-family: Helvetica, 'Helvetica Neue', Arial, sans-serif;
+  font-size:28px;
+  line-height:1.15;
+  letter-spacing:-.4px;
+  font-weight:700;
+  margin-bottom:6px;
+}
+.executive-hero p{
+  max-width:680px;
+  font-size:14px;
+  line-height:1.45;
+  color:#4b5563;
+}
+.executive-actions .btn,
+.executive-actions .segmented button{
+  font-size:13px;
+}
+.minimal-summary.corporate{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin:14px 0 10px;
+}
+.minimal-number,
+.minimal-main-number,
+.minimal-health,
+.minimal-card,
+.exec-card{
+  border-radius:10px;
+  border:1px solid #d8dce2;
+  box-shadow:none;
+  background:#fff;
+}
+.minimal-number{
+  padding:16px;
+  min-height:98px;
+}
+.minimal-number span{
+  color:#4b5563;
+  font-size:12px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+.minimal-number strong{
+  font-size:24px;
+  line-height:1.1;
+  letter-spacing:-.2px;
+  color:#111827;
+}
+.minimal-number.negative strong{
+  color:#7f1d1d;
+}
+.minimal-health{
+  padding:13px 16px;
+  margin-bottom:12px;
+  gap:10px;
+}
+.minimal-health span{
+  font-size:14px;
+  font-weight:700;
+}
+.minimal-health p{
+  font-size:12px;
+  color:#6b7280;
+}
+.health-dot{
+  width:10px;
+  height:10px;
+}
+.detail-toggle{
+  font-size:12px;
+  font-weight:700;
+  color:#374151;
+}
+.detail-toggle input{
+  width:15px;
+  height:15px;
+}
+.minimal-tabs{
+  border-radius:10px;
+  gap:4px;
+  padding:4px;
+  margin:12px 0;
+}
+.minimal-tabs button{
+  border-radius:7px;
+  padding:8px 12px;
+  font-size:13px;
+  font-weight:700;
+}
+.minimal-tabs button span{
+  min-width:19px;
+  height:19px;
+  font-size:11px;
+}
+.minimal-grid.corporate{
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.minimal-card{
+  padding:18px;
+}
+.minimal-card.full{
+  grid-column:1/-1;
+}
+.exec-section-title{
+  margin-bottom:12px;
+}
+.exec-section-title h2{
+  font-family: Helvetica, 'Helvetica Neue', Arial, sans-serif;
+  font-size:17px;
+  line-height:1.25;
+  font-weight:700;
+  letter-spacing:0;
+}
+.exec-section-title p{
+  font-size:12px;
+  color:#6b7280;
+  margin-top:3px;
+}
+.conclusion-box{
+  border-left:3px solid #111827;
+  padding-left:12px;
+}
+.conclusion-box strong{
+  display:block;
+  font-size:15px;
+  color:#111827;
+  margin-bottom:6px;
+}
+.conclusion-box p{
+  font-size:13px;
+  line-height:1.55;
+  color:#374151;
+}
+.insight-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.insight-list li{
+  position:relative;
+  padding-left:16px;
+  color:#374151;
+  font-size:13px;
+  line-height:1.45;
+}
+.insight-list li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.62em;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#111827;
+}
+.summary-ledger{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.summary-ledger td{
+  padding:10px 8px;
+  border-bottom:1px solid #e5e7eb;
+  color:#374151;
+}
+.summary-ledger td:last-child{
+  text-align:right;
+  color:#111827;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.summary-ledger tr:last-child td{
+  border-bottom:0;
+  border-top:2px solid #111827;
+  font-size:14px;
+  font-weight:800;
+}
+.summary-ledger tr.negative td:last-child{
+  color:#7f1d1d;
+}
+.summary-ledger tr.positive td:last-child{
+  color:#111827;
+}
+.monthly-analysis{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.monthly-chart{
+  display:grid;
+  grid-template-columns:repeat(12,minmax(24px,1fr));
+  gap:8px;
+  min-height:180px;
+  padding:14px 10px 8px;
+  border:1px solid #e5e7eb;
+  border-radius:8px;
+  background:linear-gradient(to top,#f9fafb,#fff);
+}
+.month-column{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.month-bars{
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  gap:3px;
+  height:130px;
+  width:100%;
+}
+.month-bars i{
+  width:8px;
+  min-height:4px;
+  border-radius:2px 2px 0 0;
+  display:block;
+}
+.month-bars .revenue,
+.monthly-legend .revenue{
+  background:#111827;
+}
+.month-bars .expense,
+.monthly-legend .expense{
+  background:#9ca3af;
+}
+.month-column span{
+  font-size:11px;
+  color:#6b7280;
+  white-space:nowrap;
+}
+.monthly-legend{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:14px;
+  color:#4b5563;
+  font-size:12px;
+}
+.monthly-legend span{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+.monthly-legend i{
+  width:10px;
+  height:10px;
+  border-radius:2px;
+  display:inline-block;
+}
+.monthly-legend strong{
+  margin-left:auto;
+  color:#111827;
+  font-weight:700;
+}
+.bar-track{
+  height:8px;
+  border-radius:4px;
+}
+.bar-item strong,
+.bar-item span{
+  font-size:12px;
+}
+.ledger-item{
+  border-radius:10px;
+  grid-template-columns:30px minmax(0,1fr);
+  padding:12px;
+}
+.ledger-marker{
+  width:30px;
+  height:30px;
+  font-size:12px;
+}
+.ledger-top strong{
+  font-size:11px;
+}
+.ledger-top span{
+  font-size:13px;
+}
+.ledger-item h3{
+  font-size:14px;
+}
+.ledger-item p,
+.ledger-explanation>strong,
+.ledger-explanation small{
+  font-size:12px;
+}
+.ledger-explanation>strong,
+.ledger-explanation small{
+  border-radius:6px;
+  padding:7px;
+}
+.result-table{
+  font-size:12px;
+}
+.result-table th,
+.result-table td{
+  padding:8px;
+}
+.total-line{
+  padding:10px 2px;
+}
+.total-line.strong{
+  font-size:14px;
+}
+@media(max-width:900px){
+  .minimal-summary.corporate,
+  .minimal-grid.corporate{
+    grid-template-columns:1fr 1fr;
+  }
+}
+@media(max-width:620px){
+  .minimal-summary.corporate,
+  .minimal-grid.corporate{
+    grid-template-columns:1fr;
+  }
+  .executive-hero h1{
+    font-size:23px;
+  }
+}

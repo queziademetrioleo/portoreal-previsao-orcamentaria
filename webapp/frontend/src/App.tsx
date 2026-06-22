@@ -5,10 +5,15 @@ import ListaSessoes from './components/ListaSessoes'
 import TelaUpload from './components/TelaUpload'
 import TelaRevisao from './components/TelaRevisao'
 import TelaResultado from './components/TelaResultado'
+import { mockSessaoResultado } from './mockSessao'
 
 type Tela = 'lista' | 'upload' | 'revisao' | 'resultado'
 
 export default function App() {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('mock') === 'resultado') {
+    return <TelaResultado sessao={mockSessaoResultado} onVoltar={() => { window.location.href = '/' }} />
+  }
+
   const [tela, setTela] = useState<Tela>('lista')
   const [sessao, setSessao] = useState<Sessao | null>(null)
   const [sessaoResultado, setSessaoResultado] = useState<Sessao | null>(null)

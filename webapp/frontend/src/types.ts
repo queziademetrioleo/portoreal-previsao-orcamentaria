@@ -53,6 +53,13 @@ export interface LinhaPrevisaoFinal {
   mensal: number | string | null
 }
 
+export interface FluxoMensal {
+  mes: string
+  receita: number
+  despesa: number
+  saldo: number
+}
+
 export interface Resumo {
   base_total: number
   desconsideracoes: number
@@ -81,5 +88,6 @@ export interface Sessao {
   inad_meta: { total: number; critica: number; data_base: string } | null
   linhas_contas: LinhaConta[]
   previsao_final?: LinhaPrevisaoFinal[]
+  fluxo_mensal?: FluxoMensal[]
   status: 'em_revisao' | 'gerado'
 }

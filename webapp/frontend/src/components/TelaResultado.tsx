@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { LinhaConta, LinhaPrevisaoFinal, Sessao } from '../types'
+import type { FluxoMensal, LinhaConta, LinhaPrevisaoFinal, Sessao } from '../types'
 import { urlDownload } from '../api'
 
 type Visao = 'anual' | 'mensal'
@@ -12,6 +12,11 @@ function fmt(v: number) {
 
 function money(v: unknown) {
   return typeof v === 'number' ? `R$ ${fmt(v)}` : '—'
+}
+
+function signedMoney(v: number) {
+  const sign = v < 0 ? '-' : ''
+  return `${sign}R$ ${fmt(Math.abs(v))}`
 }
 
 function norm(s: string) {
@@ -84,6 +89,58 @@ function scoreSaude(saldoAjustado: number, receitaAnual: number, impactoInadAnua
   return { score, label: 'Risco de déficit', classe: 'danger' }
 }
 
+function gerarInsights(params: {
+  saldoAjustado: number
+  receitaAtual: number
+  despesaAtual: number
+  impactoInadMensal: number
+  removido: number
+  mantido: number
+  grupos: { label: string; value: number }[]
+  linhas: LinhaConta[]
+  fluxoMensal: FluxoMensal[]
+  trilha: { tipo: string; conta: string; explicacao: { resumo: string; evidencias: string[] } }[]
+}) {
+  const out: string[] = []
+  if (params.saldoAjustado < 0) {
+    out.push('A previsão aponta déficit ajustado: a receita líquida estimada não cobre o total previsto.')
+  } else {
+    out.push('A receita líquida estimada cobre o total previsto no cenário atual.')
+  }
+  if (params.impactoInadMensal > 0) {
+    out.push(`A inadimplência reduz a leitura de caixa em ${money(params.impactoInadMensal)} por mês.`)
+  }
+  const margem = params.receitaAtual > 0 ? params.saldoAjustado / params.receitaAtual : 0
+  out.push(`Margem ajustada do período: ${(margem * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% da receita.`)
+  if (params.removido > 0) {
+    out.push(`${params.removido} item(ns) foram retirados da base por indício de gastos extraordinários.`)
+  }
+  const maiorDeducao = [...params.linhas].filter(l => Math.abs(l.deducao) > 0.005).sort((a, b) => Math.abs(b.deducao) - Math.abs(a.deducao))[0]
+  if (maiorDeducao) {
+    out.push(`Maior ajuste identificado: ${maiorDeducao.classe}, com ${money(Math.abs(maiorDeducao.deducao))} deduzidos ou reclassificados como gastos extraordinários.`)
+  }
+  const maiorGrupo = params.grupos[0]
+  if (maiorGrupo) {
+    out.push(`Maior concentração de despesa: ${maiorGrupo.label}, com ${money(maiorGrupo.value / 12)} por mês.`)
+  }
+  const maiorMes = [...params.fluxoMensal].sort((a, b) => b.despesa - a.despesa)[0]
+  if (maiorMes) {
+    out.push(`Mês de maior gasto no balanço: ${maiorMes.mes}, com ${money(maiorMes.despesa)} em despesas.`)
+  }
+  const ia = params.trilha.find(i => i.explicacao.evidencias.some(e => norm(e).includes('ia')))
+  if (ia) {
+    out.push(`A IA destacou sinais relevantes em "${ia.conta}", ajudando a justificar a decisão tomada.`)
+  }
+  if (params.mantido > 0) {
+    out.push(`${params.mantido} item(ns) foram mantidos para evitar subestimar despesas recorrentes.`)
+  }
+  const pressao = params.receitaAtual > 0 ? params.despesaAtual / params.receitaAtual : 0
+  if (pressao > 0) {
+    out.push(`As despesas previstas equivalem a ${(pressao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% da receita antes da inadimplência.`)
+  }
+  return out.slice(0, 7)
+}
+
 function explicarDespesa(item: {
   decisao: 'aprovada' | 'reprovada' | 'pendente'
   origem: string
@@ -95,7 +152,7 @@ function explicarDespesa(item: {
 }) {
   if (item.explicacao?.resumo) return item.explicacao
   const base = item.decisao === 'aprovada'
-    ? 'Foi retirada da previsão porque a análise classificou o lançamento como não recorrente ou extraordinário.'
+    ? 'Foi retirada da previsão porque a análise classificou o lançamento como gasto extraordinário.'
     : 'Foi mantida na previsão porque a revisão entendeu que o gasto compõe a rotina do condomínio.'
   const evidencias = []
   if (item.origem === 'IA') evidencias.push('classificação sugerida pela IA')
@@ -141,6 +198,7 @@ export default function TelaResultado({ sessao, onVoltar }: {
   const [aba, setAba] = useState<AbaResultado>('executivo')
   const [mostrarDetalhes, setMostrarDetalhes] = useState(false)
   const rows = (sessao.previsao_final?.length ? sessao.previsao_final : fallbackRows(sessao))
+  const fluxoMensal = sessao.fluxo_mensal ?? []
 
   const receitas = rows.filter(r => r.row >= 10 && r.row <= 20 && r.label && !isTotal(r.label) && !isNotaFinal(r.label))
   const despesas = rows.filter(r => r.row >= 22 && r.row <= 80 && r.label && !isTotal(r.label) && !isNotaFinal(r.label))
@@ -150,8 +208,10 @@ export default function TelaResultado({ sessao, onVoltar }: {
   const despesaAtual = visao === 'anual' ? totalDespesasMensal * 12 : totalDespesasMensal
   const impactoInadMensal = sessao.resumo.impacto_receita_mensal ?? 0
   const impactoInadAtual = visao === 'anual' ? impactoInadMensal * 12 : impactoInadMensal
+  const receitaLiquidaAtual = receitaAtual - impactoInadAtual
   const saldoAjustado = receitaAtual - impactoInadAtual - despesaAtual
   const sinalSaldo = saldoAjustado < 0 ? 'Déficit ajustado' : 'Superávit ajustado'
+  const tipoResultado = saldoAjustado < 0 ? 'DÉFICIT' : 'SUPERÁVIT'
   const grupos = useMemo(() => agruparLinhas(sessao.linhas_contas), [sessao.linhas_contas])
   const totalGrupo = grupos.reduce((s, g) => s + g.value, 0)
   const saude = scoreSaude(
@@ -183,6 +243,18 @@ export default function TelaResultado({ sessao, onVoltar }: {
     explicacao: explicarInad(i),
   }))
   const trilha = [...decisoesDespesa, ...decisoesInad]
+  const insights = gerarInsights({
+    saldoAjustado,
+    receitaAtual,
+    despesaAtual,
+    impactoInadMensal,
+    removido,
+    mantido,
+    grupos,
+    linhas: sessao.linhas_contas,
+    fluxoMensal,
+    trilha,
+  })
 
   const abas: { id: AbaResultado; label: string; count?: number }[] = [
     { id: 'executivo', label: 'Resumo Executivo' },
@@ -220,11 +292,10 @@ export default function TelaResultado({ sessao, onVoltar }: {
           </div>
         </section>
 
-        <section className="minimal-summary">
-          <div className="minimal-main-number">
+        <section className="minimal-summary corporate">
+          <div className="minimal-number">
             <span>Total previsto</span>
             <strong>{money(despesaAtual)}</strong>
-            <small>{visao === 'mensal' ? 'por mês' : 'por ano'}</small>
           </div>
           <div className="minimal-number">
             <span>Receita</span>
@@ -252,26 +323,6 @@ export default function TelaResultado({ sessao, onVoltar }: {
           </label>
         </section>
 
-        {mostrarDetalhes && (
-          <section className="exec-score-grid compact">
-            <div className={`health-card ${saude.classe}`}>
-              <div className="health-ring" style={{ '--score': `${saude.score}%` } as React.CSSProperties}>
-                <strong>{saude.score}</strong>
-                <span>/100</span>
-              </div>
-              <div>
-                <span>Saúde financeira</span>
-                <h2>{saude.label}</h2>
-                <p>Considera saldo, pressão das despesas e impacto de inadimplência.</p>
-              </div>
-            </div>
-            <Kpi label={`Receita ${visao}`} value={receitaAtual} />
-            <Kpi label={`Despesa ${visao}`} value={despesaAtual} tone="ink" />
-            <Kpi label="Impacto inadimplência" value={impactoInadAtual} tone="warn" />
-            <Kpi label={sinalSaldo} value={Math.abs(saldoAjustado)} tone={saldoAjustado < 0 ? 'danger' : 'success'} />
-          </section>
-        )}
-
         <nav className="minimal-tabs" aria-label="Abas do resultado">
           {abas.map(item => (
             <button key={item.id} className={aba === item.id ? 'active' : ''} onClick={() => setAba(item.id)}>
@@ -282,27 +333,54 @@ export default function TelaResultado({ sessao, onVoltar }: {
         </nav>
 
         {aba === 'executivo' && (
-          <section className="minimal-grid">
-            <div className="minimal-card wide">
-              <SectionTitle title="O que este resultado quer dizer" subtitle="Resumo direto para apresentação." />
-              <p className="executive-copy clean">
-                A previsão considera a média dos últimos 12 meses, separa gastos recorrentes dos eventos pontuais
-                e mostra a inadimplência fora da despesa, porque ela afeta a receita disponível. O saldo ajustado é
-                a leitura mais prática para decidir se a taxa atual cobre o orçamento previsto.
-              </p>
-            </div>
-
+          <section className="minimal-grid corporate">
             <div className="minimal-card">
-              <SectionTitle title="Revisão feita" subtitle="Intervenções antes da geração." />
-              <div className="decision-stack">
-                <MetricLine label="Removidos da previsão" value={String(removido)} />
-                <MetricLine label="Mantidos como despesa" value={String(mantido)} />
-                <MetricLine label="Inadimplências abatidas" value={String(sessao.inadimplencia.filter(i => i.decisao === 'abater').length)} />
+              <SectionTitle title="Conclusão" subtitle="Leitura objetiva para apresentação." />
+              <div className="conclusion-box">
+                <strong>{saldoAjustado < 0 ? 'Atenção: orçamento em déficit' : 'Cenário com superávit'}</strong>
+                <p>
+                  A previsão usa a média dos últimos 12 meses, separa eventos pontuais da rotina e trata a
+                  inadimplência como redução de receita disponível. O resultado final é <b>{tipoResultado}</b>.
+                </p>
               </div>
             </div>
 
+            <div className="minimal-card">
+              <SectionTitle title="Insights da análise" subtitle="Pontos que merecem atenção." />
+              <ul className="insight-list">
+                {insights.map((item, idx) => <li key={idx}>{item}</li>)}
+              </ul>
+            </div>
+
+            <div className="minimal-card full">
+              <SectionTitle title="Quadro de leitura" subtitle="Como o resultado foi formado." />
+              <table className="summary-ledger">
+                <tbody>
+                  <tr><td>Receita prevista</td><td>{money(receitaAtual)}</td></tr>
+                  <tr><td>(-) Inadimplência considerada</td><td>{money(impactoInadAtual)}</td></tr>
+                  <tr><td>(=) Receita líquida estimada</td><td>{money(receitaLiquidaAtual)}</td></tr>
+                  <tr><td>(-) Total previsto de despesas</td><td>{money(despesaAtual)}</td></tr>
+                  <tr className={saldoAjustado < 0 ? 'negative' : 'positive'}>
+                    <td>(=) {tipoResultado}</td>
+                    <td>{signedMoney(saldoAjustado)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             {mostrarDetalhes && (
-              <div className="minimal-card wide">
+              <div className="minimal-card full">
+                <SectionTitle title="Evolução mensal do balanço" subtitle="Receitas e gastos extraídos do balanual." />
+                {fluxoMensal.length > 0 ? (
+                  <MonthlyChart data={fluxoMensal} />
+                ) : (
+                  <p className="audit-muted">Sem série mensal disponível para este relatório.</p>
+                )}
+              </div>
+            )}
+
+            {mostrarDetalhes && (
+              <div className="minimal-card full">
                 <SectionTitle title="Composição das despesas" subtitle="Os maiores grupos considerados." />
                 <div className="bar-list monochrome">
                   {grupos.slice(0, 8).map(g => (
@@ -406,29 +484,11 @@ export default function TelaResultado({ sessao, onVoltar }: {
   )
 }
 
-function Kpi({ label, value, tone }: { label: string; value: number; tone?: 'ink' | 'warn' | 'danger' | 'success' }) {
-  return (
-    <div className={`exec-kpi ${tone ?? ''}`}>
-      <span>{label}</span>
-      <strong>{money(value)}</strong>
-    </div>
-  )
-}
-
 function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="exec-section-title">
       <h2>{title}</h2>
       <p>{subtitle}</p>
-    </div>
-  )
-}
-
-function MetricLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
     </div>
   )
 }
@@ -439,6 +499,31 @@ function ResultCard({ title, children }: { title: string; children: ReactNode })
       <SectionTitle title={title} subtitle="Valores exibidos conforme a visão selecionada." />
       {children}
     </section>
+  )
+}
+
+function MonthlyChart({ data }: { data: FluxoMensal[] }) {
+  const max = Math.max(...data.map(i => Math.max(i.receita, i.despesa)), 1)
+  const piorMes = [...data].sort((a, b) => a.saldo - b.saldo)[0]
+  return (
+    <div className="monthly-analysis">
+      <div className="monthly-chart" role="img" aria-label="Gastos e receitas por mês">
+        {data.map(item => (
+          <div className="month-column" key={item.mes}>
+            <div className="month-bars">
+              <i className="revenue" style={{ height: `${Math.max(4, (item.receita / max) * 100)}%` }} />
+              <i className="expense" style={{ height: `${Math.max(4, (item.despesa / max) * 100)}%` }} />
+            </div>
+            <span>{item.mes}</span>
+          </div>
+        ))}
+      </div>
+      <div className="monthly-legend">
+        <span><i className="revenue" /> Receita</span>
+        <span><i className="expense" /> Despesa</span>
+        {piorMes && <strong>Maior pressão: {piorMes.mes} ({signedMoney(piorMes.saldo)})</strong>}
+      </div>
+    </div>
   )
 }
 

@@ -245,6 +245,30 @@ def _enriquecer_explicacoes_ia(estado):
         logger.warning('Falha ao gerar explicacoes IA: %s', exc)
 
 
+def _fluxo_mensal_balanco(bal):
+    meses = bal.get('meses') or []
+    n = len(meses)
+    out = []
+    for i in range(n):
+        receita = sum(
+            float((ln.get('monthly') or [0] * n)[i] or 0)
+            for ln in bal.get('receitas', [])
+            if i < len(ln.get('monthly') or [])
+        )
+        despesa = sum(
+            float((ln.get('monthly') or [0] * n)[i] or 0)
+            for ln in bal.get('despesas', [])
+            if i < len(ln.get('monthly') or [])
+        )
+        out.append({
+            'mes': str(meses[i]),
+            'receita': round(receita, 2),
+            'despesa': round(despesa, 2),
+            'saldo': round(receita - despesa, 2),
+        })
+    return out
+
+
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
     for item in estado['extraordinarias']:
@@ -401,6 +425,7 @@ def _montar_estado(sid, nome, ano, R):
         } if R['inad'] else None),
         'linhas_contas': linhas,
         'previsao_final': [],
+        'fluxo_mensal': _fluxo_mensal_balanco(bal),
         'status': 'em_revisao',
     }
 
