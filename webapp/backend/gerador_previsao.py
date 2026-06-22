@@ -973,45 +973,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             _adicionar_consideracoes(ws_p2, ano)
             break
 
-    # ---------- Comp. Desp-Rec ----------
-    if 'Comp. Desp-Rec' in wb.sheetnames:
-        ws_cd = wb['Comp. Desp-Rec']
-        # Preenche com valores diretos (VLOOKUPs do template nao recalculam)
-        # Preenche receitas
-        for i, (nome, val_d, _) in enumerate(prev_rec):
-            r = 13 + i
-            if r <= 14:
-                ws_cd.cell(r, 3).value = nome
-                if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
-                    ws_cd.cell(r, 4).value = round(float(val_d), 2)
-        for r in range(1, ws_cd.max_row + 1):
-            code_b = ws_cd.cell(r, 2).value
-            if isinstance(code_b, (int, float)):
-                idx = int(code_b) - 1
-                if 0 <= idx < len(prev_desp):
-                    nome, val_d, val_e = prev_desp[idx]
-                    ws_cd.cell(r, 3).value = nome
-                    if isinstance(val_d, (int, float)) and abs(val_d) > 0.005:
-                        ws_cd.cell(r, 4).value = round(float(val_d), 2)
-                    # Coluna E = percentual da receita (formula D/$D$16%)
-                    # Escreve valor direto: D / receita_total * 100
-                    rec_total = sum(ln['total'] for ln in bal.get('receitas', []))
-                    if isinstance(val_d, (int, float)) and rec_total > 0:
-                        ws_cd.cell(r, 5).value = round(float(val_d) / rec_total * 100, 1)
-            else:
-                n = _norm(ws_cd.cell(r, 3).value)
-                if 'subtotal' in n:
-                    ws_cd.cell(r, 4).value = round(subtotal_val, 2)
-                elif 'aumento' in n:
-                    ws_cd.cell(r, 4).value = round(subtotal_val * inflacao, 2)
-                elif n == 'total':
-                    ws_cd.cell(r, 4).value = round(subtotal_val * (1 + inflacao), 2)
-            # Limpa formulas remanescentes
-            for c in (3, 4, 5):
-                val = ws_cd.cell(r, c).value
-                if isinstance(val, str) and val.startswith('='):
-                    ws_cd.cell(r, c).value = None
-
     # ---------- Recalculo ----------
     # Nao apagar formulas do template: varias linhas (ex.: Agua/Luz/Gas) usam
     # referencias corretas para a CONTAS, mesmo quando o match textual nao
@@ -1025,10 +986,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         wb.calculation.calcCompleted = False
     except Exception:
         pass
-
-    # ---------- Inadimplencia ----------
-    if inad_detalhe:
-        _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio)
 
     _manter_apenas_previsao2(wb)
     wb.save(destino)
@@ -1202,49 +1159,6 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
     _adicionar_consideracoes(ws_p, ano)
 
-    if inad_detalhe:
-        _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio)
-
     _manter_apenas_previsao2(wb)
     wb.save(destino)
     return {'ok': True, 'modo': 'zero'}
-
-
-def _criar_aba_inad(wb, inad_detalhe, inad_meta, nome_condominio):
-    """Cria aba de Inadimplencia."""
-    azul = PatternFill('solid', fgColor='1F3864')
-    amarelo = PatternFill('solid', fgColor='FFF2CC')
-    branco_negrito = Font(bold=True, color='FFFFFF')
-    wsi = wb.create_sheet('Inadimplencia')
-    wsi['A1'] = f'INADIMPLENCIA - {nome_condominio}'
-    wsi['A1'].font = Font(bold=True, size=13)
-    if inad_meta:
-        wsi['A2'] = f"Data-base: {inad_meta.get('data_base', '')} | >= 3 meses consecutivos"
-        wsi['A2'].font = Font(italic=True, color='5A6472')
-    cab = ['Unidade / Devedor', 'Classe', 'Mes Ref.', 'Vencimento', 'Valor (R$)',
-           'Meses atraso', 'Situacao', 'Decisao']
-    for j, h in enumerate(cab, 1):
-        c = wsi.cell(4, j, h)
-        c.fill = azul; c.font = branco_negrito; c.border = BORDER
-        c.alignment = Alignment(horizontal='center', wrap_text=True)
-    for w, col in zip([34, 22, 10, 12, 12, 13, 18, 26], 'ABCDEFGH'):
-        wsi.column_dimensions[col].width = w
-    rr = 5
-    for it in sorted(inad_detalhe, key=lambda x: -(x.get('meses_atraso') or 0)):
-        for j, (k, fmt) in enumerate([
-            ('unidade', None), ('classe', None), ('mes_ref', None),
-            ('vencimento', None), ('valor', MONEY), ('meses_atraso', None),
-        ], 1):
-            v = it.get(k)
-            c = wsi.cell(rr, j, str(v) if v is not None else '')
-            if fmt:
-                c.number_format = fmt
-            c.border = BORDER
-        critica = bool(it.get('critica'))
-        wsi.cell(rr, 7, 'CRITICA (>= 3 meses)' if critica else 'Recente').border = BORDER
-        dec = it.get('decisao')
-        wsi.cell(rr, 8, 'Abatida da receita' if dec == 'abater' else 'Mantida').border = BORDER
-        if critica:
-            for j in range(1, 9):
-                wsi.cell(rr, j).fill = amarelo
-        rr += 1

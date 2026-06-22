@@ -32,7 +32,6 @@ from pydantic import BaseModel, Field
 import db
 import previsao as core
 from gerador_previsao import gerar_previsao_adaptativa
-from diagnostico_contas import extrair_contas, gerar_markdown
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -432,22 +431,6 @@ async def startup():
 async def health():
     db_ok = db.verificar_conexao()
     return {"status": "ok" if db_ok else "degraded", "db": "connected" if db_ok else "disconnected"}
-
-
-@app.post('/api/diagnostico-contas')
-async def diagnostico_contas(previsao_manual: UploadFile = File(...)):
-    """Extrai formulas, valores e dependencias da aba CONTAS de uma previsao manual."""
-    conteudo = await previsao_manual.read()
-    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-        tmp.write(conteudo)
-        tmp_path = tmp.name
-    try:
-        diag = extrair_contas(tmp_path)
-        diag['arquivo'] = previsao_manual.filename
-        diag['markdown'] = gerar_markdown(diag)
-        return diag
-    finally:
-        os.unlink(tmp_path)
 
 
 # ---------------------------------------------------------------------------
