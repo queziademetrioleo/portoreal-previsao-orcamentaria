@@ -457,100 +457,168 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 _set(r, 5, round(val, 2))
                 usados_rec.add(chave)
 
-        # Despesas — atualiza linhas existentes com valores calculados
-        usados_p = set()
-        for r in range(22, ws_p.max_row + 1):
-            nome = str(ws_p.cell(r, 3).value or '').strip()
-            if not nome:
-                continue
-            nn = _norm(nome)
-
-            # Pular cabecalhos
-            if nn in ('receitas', 'despesas', 'subtotal',
-                       'previsao de inflacao', 'total'):
-                continue
-            if 'saldo' in nn or 'deficit' in nn or 'superavit' in nn:
-                continue
-            if 'infla' in nn and 'previsao' in nn:
-                continue
-
-            chave, val = _achar_valor(nn, valores, usados_p)
-            if val is not None and abs(val) > 0.005:
-                _set_se_nao_formula(r, 4, round(val, 2))
-                _set_se_nao_formula(r, 5, round(val / num_frac, 2))
-                _set_se_nao_formula(r, 6, round(val / 12, 2))
-                usados_p.add(chave)
-
-        # A area de contratos/pro-labore precisa refletir as classes reais de cada
-        # condominio; o modelo fixo tem rotulos de outro empreendimento.
-        tail_nao_contratual = []
-        for rr in range(32, 47):
-            label = str(ws_p.cell(rr, 3).value or '').strip()
-            anual = ws_p.cell(rr, 4).value
-            rateio = ws_p.cell(rr, 5).value
-            mensal = ws_p.cell(rr, 6).value
-            nlabel = _norm(label)
-            if not label or not isinstance(anual, (int, float)) or abs(anual) <= 0.005:
-                continue
-            if ('contrato' in nlabel or 'pro-labore' in nlabel or 'prolabore' in nlabel
-                    or 'sindico' in nlabel):
-                continue
-            tail_nao_contratual.append((label, anual, rateio, mensal))
-
-        for rr in range(32, 47):
+        # Despesas — reconstroi a area visivel com os valores finais calculados.
+        # Nao reaproveitamos formulas/rotulos do template aqui: elas podem apontar
+        # para linhas antigas da CONTAS e gerar duplicidades ou subtotais falsos.
+        subtotal_row = None
+        for rr in range(22, ws_p.max_row + 1):
+            if 'subtotal' in _norm(ws_p.cell(rr, 3).value):
+                subtotal_row = rr
+                break
+        if subtotal_row is None:
+            subtotal_row = 48
+        desp_ini = 22
+        desp_fim = subtotal_row - 1
+        for rr in range(desp_ini, desp_fim + 1):
             for cc in (3, 4, 5, 6):
                 ws_p.cell(rr, cc).value = None
 
-        rr_out = 32
-        usados_labels = set()
-        for ln in linhas_contratuais:
-            if rr_out > 46:
-                break
-            anual = round(ln['final'], 2)
-            ws_p.cell(rr_out, 3).value = ln['classe']
-            ws_p.cell(rr_out, 4).value = anual
-            ws_p.cell(rr_out, 5).value = round(anual / num_frac, 2)
-            ws_p.cell(rr_out, 6).value = round(anual / 12, 2)
-            usados_labels.add(_norm(ln['classe']))
-            rr_out += 1
+        def _valor_linha(ln):
+            return float(ln.get('final') or 0)
 
-        for label, anual, rateio, mensal in tail_nao_contratual:
-            if rr_out > 46:
-                break
-            if _norm(label) in usados_labels:
+        despesas_ativas = [
+            (idx, ln) for idx, ln in enumerate(linhas)
+            if abs(_valor_linha(ln)) > 0.005
+        ]
+        consumidos = set()
+
+        def _somar(label, pred):
+            total = 0.0
+            for idx, ln in despesas_ativas:
+                if idx in consumidos:
+                    continue
+                if pred(ln):
+                    total += _valor_linha(ln)
+                    consumidos.add(idx)
+            return (label, total) if abs(total) > 0.005 else None
+
+        def _ng(ln):
+            return _norm(ln.get('grupo'))
+
+        def _nc(ln):
+            return _norm(ln.get('classe'))
+
+        linhas_prev = []
+        categorias = [
+            ('Despesas com Pessoal',
+             lambda ln: 'pessoal' in _ng(ln)),
+            ('Luz do Condomínio',
+             lambda ln: 'luz' in _nc(ln)),
+            ('Água do Condomínio',
+             lambda ln: 'agua' in _nc(ln)),
+            ('Gás do Condomínio',
+             lambda ln: 'gas' in _nc(ln)),
+            ('Material de Limpeza',
+             lambda ln: 'material' in _nc(ln) and 'limpeza' in _nc(ln)),
+            ('Gastos com conservação',
+             lambda ln: 'conservacao' in _ng(ln)),
+            ('Tarifas Bancárias',
+             lambda ln: 'tarifas bancarias' in _ng(ln) or 'tarifas bancarias' in _nc(ln)),
+            ('Seguro de Incêndio Obrigatório',
+             lambda ln: 'seguro' in _nc(ln) and 'incendio' in _nc(ln)),
+            ('Outras despesas diversas',
+             lambda ln: 'diversas' in _ng(ln)),
+        ]
+        for label, pred in categorias:
+            item = _somar(label, pred)
+            if item:
+                linhas_prev.append(item)
+
+        labels_usados = set()
+        for ln in linhas_contratuais:
+            idx = ln.get('idx')
+            if idx in consumidos:
                 continue
-            ws_p.cell(rr_out, 3).value = label
-            ws_p.cell(rr_out, 4).value = round(float(anual), 2)
-            ws_p.cell(rr_out, 5).value = round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio
-            ws_p.cell(rr_out, 6).value = round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal
-            usados_labels.add(_norm(label))
-            rr_out += 1
+            anual = float(ln.get('final') or 0)
+            if abs(anual) <= 0.005:
+                continue
+            label_norm = _norm(ln['classe'])
+            if label_norm in labels_usados:
+                continue
+            linhas_prev.append((ln['classe'], anual))
+            labels_usados.add(label_norm)
+            if idx is not None:
+                consumidos.add(idx)
+
+        categorias_finais = [
+            ('Despesas Administrativas',
+             lambda ln: 'administrativa' in _ng(ln) or 'administrativas' in _ng(ln)),
+            ('Despesas Cartoriais e Honorários',
+             lambda ln: any(t in _ng(ln) or t in _nc(ln) for t in ('cartori', 'honorari'))),
+            ('Despesas com Obras/Benfeitorias',
+             lambda ln: any(t in _ng(ln) for t in ('obras', 'benfeitoria'))),
+        ]
+        for label, pred in categorias_finais:
+            item = _somar(label, pred)
+            if item:
+                linhas_prev.append(item)
+
+        prov_laudo = float(R.get('prov_laudo') or 0)
+        prov_incendio = float(R.get('prov_incendio') or 0)
+        if abs(prov_laudo) > 0.005:
+            linhas_prev.append(('Provisão Laudo Autovistoria', prov_laudo))
+        if abs(prov_incendio) > 0.005:
+            linhas_prev.append(('Provisão Sistema de Incêndio/Registro', prov_incendio))
+
+        demais = sum(_valor_linha(ln) for idx, ln in despesas_ativas
+                     if idx not in consumidos)
+        if abs(demais) > 0.005:
+            linhas_prev.append(('Demais despesas', demais))
+
+        alvo_subtotal = float(R.get('subtotal') or 0)
+        soma_prev = sum(valor for _, valor in linhas_prev)
+        diferenca = round(alvo_subtotal - soma_prev, 2)
+        if abs(diferenca) > 0.05:
+            linhas_prev.append(('Ajustes de previsão', diferenca))
+
+        slots = max(desp_fim - desp_ini + 1, 0)
+        if len(linhas_prev) > slots and slots > 0:
+            cabem = max(slots - 1, 0)
+            mantidas = linhas_prev[:cabem]
+            agregado = sum(valor for _, valor in linhas_prev[cabem:])
+            linhas_prev = mantidas + [('Demais despesas', agregado)]
+
+        for rr, (label, anual) in zip(range(desp_ini, desp_fim + 1), linhas_prev):
+            anual = round(float(anual), 2)
+            ws_p.cell(rr, 3).value = label
+            ws_p.cell(rr, 4).value = anual
+            ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
+            ws_p.cell(rr, 6).value = round(anual / 12, 2)
+
+        subtotal_val = round(sum(valor for _, valor in linhas_prev), 2)
 
         total_rec = sum(float(ws_p.cell(rr, 4).value or 0)
                         for rr in range(10, 19)
                         if isinstance(ws_p.cell(rr, 4).value, (int, float)))
 
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
-        subtotal_val = R.get('subtotal', 0)
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
+                ws_p.cell(r, 3).value = 'SUBTOTAL'
                 _set_se_nao_formula(r, 4, round(subtotal_val, 2))
                 _set_se_nao_formula(r, 6, round(subtotal_val / 12, 2))
             elif 'infla' in n3 and 'previsao' in n3:
+                pct_txt = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
+                ws_p.cell(r, 3).value = f'PREVISÃO DE INFLAÇÃO - {pct_txt}%'
                 _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
+                _set_se_nao_formula(r, 5, round(inflacao, 4))
             elif n3 == 'total':
                 if r <= 20:
                     _set_se_nao_formula(r, 4, round(total_rec, 2))
                     _set_se_nao_formula(r, 5, round(total_rec, 2))
                 else:
+                    ws_p.cell(r, 3).value = 'TOTAL'
                     total = subtotal_val * (1 + inflacao)
                     _set_se_nao_formula(r, 4, round(total, 2))
                     _set_se_nao_formula(r, 5, round(total / num_frac, 2))
             elif 'saldo' in n3 or 'deficit' in n3 or 'superavit' in n3:
                 rec_anual = total_rec * 12
                 total = subtotal_val * (1 + inflacao)
-                _set_se_nao_formula(r, 4, round(rec_anual - total, 2))
+                saldo = round(rec_anual - total, 2)
+                ws_p.cell(r, 3).value = 'SALDO ( SUPERÁVIT )' if saldo >= 0 else 'SALDO ( DÉFICIT )'
+                _set_se_nao_formula(r, 4, saldo)
+                _set_se_nao_formula(r, 5, round(saldo / 12, 2))
 
     # ---------- PREVISAO (2) ----------
     for nome in wb.sheetnames:
