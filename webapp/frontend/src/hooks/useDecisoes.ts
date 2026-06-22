@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BASE, previewDocumento } from '../api'
+import { BASE, previewDocumento, salvarDecisoes, type PayloadDecisoes } from '../api'
 import type { ItemInad, ItemRevisao, Sessao } from '../types'
-
-export interface PayloadDecisoes {
-  extraordinarias: Record<string, string>
-  revisar: Record<string, string>
-  inadimplencia: Record<string, string>
-}
 
 export interface UseDecisoesReturn {
   extra: ItemRevisao[]
@@ -22,6 +16,30 @@ export interface UseDecisoesReturn {
   calculando: boolean
   aoVivo: { dedExtra: number; dedRev: number; impacto: number }
   buildPayload: () => PayloadDecisoes
+}
+
+function valorAtual(i: { valor: number; valor_editado?: number }) {
+  return Number.isFinite(i.valor_editado) ? Number(i.valor_editado) : i.valor
+}
+
+function payloadRevisao(items: ItemRevisao[]) {
+  return Object.fromEntries(
+    items.map(i => [String(i.id), {
+      decisao: i.decisao,
+      valor: valorAtual(i),
+      nota: i.nota ?? '',
+    }]),
+  )
+}
+
+function payloadInad(items: ItemInad[]) {
+  return Object.fromEntries(
+    items.map(i => [String(i.id), {
+      decisao: i.decisao,
+      valor: valorAtual(i),
+      nota: i.nota ?? '',
+    }]),
+  )
 }
 
 export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
@@ -53,21 +71,29 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const aoVivo = useMemo(() => {
     const dedExtra = extra
       .filter(i => i.decisao === 'aprovada')
-      .reduce((s, i) => s + i.valor, 0)
+      .reduce((s, i) => s + valorAtual(i), 0)
     const dedRev = revisar
       .filter(i => i.decisao === 'aprovada')
-      .reduce((s, i) => s + i.valor, 0)
+      .reduce((s, i) => s + valorAtual(i), 0)
     const unidades = new Map<string, number[]>()
     inad
       .filter(i => i.decisao === 'abater')
       .forEach(i => {
-        unidades.set(i.unidade, [...(unidades.get(i.unidade) ?? []), i.valor])
+        unidades.set(i.unidade, [...(unidades.get(i.unidade) ?? []), valorAtual(i)])
       })
     let impacto = 0
     unidades.forEach(vs => {
       impacto += vs.reduce((a, b) => a + b, 0) / vs.length
     })
     return { dedExtra, dedRev, impacto }
+  }, [extra, revisar, inad])
+
+  const buildPayload = useCallback((): PayloadDecisoes => {
+    return {
+      extraordinarias: payloadRevisao(extra),
+      revisar: payloadRevisao(revisar),
+      inadimplencia: payloadInad(inad),
+    }
   }, [extra, revisar, inad])
 
   // Preview debounced (backend recalcula subtotal/total)
@@ -81,22 +107,14 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     setCalculando(true)
     const t = setTimeout(async () => {
       try {
-        const r = await previewDocumento(sessao.sessao_id, {
-          extraordinarias: Object.fromEntries(
-            extra.map(i => [String(i.id), i.decisao]),
-          ),
-          revisar: Object.fromEntries(
-            revisar.map(i => [String(i.id), i.decisao]),
-          ),
-          inadimplencia: Object.fromEntries(
-            inad.map(i => [String(i.id), i.decisao]),
-          ),
-        })
+        const payload = buildPayload()
+        const r = await previewDocumento(sessao.sessao_id, payload)
         setVivo({
           subtotal: r.subtotal,
           total: r.total_previsto,
           impacto: r.impacto_receita_mensal,
         })
+        await salvarDecisoes(sessao.sessao_id, payload)
       } catch {
         /* mantem ultimo valor */
       } finally {
@@ -104,22 +122,12 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       }
     }, 350)
     return () => clearTimeout(t)
-  }, [extra, revisar, inad, sessao.sessao_id])
+  }, [extra, revisar, inad, sessao.sessao_id, buildPayload])
 
   // Salvar decisoes ao fechar/recarregar (beforeunload)
   useEffect(() => {
     const handleBeforeUnload = () => {
-      const payload: PayloadDecisoes = {
-        extraordinarias: Object.fromEntries(
-          extra.map(i => [String(i.id), i.decisao]),
-        ),
-        revisar: Object.fromEntries(
-          revisar.map(i => [String(i.id), i.decisao]),
-        ),
-        inadimplencia: Object.fromEntries(
-          inad.map(i => [String(i.id), i.decisao]),
-        ),
-      }
+      const payload = buildPayload()
       navigator.sendBeacon(
         `${BASE}/api/sessao/${sessao.sessao_id}/salvar-decisoes`,
         JSON.stringify(payload),
@@ -127,21 +135,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [extra, revisar, inad, sessao.sessao_id])
-
-  const buildPayload = useCallback((): PayloadDecisoes => {
-    return {
-      extraordinarias: Object.fromEntries(
-        extra.map(i => [String(i.id), i.decisao]),
-      ),
-      revisar: Object.fromEntries(
-        revisar.map(i => [String(i.id), i.decisao]),
-      ),
-      inadimplencia: Object.fromEntries(
-        inad.map(i => [String(i.id), i.decisao]),
-      ),
-    }
-  }, [extra, revisar, inad])
+  }, [buildPayload, sessao.sessao_id])
 
   return {
     extra,

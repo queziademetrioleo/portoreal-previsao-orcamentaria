@@ -2,6 +2,18 @@ import { type Sessao } from './types'
 
 export const BASE = import.meta.env.DEV ? 'http://localhost:8000' : ''
 
+export interface DecisaoEditavel {
+  decisao: string
+  valor?: number
+  nota?: string
+}
+
+export interface PayloadDecisoes {
+  extraordinarias: Record<string, DecisaoEditavel>
+  revisar: Record<string, DecisaoEditavel>
+  inadimplencia: Record<string, DecisaoEditavel>
+}
+
 export async function criarSessao(form: {
   nome: string
   ano: number
@@ -24,11 +36,7 @@ export async function criarSessao(form: {
 
 export async function gerarDocumento(
   sid: string,
-  decisoes: {
-    extraordinarias: Record<string, string>
-    revisar: Record<string, string>
-    inadimplencia: Record<string, string>
-  },
+  decisoes: PayloadDecisoes,
 ): Promise<{ ok: boolean; subtotal: number; total_previsto: number; impacto_receita_mensal: number; download: string }> {
   const r = await fetch(`${BASE}/api/sessao/${sid}/gerar`, {
     method: 'POST',
@@ -41,11 +49,7 @@ export async function gerarDocumento(
 
 export async function previewDocumento(
   sid: string,
-  decisoes: {
-    extraordinarias: Record<string, string>
-    revisar: Record<string, string>
-    inadimplencia: Record<string, string>
-  },
+  decisoes: PayloadDecisoes,
 ): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number }> {
   const r = await fetch(`${BASE}/api/sessao/${sid}/preview`, {
     method: 'POST',
@@ -60,7 +64,7 @@ export function urlDownload(sid: string): string {
   return `${BASE}/api/sessao/${sid}/download`
 }
 
-export async function salvarDecisoes(sid: string, decisoes: any) {
+export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {
   const r = await fetch(`${BASE}/api/sessao/${sid}/salvar-decisoes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

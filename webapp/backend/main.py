@@ -16,6 +16,7 @@ import sys
 import json
 import uuid
 import asyncio
+import copy
 import threading
 import tempfile
 import datetime
@@ -26,7 +27,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import db
 import previsao as core
@@ -119,20 +120,43 @@ def _obter_R(sid):
         return R
 
 
+def _decisao_payload(decisoes, item_id):
+    raw = decisoes.get(str(item_id))
+    if isinstance(raw, dict):
+        return raw.get('decisao'), raw.get('valor'), raw.get('nota')
+    return raw, None, None
+
+
+def _aplicar_decisao_editavel(item, decisao, valor, nota, permitidas):
+    if decisao in permitidas:
+        item['decisao'] = decisao
+    if valor is not None and valor != '':
+        try:
+            item['valor_editado'] = round(float(valor), 2)
+        except (TypeError, ValueError):
+            pass
+    if nota is not None:
+        item['nota'] = str(nota).strip()[:1000]
+
+
+def _valor_revisado(item):
+    try:
+        return float(item.get('valor_editado', item.get('valor', 0)) or 0)
+    except (TypeError, ValueError):
+        return float(item.get('valor', 0) or 0)
+
+
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
     for item in estado['extraordinarias']:
-        d = dec.extraordinarias.get(str(item['id']))
-        if d in ('aprovada', 'reprovada'):
-            item['decisao'] = d
+        d, valor, nota = _decisao_payload(dec.extraordinarias, item['id'])
+        _aplicar_decisao_editavel(item, d, valor, nota, ('aprovada', 'reprovada'))
     for item in estado['revisar']:
-        d = dec.revisar.get(str(item['id']))
-        if d in ('aprovada', 'reprovada', 'pendente'):
-            item['decisao'] = d
+        d, valor, nota = _decisao_payload(dec.revisar, item['id'])
+        _aplicar_decisao_editavel(item, d, valor, nota, ('aprovada', 'reprovada', 'pendente'))
     for item in estado['inadimplencia']:
-        d = dec.inadimplencia.get(str(item['id']))
-        if d in ('abater', 'ignorar'):
-            item['decisao'] = d
+        d, valor, nota = _decisao_payload(dec.inadimplencia, item['id'])
+        _aplicar_decisao_editavel(item, d, valor, nota, ('abater', 'ignorar'))
 
 
 def _recalcular_com_decisoes(sid, estado):
@@ -141,8 +165,16 @@ def _recalcular_com_decisoes(sid, estado):
     ids_remover = {i['id'] for i in estado['extraordinarias'] if i['decisao'] == 'aprovada'}
     ids_remover |= {i['id'] for i in estado['revisar'] if i['decisao'] == 'aprovada'}
 
-    R = _obter_R(sid)
+    R = copy.deepcopy(_obter_R(sid))
+    valores_editados = {
+        i['id']: _valor_revisado(i)
+        for i in (estado['extraordinarias'] + estado['revisar'])
+        if 'valor_editado' in i
+    }
     for idx, it in enumerate(R['des']['itens']):
+        if idx in valores_editados:
+            it['valor_pago'] = valores_editados[idx]
+            it['valor_lcto'] = valores_editados[idx]
         it['cat'] = 'Extraordinaria' if idx in ids_remover else (
             'Recorrente' if it['cat'] in ('Extraordinaria', 'Revisar') else it['cat'])
     R2 = core.recalcular(R)
@@ -150,7 +182,7 @@ def _recalcular_com_decisoes(sid, estado):
     unidades = {}
     for item in estado['inadimplencia']:
         if item['decisao'] == 'abater':
-            unidades.setdefault(item['unidade'], []).append(item['valor'])
+            unidades.setdefault(item['unidade'], []).append(_valor_revisado(item))
     impacto = sum(sum(v) / len(v) for v in unidades.values())
     return R2, impacto
 
@@ -272,9 +304,9 @@ def _montar_estado(sid, nome, ano, R):
 # Modelo de decisoes
 # ---------------------------------------------------------------------------
 class Decisoes(BaseModel):
-    extraordinarias: dict = {}
-    revisar: dict = {}
-    inadimplencia: dict = {}
+    extraordinarias: dict = Field(default_factory=dict)
+    revisar: dict = Field(default_factory=dict)
+    inadimplencia: dict = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

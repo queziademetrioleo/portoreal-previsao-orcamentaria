@@ -9,6 +9,8 @@ export interface ItemRevisao {
   n_meses: number | null
   origem: 'IA' | 'Regra'
   decisao: 'aprovada' | 'reprovada' | 'pendente'
+  valor_editado?: number
+  nota?: string
 }
 
 export interface ItemInad {
@@ -21,6 +23,8 @@ export interface ItemInad {
   meses_atraso: number
   critica: boolean
   decisao: 'abater' | 'ignorar'
+  valor_editado?: number
+  nota?: string
 }
 
 export interface LinhaConta {
