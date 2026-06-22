@@ -483,15 +483,48 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
         # A area de contratos/pro-labore precisa refletir as classes reais de cada
         # condominio; o modelo fixo tem rotulos de outro empreendimento.
-        for rr in range(32, 43):
+        tail_nao_contratual = []
+        for rr in range(32, 47):
+            label = str(ws_p.cell(rr, 3).value or '').strip()
+            anual = ws_p.cell(rr, 4).value
+            rateio = ws_p.cell(rr, 5).value
+            mensal = ws_p.cell(rr, 6).value
+            nlabel = _norm(label)
+            if not label or not isinstance(anual, (int, float)) or abs(anual) <= 0.005:
+                continue
+            if ('contrato' in nlabel or 'pro-labore' in nlabel or 'prolabore' in nlabel
+                    or 'sindico' in nlabel):
+                continue
+            tail_nao_contratual.append((label, anual, rateio, mensal))
+
+        for rr in range(32, 47):
             for cc in (3, 4, 5, 6):
                 ws_p.cell(rr, cc).value = None
-        for rr, ln in zip(range(32, 43), linhas_contratuais):
+
+        rr_out = 32
+        usados_labels = set()
+        for ln in linhas_contratuais:
+            if rr_out > 46:
+                break
             anual = round(ln['final'], 2)
-            ws_p.cell(rr, 3).value = ln['classe']
-            ws_p.cell(rr, 4).value = anual
-            ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
-            ws_p.cell(rr, 6).value = round(anual / 12, 2)
+            ws_p.cell(rr_out, 3).value = ln['classe']
+            ws_p.cell(rr_out, 4).value = anual
+            ws_p.cell(rr_out, 5).value = round(anual / num_frac, 2)
+            ws_p.cell(rr_out, 6).value = round(anual / 12, 2)
+            usados_labels.add(_norm(ln['classe']))
+            rr_out += 1
+
+        for label, anual, rateio, mensal in tail_nao_contratual:
+            if rr_out > 46:
+                break
+            if _norm(label) in usados_labels:
+                continue
+            ws_p.cell(rr_out, 3).value = label
+            ws_p.cell(rr_out, 4).value = round(float(anual), 2)
+            ws_p.cell(rr_out, 5).value = round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio
+            ws_p.cell(rr_out, 6).value = round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal
+            usados_labels.add(_norm(label))
+            rr_out += 1
 
         total_rec = sum(float(ws_p.cell(rr, 4).value or 0)
                         for rr in range(10, 19)
