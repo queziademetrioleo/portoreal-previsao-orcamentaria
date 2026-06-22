@@ -48,6 +48,7 @@ ARQUIVOS_ESPERADOS = {
     'desbai': 'desbai06.xls',
     'dessin': 'dessin02.xls',
     'inad': 'inad01.xls',
+    'previsao': 'Previsao referencia.xlsx',
 }
 
 
@@ -275,13 +276,20 @@ async def criar_sessao(
     desbai: UploadFile = File(...),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
+    previsao: UploadFile = File(None),
 ):
     sid = uuid.uuid4().hex[:12]
 
     # Criar registro PRIMEIRO (INSERT), depois salvar arquivos (UPDATE)
     db.criar_sessao(sid, nome_condominio, ano_previsao)
 
-    uploads = {'balanual': balanual, 'desbai': desbai, 'dessin': dessin, 'inad': inad}
+    uploads = {
+        'balanual': balanual,
+        'desbai': desbai,
+        'dessin': dessin,
+        'inad': inad,
+        'previsao': previsao,
+    }
     file_bytes = {}
     for chave, up in uploads.items():
         if up is None:

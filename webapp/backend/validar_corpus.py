@@ -98,6 +98,40 @@ def previsao_manual(path):
     return out
 
 
+def _sheet_previsao(path, data_only=True):
+    wb = openpyxl.load_workbook(path, data_only=data_only)
+    for name in wb.sheetnames:
+        nn = _norm(name).replace(' ', '')
+        if 'previs' in nn and '(2)' not in name:
+            return wb[name]
+    raise ValueError(f'Aba PREVISAO nao encontrada em {path}')
+
+
+def _fmt(v):
+    if isinstance(v, (int, float)):
+        return round(float(v), 2) if abs(float(v)) > 0.005 else 0.0
+    if v is None:
+        return ''
+    return str(v).strip()
+
+
+def comparar_previsao_visivel(gerado, manual):
+    """Compara o que aparece no documento final, nao apenas linhas tecnicas."""
+    ws_g = _sheet_previsao(gerado, data_only=True)
+    ws_m = _sheet_previsao(manual, data_only=True)
+    diffs = []
+    for r in range(9, 53):
+        for c in (3, 4, 5, 6):
+            gv = _fmt(ws_g.cell(r, c).value)
+            mv = _fmt(ws_m.cell(r, c).value)
+            if gv == mv:
+                continue
+            if isinstance(gv, float) and isinstance(mv, float) and abs(gv - mv) < 0.01:
+                continue
+            diffs.append((r, c, gv, mv))
+    return diffs
+
+
 def main(root):
     from collections import defaultdict
     byline = defaultdict(lambda: [0, 0.0, 0.0])
@@ -126,6 +160,7 @@ def main(root):
                 gerar_previsao_adaptativa(tmp, R, condo, int(ano), num_fracoes=None,
                                           inflacao=0.10, referencia=MODELO)
                 mine, manu = previsao_gerada(tmp), previsao_manual(man[0])
+                diffs_visiveis = comparar_previsao_visivel(tmp, man[0])
             except Exception as e:
                 print(f"{(condo + ' ' + ano)[:28]:28}  ERRO: {e}")
                 continue
@@ -146,8 +181,11 @@ def main(root):
                     e[2] += d
             casos += 1
             tot_ok += ok
-            tot_dif += dif
-            print(f"{(condo + ' ' + ano)[:28]:28} {ok:>6} {dif:>6} {ddet:>11.2f}")
+            dif_total = dif + len(diffs_visiveis)
+            tot_dif += dif_total
+            print(f"{(condo + ' ' + ano)[:28]:28} {ok:>6} {dif_total:>6} {ddet:>11.2f}")
+            for rr, cc, gv, mv in diffs_visiveis[:8]:
+                print(f"  VIS row={rr} col={cc}: gerado={gv!r} manual={mv!r}")
     print("-" * 56)
     print(f"TOTAL: casos={casos}  linhas OK={tot_ok}  DIF={tot_dif}")
     print(f"\n{'PADROES (linha deterministica divergente)':44}{'#':>4}{'Σ|Δ|':>12}{'netΔ':>12}")

@@ -131,25 +131,23 @@ def _aplicar_previsao_manual(ws_p, R):
     if not manual_rows:
         return None
 
-    for rr in range(20, 56):
+    for rr in range(9, 56):
         for cc in (3, 4, 5, 6):
             ws_p.cell(rr, cc).value = None
 
     refs = {}
     for item in manual_rows:
         rr = int(item.get('row') or 0)
-        if rr < 20 or rr > 55:
+        if rr < 9 or rr > 55:
             continue
-        label = item.get('label') or ''
+        label = item.get('label')
         anual = item.get('anual')
         ws_p.cell(rr, 3).value = label
         ws_p.cell(rr, 4).value = round(float(anual), 2) if isinstance(anual, (int, float)) else anual
         rateio = item.get('rateio')
         mensal = item.get('mensal')
-        if isinstance(rateio, (int, float)):
-            ws_p.cell(rr, 5).value = round(float(rateio), 2)
-        if isinstance(mensal, (int, float)):
-            ws_p.cell(rr, 6).value = round(float(mensal), 2)
+        ws_p.cell(rr, 5).value = round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio
+        ws_p.cell(rr, 6).value = round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal
         nlabel = _norm(label)
         if 'subtotal' in nlabel and isinstance(anual, (int, float)):
             refs['subtotal'] = float(anual)

@@ -648,17 +648,19 @@ def parse_previsao(path):
             ws_prev = wb[name]
             break
     if ws_prev is not None:
-        for r in range(1, ws_prev.max_row + 1):
+        for r in range(9, 56):
             label = ws_prev.cell(r, 3).value
             anual = ws_prev.cell(r, 4).value
-            if not label or not isinstance(anual, (int, float)):
+            rateio = ws_prev.cell(r, 5).value
+            mensal = ws_prev.cell(r, 6).value
+            if label is None and anual is None and rateio is None and mensal is None:
                 continue
             previsao.append({
                 'row': r,
-                'label': str(label).strip(),
-                'anual': float(anual),
-                'rateio': _num(ws_prev.cell(r, 5).value),
-                'mensal': _num(ws_prev.cell(r, 6).value),
+                'label': str(label).strip() if label is not None else None,
+                'anual': float(anual) if isinstance(anual, (int, float)) else anual,
+                'rateio': float(rateio) if isinstance(rateio, (int, float)) else rateio,
+                'mensal': float(mensal) if isinstance(mensal, (int, float)) else mensal,
             })
 
     return {'contas': contas, 'confronto': confronto, 'previsao': previsao}
