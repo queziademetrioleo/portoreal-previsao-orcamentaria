@@ -431,31 +431,70 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         # compatibilidade: chamadas antigas a _set_se_nao_formula
         _set_se_nao_formula = _set
 
-        # Receitas — valores MENSAIS (nao anuais) na PREVISAO
-        # So processa linhas da secao de receitas (rows 10-18 no template)
-        valores_rec = {}
+        # Receitas — reconstroi a area visivel com receitas recorrentes reais.
+        # O template tem rotulos fixos (ex.: Fundo de Obra), mas cada condominio
+        # pode ter fundos diferentes (ex.: Fundo de Verao). Evita receita ativa
+        # sumir por nao existir no modelo.
+        def _receita_entra(ln):
+            nc = _norm(ln.get('classe'))
+            if any(t in nc for t in ('credito', 'debito', 'debitos',
+                                     'rendimento', 'outros', 'multa',
+                                     'juros', 'acrescimo')):
+                return False
+            return (
+                'condominio' in nc or nc.startswith('tx') or
+                'fundo' in nc or 'agua' in nc or 'gas' in nc or
+                'luz' in nc or 'tv' in nc or 'internet' in nc
+            )
+
+        def _label_receita(ln):
+            nc = _norm(ln.get('classe'))
+            if nc in ('tx. condominio', 'tx condominio', 'taxa condominio',
+                      'taxas de condominio'):
+                return 'Taxas de Condomínio'
+            return str(ln.get('classe') or '').strip()
+
+        def _ordem_receita(item):
+            nc = _norm(item[0])
+            if 'condominio' in nc or nc.startswith('tx'):
+                return 0
+            if 'fundo reserva' in nc or 'fundo de reserva' in nc:
+                return 1
+            if 'fundo' in nc:
+                return 2
+            if 'agua' in nc:
+                return 3
+            if 'gas' in nc:
+                return 4
+            if 'luz' in nc:
+                return 5
+            if 'tv' in nc:
+                return 6
+            if 'internet' in nc:
+                return 7
+            return 8
+
+        receitas_prev = []
+        usados_receita = set()
         for ln in bal.get('receitas', []):
             val = _receita_mensal(ln)
-            if val is not None and abs(val) > 0.005:
-                valores_rec[_norm(ln['classe'])] = val
-        usados_rec = set()
-        for r in range(10, 19):  # apenas secao de receitas
-            nome = str(ws_p.cell(r, 3).value or '').strip()
-            if not nome:
+            if val is None or abs(val) <= 0.005 or not _receita_entra(ln):
                 continue
-            nn = _norm(nome)
-            if nn in ('receitas', 'total'):
+            label = _label_receita(ln)
+            nlabel = _norm(label)
+            if nlabel in usados_receita:
                 continue
-            if 'total' in nn:
-                continue
-            ws_p.cell(r, 4).value = 0
-            ws_p.cell(r, 5).value = 0
-            ws_p.cell(r, 6).value = None
-            chave, val = _achar_valor(nn, valores_rec, usados_rec)
-            if val is not None and abs(val) > 0.005:
-                _set(r, 4, round(val, 2))
-                _set(r, 5, round(val, 2))
-                usados_rec.add(chave)
+            receitas_prev.append((label, round(float(val), 2)))
+            usados_receita.add(nlabel)
+        receitas_prev.sort(key=_ordem_receita)
+
+        for r in range(10, 19):
+            for c in (3, 4, 5, 6):
+                ws_p.cell(r, c).value = None
+        for r, (label, val) in zip(range(10, 19), receitas_prev):
+            ws_p.cell(r, 3).value = label
+            ws_p.cell(r, 4).value = val
+            ws_p.cell(r, 5).value = val
 
         # Despesas — reconstroi a area visivel com os valores finais calculados.
         # Nao reaproveitamos formulas/rotulos do template aqui: elas podem apontar
@@ -498,16 +537,21 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         def _nc(ln):
             return _norm(ln.get('classe'))
 
+        def _tarifa_publica(ln):
+            return 'tarifas publicas' in _ng(ln)
+
         linhas_prev = []
         categorias = [
             ('Despesas com Pessoal',
              lambda ln: 'pessoal' in _ng(ln)),
             ('Luz do Condomínio',
-             lambda ln: 'luz' in _nc(ln)),
+             lambda ln: _tarifa_publica(ln) and 'luz' in _nc(ln)),
             ('Água do Condomínio',
-             lambda ln: 'agua' in _nc(ln)),
+             lambda ln: _tarifa_publica(ln) and 'agua' in _nc(ln)),
+            ('Telefone do Condomínio',
+             lambda ln: _tarifa_publica(ln) and 'telefone' in _nc(ln)),
             ('Gás do Condomínio',
-             lambda ln: 'gas' in _nc(ln)),
+             lambda ln: _tarifa_publica(ln) and 'gas' in _nc(ln)),
             ('Material de Limpeza',
              lambda ln: 'material' in _nc(ln) and 'limpeza' in _nc(ln)),
             ('Gastos com conservação',
