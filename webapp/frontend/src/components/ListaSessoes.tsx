@@ -1,16 +1,26 @@
 import { useEffect, useState } from 'react'
 import { listarSessoes, deletarSessao } from '../api'
 import type { SessaoResumida } from '../api'
+import Header from './ui/Header'
+import Badge from './ui/Badge'
+import Button from './ui/Button'
+import Spinner from './ui/Spinner'
+import EmptyState from './ui/EmptyState'
 
-export default function ListaSessoes({ onNova, onAbrir }: {
+interface Props {
   onNova: () => void
   onAbrir: (id: string, status: string) => void
-}) {
+}
+
+export default function ListaSessoes({ onNova, onAbrir }: Props) {
   const [sessoes, setSessoes] = useState<SessaoResumida[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    listarSessoes().then(setSessoes).catch(() => {}).finally(() => setLoading(false))
+    listarSessoes()
+      .then(setSessoes)
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   async function handleDelete(e: React.MouseEvent, sid: string) {
@@ -18,51 +28,68 @@ export default function ListaSessoes({ onNova, onAbrir }: {
     if (!confirm('Excluir esta previsão?')) return
     try {
       await deletarSessao(sid)
-      setSessoes(prev => prev.filter(s => s.sessao_id !== sid))
+      setSessoes((prev) => prev.filter((s) => s.sessao_id !== sid))
     } catch {
-      alert('Erro ao excluir')
+      alert('Erro ao excluir.')
     }
   }
 
+  const statusBadge = (status: string) =>
+    status === 'gerado' ? (
+      <Badge label="Gerado" variant="success" />
+    ) : (
+      <Badge label="Em revisão" variant="warning" />
+    )
+
   return (
     <>
-      <header className="app-header">
-        <a href="/" className="logo">
-          <img src="/assets/logo.png" alt="" /> Previsão Orçamentária
-        </a>
-      </header>
-      <div className="container">
-        <div className="eyebrow">Previsão Orçamentária</div>
-        <h1 className="title">Condomínios</h1>
-        <button className="btn btn-primary" onClick={onNova}>+ Nova Previsão</button>
+      <Header>
+        <Button variant="primary" onClick={onNova}>
+          + Nova Previsão
+        </Button>
+      </Header>
 
-        {loading && <div className="spinner" />}
+      <div className="page">
+        <p className="section-label">Previsão Orçamentária</p>
+        <h1 className="page-title">Condomínios</h1>
+
+        {loading && <Spinner text="Carregando..." />}
 
         {!loading && sessoes.length === 0 && (
-          <div className="empty">
-            <p>Nenhuma previsão salva ainda.</p>
-            <button className="btn btn-primary" onClick={onNova}>Criar primeira previsão</button>
-          </div>
+          <EmptyState
+            message="Nenhuma previsão salva ainda."
+            action={{ label: 'Criar primeira previsão', onClick: onNova }}
+          />
         )}
 
         {!loading && sessoes.length > 0 && (
-          <div className="sessions-grid" style={{marginTop:'var(--s-xl)'}}>
-            {sessoes.map(s => (
-              <div key={s.sessao_id} className="session-card" onClick={() => onAbrir(s.sessao_id, s.status)} style={{position:'relative'}}>
+          <div className="sessions-grid">
+            {sessoes.map((s) => (
+              <div
+                key={s.sessao_id}
+                className="session-card"
+                onClick={() => onAbrir(s.sessao_id, s.status)}
+              >
                 <button
                   className="btn btn-ghost btn-xs"
-                  onClick={e => handleDelete(e, s.sessao_id)}
-                  style={{position:'absolute',top:'var(--s-sm)',right:'var(--s-sm)',padding:'2px 6px',lineHeight:1,zIndex:1}}
+                  onClick={(e) => handleDelete(e, s.sessao_id)}
+                  style={{
+                    position: 'absolute',
+                    top: 'var(--s-sm)',
+                    right: 'var(--s-sm)',
+                    padding: '2px 8px',
+                    zIndex: 1,
+                  }}
                   title="Excluir"
                 >
                   ✕
                 </button>
                 <h3>{s.nome}</h3>
                 <p>Previsão {s.ano}</p>
-                <span className={`badge ${s.status === 'gerado' ? 'badge-gerado' : 'badge-pendente'}`}>
-                  {s.status === 'gerado' ? '✓ Gerado' : '📝 Em revisão'}
-                </span>
-                <time>{new Date(s.criado_em).toLocaleDateString('pt-BR')}</time>
+                {statusBadge(s.status)}
+                <time>
+                  {new Date(s.criado_em).toLocaleDateString('pt-BR')}
+                </time>
               </div>
             ))}
           </div>

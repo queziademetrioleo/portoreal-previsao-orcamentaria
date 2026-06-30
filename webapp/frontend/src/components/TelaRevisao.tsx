@@ -2,15 +2,22 @@ import { useMemo, useState } from 'react'
 import type { ItemInad, ItemRevisao, LinhaConta, Sessao } from '../types'
 import { useDecisoes } from '../hooks/useDecisoes'
 import { gerarDocumento } from '../api'
+import { money } from '../utils/format'
+import Header from './ui/Header'
+import Card from './ui/Card'
+import Button from './ui/Button'
+import Badge from './ui/Badge'
+import NumberBlock from './ui/NumberBlock'
+import TabBar from './ui/TabBar'
+import DataTable from './ui/DataTable'
+
+/* ─── helpers ─────────────────────────── */
 
 type Aba = 'relatorio' | 'extraordinarios' | 'ordinarias' | 'inadimplentes' | 'contas'
 
-function fmt(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function brl(v: number) {
-  return `R$ ${fmt(v)}`
+function parseValor(value: string) {
+  const n = Number(value.replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
 }
 
 function valorAtual(item: { valor: number; valor_editado?: number }) {
@@ -19,212 +26,215 @@ function valorAtual(item: { valor: number; valor_editado?: number }) {
 
 function agruparPorGrupo(linhas: LinhaConta[]) {
   const grupos = new Map<string, { base: number; deducao: number; final: number; contas: number }>()
-  linhas.forEach(l => {
-    const atual = grupos.get(l.grupo) ?? { base: 0, deducao: 0, final: 0, contas: 0 }
-    atual.base += l.base
-    atual.deducao += l.deducao
-    atual.final += l.final
-    atual.contas += 1
-    grupos.set(l.grupo, atual)
+  linhas.forEach((l) => {
+    const g = grupos.get(l.grupo) ?? { base: 0, deducao: 0, final: 0, contas: 0 }
+    g.base += l.base
+    g.deducao += l.deducao
+    g.final += l.final
+    g.contas += 1
+    grupos.set(l.grupo, g)
   })
   return [...grupos.entries()].sort((a, b) => b[1].final - a[1].final)
 }
 
-function parseValor(value: string) {
-  const n = Number(value.replace(',', '.'))
-  return Number.isFinite(n) ? n : 0
+/* ─── sub-componentes ─────────────────── */
+
+function StatusBadge({ decisao }: { decisao: string }) {
+  switch (decisao) {
+    case 'aprovada':
+      return <Badge label="Removido da previsão" variant="danger" />
+    case 'reprovada':
+      return <Badge label="Mantido na previsão" variant="success" />
+    case 'abater':
+      return <Badge label="Abater da receita" variant="danger" />
+    case 'ignorar':
+      return <Badge label="Ignorar" variant="neutral" />
+    default:
+      return <Badge label="Pendente" variant="warning" />
+  }
 }
 
-function StatusDecisao({ decisao }: { decisao: string }) {
-  if (decisao === 'aprovada') return <span className="audit-pill danger">Removido da previsão</span>
-  if (decisao === 'reprovada') return <span className="audit-pill ok">Mantido na previsão</span>
-  if (decisao === 'abater') return <span className="audit-pill danger">Abater da receita</span>
-  if (decisao === 'ignorar') return <span className="audit-pill neutral">Ignorar</span>
-  return <span className="audit-pill warn">Pendente</span>
-}
-
-function EditorDespesa({ item, onChange, origem }: {
+function EditorDespesa({
+  item,
+  onChange,
+}: {
   item: ItemRevisao
-  origem: 'extraordinaria' | 'ordinaria'
   onChange: (patch: Partial<ItemRevisao>) => void
 }) {
-  const ehPendente = item.decisao === 'pendente'
   return (
-    <article className={`audit-editor-card ${ehPendente ? 'pending' : ''}`}>
-      <div className="audit-editor-main">
-        <div className="audit-editor-title">
-          <strong>{item.classe}</strong>
+    <article className={`editor-card ${item.decisao === 'pendente' ? 'pending' : ''}`}>
+      <div>
+        <h3>{item.classe}</h3>
+        <p className="meta">
           <span>{item.grupo}</span>
-        </div>
-        {item.descricao && <p className="audit-editor-desc">{item.descricao}</p>}
-        <div className="audit-editor-meta">
           <span>{item.data || 'Sem data'}</span>
-          <span>{item.origem === 'IA' ? 'Classificado por IA' : 'Classificado por regra'}</span>
-          {item.n_meses !== null && <span>{item.n_meses} meses com movimento</span>}
-        </div>
-        {item.motivo && <p className="audit-note-line">{item.motivo}</p>}
+          <span>{item.origem === 'IA' ? 'IA' : 'Regra'}</span>
+          {item.n_meses !== null && <span>{item.n_meses} meses</span>}
+        </p>
+        {item.descricao && <p className="desc">{item.descricao}</p>}
+        {item.motivo && <p className="note">{item.motivo}</p>}
       </div>
 
-      <div className="audit-editor-controls">
-        <StatusDecisao decisao={item.decisao} />
-        <label className="audit-field">
-          <span>Valor considerado</span>
+      <div className="editor-controls">
+        <StatusBadge decisao={item.decisao} />
+
+        <label className="editor-field">
+          <span>Valor</span>
           <input
             type="number"
             min="0"
             step="0.01"
             value={valorAtual(item)}
-            onChange={e => onChange({ valor_editado: parseValor(e.target.value) })}
+            onChange={(e) => onChange({ valor_editado: parseValor(e.target.value) })}
           />
         </label>
-        <label className="audit-field wide">
-          <span>Nota da revisão</span>
+
+        <label className="editor-field">
+          <span>Nota</span>
           <textarea
             value={item.nota ?? ''}
-            onChange={e => onChange({ nota: e.target.value })}
-            placeholder="Explique o motivo da decisão para auditoria futura."
+            onChange={(e) => onChange({ nota: e.target.value })}
+            placeholder="Explique o motivo da decisão."
           />
         </label>
-        <div className="audit-choice-row">
-          <button
-            className={`btn ${item.decisao === 'aprovada' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+
+        <div className="choice-row">
+          <Button
+            size="sm"
+            variant={item.decisao === 'aprovada' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'aprovada' })}
           >
-            Remover da previsão
-          </button>
-          <button
-            className={`btn ${item.decisao === 'reprovada' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+            Remover
+          </Button>
+          <Button
+            size="sm"
+            variant={item.decisao === 'reprovada' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'reprovada' })}
           >
-            Manter como despesa
-          </button>
-          {origem === 'ordinaria' && (
-            <button className="btn btn-ghost btn-sm" onClick={() => onChange({ decisao: 'pendente' })}>
-              Marcar pendente
-            </button>
-          )}
+            Manter
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onChange({ decisao: 'pendente' })}
+          >
+            Pendente
+          </Button>
         </div>
       </div>
     </article>
   )
 }
 
-function EditorInadimplente({ item, onChange }: {
+function EditorInad({
+  item,
+  onChange,
+}: {
   item: ItemInad
   onChange: (patch: Partial<ItemInad>) => void
 }) {
   return (
-    <article className={`audit-editor-card ${item.critica ? 'pending' : ''}`}>
-      <div className="audit-editor-main">
-        <div className="audit-editor-title">
-          <strong>{item.unidade}</strong>
+    <article className={`editor-card ${item.critica ? 'pending' : ''}`}>
+      <div>
+        <h3>{item.unidade}</h3>
+        <p className="meta">
           <span>{item.classe}</span>
-        </div>
-        <div className="audit-editor-meta">
           <span>Ref. {item.mes_ref}</span>
-          <span>Venc. {item.vencimento || 'sem vencimento'}</span>
-          <span>{item.meses_atraso} meses em atraso</span>
+          <span>Venc. {item.vencimento || '—'}</span>
+          <span>{item.meses_atraso} meses atraso</span>
           {item.critica && <span>Crítica</span>}
-        </div>
+        </p>
       </div>
 
-      <div className="audit-editor-controls">
-        <StatusDecisao decisao={item.decisao} />
-        <label className="audit-field">
-          <span>Valor considerado</span>
+      <div className="editor-controls">
+        <StatusBadge decisao={item.decisao} />
+
+        <label className="editor-field">
+          <span>Valor</span>
           <input
             type="number"
             min="0"
             step="0.01"
             value={valorAtual(item)}
-            onChange={e => onChange({ valor_editado: parseValor(e.target.value) })}
+            onChange={(e) => onChange({ valor_editado: parseValor(e.target.value) })}
           />
         </label>
-        <label className="audit-field wide">
-          <span>Nota da revisão</span>
+
+        <label className="editor-field">
+          <span>Nota</span>
           <textarea
             value={item.nota ?? ''}
-            onChange={e => onChange({ nota: e.target.value })}
-            placeholder="Ex.: inadimplência recorrente, acordo, cobrança em aberto."
+            onChange={(e) => onChange({ nota: e.target.value })}
+            placeholder="Ex.: acordo de cobrança em andamento."
           />
         </label>
-        <div className="audit-choice-row">
-          <button
-            className={`btn ${item.decisao === 'abater' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+
+        <div className="choice-row">
+          <Button
+            size="sm"
+            variant={item.decisao === 'abater' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'abater' })}
           >
-            Abater da receita
-          </button>
-          <button
-            className={`btn ${item.decisao === 'ignorar' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+            Abater
+          </Button>
+          <Button
+            size="sm"
+            variant={item.decisao === 'ignorar' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'ignorar' })}
           >
-            Ignorar no cálculo
-          </button>
+            Ignorar
+          </Button>
         </div>
       </div>
     </article>
   )
 }
 
-function TabelaLinhas({ linhas }: { linhas: LinhaConta[] }) {
-  return (
-    <div className="audit-table-wrap">
-      <table className="result-table audit-table">
-        <thead>
-          <tr>
-            <th>Grupo</th>
-            <th>Conta</th>
-            <th className="num">Base</th>
-            <th className="num">Dedução</th>
-            <th className="num">Final</th>
-            <th>Regra aplicada</th>
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((l, idx) => (
-            <tr key={`${l.grupo}-${l.classe}-${idx}`}>
-              <td>{l.grupo}</td>
-              <td>{l.classe}</td>
-              <td className="num">{brl(l.base)}</td>
-              <td className="num">{brl(l.deducao)}</td>
-              <td className="num">{brl(l.final)}</td>
-              <td>{l.regra}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
+/* ─── tela principal ──────────────────── */
 
-export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
+export default function TelaRevisao({
+  sessao,
+  onVoltar,
+  onGerado,
+}: {
   sessao: Sessao
   onVoltar: () => void
   onGerado: (s: Sessao) => void
 }) {
-  const { extra, setExtra, revisar, setRevisar, inad, setInad, vivo, calculando, aoVivo, buildPayload } = useDecisoes(sessao)
+  const {
+    extra,
+    setExtra,
+    revisar,
+    setRevisar,
+    inad,
+    setInad,
+    vivo,
+    calculando,
+    aoVivo,
+    buildPayload,
+  } = useDecisoes(sessao)
+
   const [aba, setAba] = useState<Aba>('relatorio')
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState('')
 
-  const pendentes = extra.filter(i => i.decisao === 'pendente').length + revisar.filter(i => i.decisao === 'pendente').length
-  const removidos = [...extra, ...revisar].filter(i => i.decisao === 'aprovada')
-  const mantidos = [...extra, ...revisar].filter(i => i.decisao === 'reprovada')
-  const abatidos = inad.filter(i => i.decisao === 'abater')
+  const pendentes =
+    extra.filter((i) => i.decisao === 'pendente').length +
+    revisar.filter((i) => i.decisao === 'pendente').length
+
+  const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
+  const mantidos = [...extra, ...revisar].filter((i) => i.decisao === 'reprovada')
+  const abatidos = inad.filter((i) => i.decisao === 'abater')
   const saldo = sessao.resumo.receita_anual - vivo.total
   const grupos = useMemo(() => agruparPorGrupo(sessao.linhas_contas), [sessao.linhas_contas])
-  const contasComDeducao = sessao.linhas_contas.filter(l => Math.abs(l.deducao) > 0.005)
+  const contasComDeducao = sessao.linhas_contas.filter((l) => Math.abs(l.deducao) > 0.005)
 
-  const atualizarExtra = (id: number, patch: Partial<ItemRevisao>) => {
-    setExtra(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-  }
-  const atualizarRevisar = (id: number, patch: Partial<ItemRevisao>) => {
-    setRevisar(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-  }
-  const atualizarInad = (id: number, patch: Partial<ItemInad>) => {
-    setInad(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-  }
+  const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
+    setExtra((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+  const updateRevisar = (id: number, patch: Partial<ItemRevisao>) =>
+    setRevisar((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+  const updateInad = (id: number, patch: Partial<ItemInad>) =>
+    setInad((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
 
   const handleGerar = async () => {
     setGerando(true)
@@ -232,230 +242,242 @@ export default function TelaRevisao({ sessao, onVoltar, onGerado }: {
     try {
       await gerarDocumento(sessao.sessao_id, buildPayload())
       const r = await fetch(`/api/sessao/${sessao.sessao_id}`)
-      const s = await r.json()
-      onGerado(s)
-    } catch (err: any) {
-      setErro(err.message || 'Erro ao gerar documento.')
+      onGerado(await r.json())
+    } catch (err: unknown) {
+      setErro(err instanceof Error ? err.message : 'Erro ao gerar documento.')
     } finally {
       setGerando(false)
     }
   }
 
-  const abas: { id: Aba; label: string; count?: number }[] = [
+  const tabs: { id: Aba; label: string; count?: number }[] = [
     { id: 'relatorio', label: 'Relatório' },
-    { id: 'extraordinarios', label: 'Editar Extraordinários', count: extra.length },
-    { id: 'ordinarias', label: 'Editar Despesas Ordinárias', count: revisar.length },
-    { id: 'inadimplentes', label: 'Editar Inadimplentes', count: inad.length },
-    { id: 'contas', label: 'Contas Calculadas', count: sessao.linhas_contas.length },
+    { id: 'extraordinarios', label: 'Extraordinários', count: extra.length },
+    { id: 'ordinarias', label: 'Despesas ordinárias', count: revisar.length },
+    { id: 'inadimplentes', label: 'Inadimplentes', count: inad.length },
+    { id: 'contas', label: 'Contas calculadas', count: sessao.linhas_contas.length },
+  ]
+
+  const contasColumns = [
+    { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
+    { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
+    { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
+    { key: 'deducao', header: 'Dedução', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.deducao as number) },
+    { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
+    { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
   ]
 
   return (
     <>
-      <header className="app-header">
-        <a href="/" className="logo" onClick={e => { e.preventDefault(); onVoltar() }}>
-          <img src="/assets/logo.png" alt="" /> Previsão Orçamentária
-        </a>
-        <button className="btn btn-ghost btn-sm" onClick={onVoltar}>Voltar</button>
-      </header>
+      <Header onHome={onVoltar}>
+        <Button variant="ghost" onClick={onVoltar}>
+          Voltar
+        </Button>
+      </Header>
 
-      <main className="audit-page">
-        <section className="audit-hero">
+      <div className="page page-wide">
+        {/* hero */}
+        <section className="review-hero">
           <div>
-            <div className="eyebrow">Revisão auditável</div>
-            <h1>{sessao.nome_condominio} <span>{sessao.ano_previsao}</span></h1>
+            <p className="section-label">Revisão da previsão</p>
+            <h1>
+              {sessao.nome_condominio} — {sessao.ano_previsao}
+            </h1>
             <p>
-              Período base: {sessao.resumo.periodo?.[0]} a {sessao.resumo.periodo?.[1]}.
-              As edições abaixo recalculam o preview pelo backend antes da geração.
+              Período base: {sessao.resumo.periodo?.[0]} a {sessao.resumo.periodo?.[1]}. Revise
+              cada item antes de gerar o documento final.
             </p>
           </div>
-          <div className="audit-hero-actions">
-            <span className={`audit-pill ${pendentes > 0 ? 'warn' : 'ok'}`}>
-              {pendentes > 0 ? `${pendentes} pendências` : 'Sem pendências'}
-            </span>
-            <button className="btn btn-primary" onClick={handleGerar} disabled={gerando || pendentes > 0}>
-              {gerando ? 'Gerando...' : 'Salvar e gerar documento'}
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Badge
+              label={pendentes > 0 ? `${pendentes} pendências` : 'Tudo revisado'}
+              variant={pendentes > 0 ? 'warning' : 'success'}
+            />
+            <Button
+              variant="primary"
+              onClick={handleGerar}
+              disabled={gerando || pendentes > 0}
+            >
+              {gerando ? 'Gerando...' : 'Gerar documento'}
+            </Button>
           </div>
         </section>
 
-        {erro && <div className="erro">{erro}</div>}
+        {erro && <div className="alert-error">{erro}</div>}
 
-        <section className="audit-kpis">
-          <div className="audit-kpi">
-            <span>Valor transportado</span>
-            <strong>{brl(sessao.resumo.base_total)}</strong>
-          </div>
-          <div className="audit-kpi">
-            <span>Removido na revisão</span>
-            <strong>{brl(aoVivo.dedExtra + aoVivo.dedRev)}</strong>
-          </div>
-          <div className="audit-kpi">
-            <span>Total previsto</span>
-            <strong>{brl(vivo.total)}</strong>
-            {calculando && <small>Recalculando...</small>}
-          </div>
-          <div className={`audit-kpi ${saldo < 0 ? 'danger' : 'success'}`}>
-            <span>Saldo estimado</span>
-            <strong>{brl(saldo)}</strong>
-          </div>
-        </section>
+        {/* KPIs */}
+        <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <NumberBlock label="Valor transportado" value={money(sessao.resumo.base_total)} />
+          <NumberBlock label="Removido na revisão" value={money(aoVivo.dedExtra + aoVivo.dedRev)} />
+          <NumberBlock
+            label="Total previsto"
+            value={calculando ? '...' : money(vivo.total)}
+          />
+          <NumberBlock
+            label="Saldo estimado"
+            value={money(saldo)}
+            variant={saldo < 0 ? 'negative' : 'positive'}
+          />
+        </div>
 
-        <div className="audit-layout">
-          <aside className="audit-sidebar">
-            <div className="audit-panel">
-              <h2>Trilha do cálculo</h2>
-              <div className="audit-calc-row"><span>Base 12 meses</span><strong>{brl(sessao.resumo.base_total)}</strong></div>
-              <div className="audit-calc-row"><span>Itens removidos</span><strong>- {brl(aoVivo.dedExtra + aoVivo.dedRev)}</strong></div>
-              <div className="audit-calc-row"><span>Provisão laudo</span><strong>{brl(sessao.resumo.prov_laudo)}</strong></div>
-              <div className="audit-calc-row"><span>Provisão incêndio</span><strong>{brl(sessao.resumo.prov_incendio)}</strong></div>
-              <div className="audit-calc-row strong"><span>Subtotal</span><strong>{brl(vivo.subtotal)}</strong></div>
-              <div className="audit-calc-row"><span>Inflação</span><strong>{brl(vivo.total - vivo.subtotal)}</strong></div>
-              <div className="audit-calc-row strong"><span>Total previsto</span><strong>{brl(vivo.total)}</strong></div>
-              <div className="audit-calc-row"><span>Receita anual</span><strong>{brl(sessao.resumo.receita_anual)}</strong></div>
-              <div className="audit-calc-row"><span>Impacto inad.</span><strong>{brl(vivo.impacto)}/mês</strong></div>
-            </div>
+        {/* layout: sidebar + conteúdo */}
+        <div className="review-layout">
+          <aside className="review-sidebar">
+            <Card padding="md">
+              <h2 className="section-title">Cálculo</h2>
+              <div className="calc-row"><span>Base 12 meses</span><strong>{money(sessao.resumo.base_total)}</strong></div>
+              <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev)}</strong></div>
+              <div className="calc-row"><span>Provisão laudo</span><strong>{money(sessao.resumo.prov_laudo)}</strong></div>
+              <div className="calc-row"><span>Provisão incêndio</span><strong>{money(sessao.resumo.prov_incendio)}</strong></div>
+              <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
+              <div className="calc-row"><span>Inflação</span><strong>{money(vivo.total - vivo.subtotal)}</strong></div>
+              <div className="calc-row strong"><span>Total previsto</span><strong>{money(vivo.total)}</strong></div>
+              <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>
+              <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
+            </Card>
           </aside>
 
-          <section className="audit-workspace">
-            <nav className="audit-tabs" aria-label="Abas da revisão">
-              {abas.map(item => (
-                <button
-                  key={item.id}
-                  className={aba === item.id ? 'active' : ''}
-                  onClick={() => setAba(item.id)}
-                >
-                  {item.label}
-                  {typeof item.count === 'number' && <span>{item.count}</span>}
-                </button>
-              ))}
-            </nav>
+          <section style={{ minWidth: 0 }}>
+            <TabBar tabs={tabs} active={aba} onChange={(id) => setAba(id as Aba)} />
 
             {aba === 'relatorio' && (
-              <div className="audit-section-stack">
-                <section className="audit-card">
-                  <div className="audit-section-head">
-                    <div>
-                      <h2>Relatório completo da revisão</h2>
-                      <p>Mostra o que entrou, o que saiu e qual regra levou ao número final.</p>
-                    </div>
-                  </div>
-                  <div className="audit-summary-grid">
-                    <div><span>Análise inteligente</span><strong>{sessao.ia_ativa ? 'Ativa' : 'Regras locais'}</strong></div>
-                    <div><span>Extraordinários removidos</span><strong>{removidos.length}</strong></div>
-                    <div><span>Itens mantidos</span><strong>{mantidos.length}</strong></div>
-                    <div><span>Inadimplências abatidas</span><strong>{abatidos.length}</strong></div>
-                    <div><span>Notas manuais</span><strong>{[...extra, ...revisar, ...inad].filter(i => i.nota).length}</strong></div>
-                  </div>
-                </section>
-
-                <section className="audit-card">
-                  <h2>Despesas ordinárias consideradas</h2>
-                  <p className="audit-muted">
-                    Estas são as classes que permanecem compondo a previsão após as regras e decisões humanas.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <Card>
+                  <h2 className="section-title">Relatório da revisão</h2>
+                  <p className="section-desc">
+                    O que entrou, o que saiu e qual regra levou ao número final.
                   </p>
-                  <div className="audit-group-grid">
+                  <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                    <NumberBlock label="Análise IA" value={sessao.ia_ativa ? 'Ativa' : 'Inativa'} />
+                    <NumberBlock label="Extraordinários remov." value={String(removidos.length)} />
+                    <NumberBlock label="Itens mantidos" value={String(mantidos.length)} />
+                    <NumberBlock label="Inad. abatidas" value={String(abatidos.length)} />
+                    <NumberBlock label="Notas manuais" value={String([...extra, ...revisar, ...inad].filter((i) => i.nota).length)} />
+                  </div>
+                </Card>
+
+                <Card>
+                  <h2 className="section-title">Despesas por grupo</h2>
+                  <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                     {grupos.map(([grupo, total]) => (
-                      <div className="audit-group-card" key={grupo}>
-                        <span>{grupo}</span>
-                        <strong>{brl(total.final)}</strong>
-                        <small>{total.contas} contas · dedução {brl(total.deducao)}</small>
+                      <div key={grupo} style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 'var(--s-md)' }}>
+                        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', marginBottom: 4 }}>
+                          {grupo}
+                        </span>
+                        <strong style={{ fontSize: 20, color: 'var(--text)' }}>{money(total.final)}</strong>
+                        <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          {total.contas} contas · dedução {money(total.deducao)}
+                        </small>
                       </div>
                     ))}
                   </div>
-                </section>
+                </Card>
 
-                <section className="audit-card">
-                  <h2>Gastos não considerados ou provisionados</h2>
-                  {removidos.length === 0 && contasComDeducao.length === 0 ? (
-                    <p className="audit-muted">Nenhum item removido ou deduzido até o momento.</p>
-                  ) : (
-                    <TabelaLinhas linhas={contasComDeducao.slice(0, 12)} />
-                  )}
-                </section>
+                {contasComDeducao.length > 0 && (
+                  <Card>
+                    <h2 className="section-title">Gastos deduzidos ou provisionados</h2>
+                    <DataTable
+                      columns={contasColumns}
+                      rows={contasComDeducao.slice(0, 12) as unknown as Record<string, unknown>[]}
+                    />
+                  </Card>
+                )}
               </div>
             )}
 
             {aba === 'extraordinarios' && (
-              <div className="audit-section-stack">
-                <div className="audit-section-head">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2>Editar Extraordinários</h2>
-                    <p>Itens classificados como fora da rotina. “Remover” reduz a base da previsão; “manter” volta para o cálculo.</p>
+                    <h2 className="section-title">Extraordinários</h2>
+                    <p className="section-desc">Gastos fora da rotina. Remova o que for pontual.</p>
                   </div>
-                  <div className="audit-choice-row">
-                    <button className="btn btn-secondary btn-sm" onClick={() => setExtra(prev => prev.map(i => ({ ...i, decisao: 'aprovada' })))}>
+                  <div className="choice-row">
+                    <Button size="sm" variant="secondary" onClick={() => setExtra((prev) => prev.map((i) => ({ ...i, decisao: 'aprovada' })))}>
                       Remover todos
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setExtra(prev => prev.map(i => ({ ...i, decisao: 'reprovada' })))}>
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setExtra((prev) => prev.map((i) => ({ ...i, decisao: 'reprovada' })))}>
                       Manter todos
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                {extra.length === 0 ? <div className="result-empty">Nenhum extraordinário detectado.</div> : extra.map(item => (
-                  <EditorDespesa key={item.id} item={item} origem="extraordinaria" onChange={patch => atualizarExtra(item.id, patch)} />
-                ))}
+                {extra.length === 0 ? (
+                  <p className="table-empty">Nenhum extraordinário detectado.</p>
+                ) : (
+                  extra.map((item) => (
+                    <EditorDespesa key={item.id} item={item} onChange={(p) => updateExtra(item.id, p)} />
+                  ))
+                )}
               </div>
             )}
 
             {aba === 'ordinarias' && (
-              <div className="audit-section-stack">
-                <div className="audit-section-head">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2>Editar Despesas Ordinárias</h2>
-                    <p>Itens em revisão. Use esta aba para decidir se entram como gasto normal ou se devem ser removidos.</p>
+                    <h2 className="section-title">Despesas ordinárias</h2>
+                    <p className="section-desc">Itens ambíguos. Decida se entram como gasto recorrente.</p>
                   </div>
-                  <div className="audit-choice-row">
-                    <button className="btn btn-secondary btn-sm" onClick={() => setRevisar(prev => prev.map(i => ({ ...i, decisao: 'reprovada' })))}>
+                  <div className="choice-row">
+                    <Button size="sm" variant="secondary" onClick={() => setRevisar((prev) => prev.map((i) => ({ ...i, decisao: 'reprovada' })))}>
                       Manter todos
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setRevisar(prev => prev.map(i => ({ ...i, decisao: 'aprovada' })))}>
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setRevisar((prev) => prev.map((i) => ({ ...i, decisao: 'aprovada' })))}>
                       Remover todos
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                {revisar.length === 0 ? <div className="result-empty">Nenhuma despesa ordinária pendente de revisão.</div> : revisar.map(item => (
-                  <EditorDespesa key={item.id} item={item} origem="ordinaria" onChange={patch => atualizarRevisar(item.id, patch)} />
-                ))}
+                {revisar.length === 0 ? (
+                  <p className="table-empty">Nenhuma despesa ordinária pendente.</p>
+                ) : (
+                  revisar.map((item) => (
+                    <EditorDespesa key={item.id} item={item} onChange={(p) => updateRevisar(item.id, p)} />
+                  ))
+                )}
               </div>
             )}
 
             {aba === 'inadimplentes' && (
-              <div className="audit-section-stack">
-                <div className="audit-section-head">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2>Editar Inadimplentes</h2>
-                    <p>O abatimento calcula o impacto médio mensal por unidade e reduz a percepção de receita disponível.</p>
+                    <h2 className="section-title">Inadimplentes</h2>
+                    <p className="section-desc">Abatimentos reduzem a receita projetada.</p>
                   </div>
-                  <div className="audit-choice-row">
-                    <button className="btn btn-secondary btn-sm" onClick={() => setInad(prev => prev.map(i => ({ ...i, decisao: 'abater' })))}>
+                  <div className="choice-row">
+                    <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'abater' })))}>
                       Abater todos
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setInad(prev => prev.map(i => ({ ...i, decisao: 'ignorar' })))}>
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'ignorar' })))}>
                       Ignorar todos
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                {inad.length === 0 ? <div className="result-empty">Nenhuma inadimplência carregada.</div> : inad.map(item => (
-                  <EditorInadimplente key={item.id} item={item} onChange={patch => atualizarInad(item.id, patch)} />
-                ))}
+                {inad.length === 0 ? (
+                  <p className="table-empty">Nenhuma inadimplência carregada.</p>
+                ) : (
+                  inad.map((item) => (
+                    <EditorInad key={item.id} item={item} onChange={(p) => updateInad(item.id, p)} />
+                  ))
+                )}
               </div>
             )}
 
             {aba === 'contas' && (
-              <div className="audit-section-stack">
-                <section className="audit-card">
-                  <h2>Contas calculadas pelo backend</h2>
-                  <p className="audit-muted">
-                    O “Valor Transportado” vem do balanço anual por classe. As NFs do DESBAI/DESSIN explicam deduções,
-                    revisões e provisões, mas nem toda edição altera a base anual de uma classe.
-                  </p>
-                  <TabelaLinhas linhas={sessao.linhas_contas} />
-                </section>
-              </div>
+              <Card>
+                <h2 className="section-title">Contas calculadas</h2>
+                <p className="section-desc">
+                  Base anual por classe. Deduções e provisões vêm dos relatórios DESBAI/DESSIN.
+                </p>
+                <DataTable
+                  columns={contasColumns}
+                  rows={sessao.linhas_contas as unknown as Record<string, unknown>[]}
+                />
+              </Card>
             )}
           </section>
         </div>
-      </main>
+      </div>
     </>
   )
 }

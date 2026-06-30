@@ -1,4 +1,3 @@
-import './App.css'
 import { useState } from 'react'
 import type { Sessao } from './types'
 import ListaSessoes from './components/ListaSessoes'
@@ -10,8 +9,17 @@ import { mockSessaoResultado } from './mockSessao'
 type Tela = 'lista' | 'upload' | 'revisao' | 'resultado'
 
 export default function App() {
-  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('mock') === 'resultado') {
-    return <TelaResultado sessao={mockSessaoResultado} onVoltar={() => { window.location.href = '/' }} />
+  // Modo mock em dev para visualizar resultado sem backend
+  const params = new URLSearchParams(window.location.search)
+  if (import.meta.env.DEV && params.get('mock') === 'resultado') {
+    return (
+      <TelaResultado
+        sessao={mockSessaoResultado}
+        onVoltar={() => {
+          window.location.href = '/'
+        }}
+      />
+    )
   }
 
   const [tela, setTela] = useState<Tela>('lista')
@@ -34,11 +42,27 @@ export default function App() {
     return <TelaResultado sessao={sessaoResultado} onVoltar={() => setTela('lista')} />
   }
   if (tela === 'revisao' && sessao) {
-    return <TelaRevisao sessao={sessao} onVoltar={() => setTela('lista')}
-      onGerado={(s) => { setSessaoResultado(s); setTela('resultado') }} />
+    return (
+      <TelaRevisao
+        sessao={sessao}
+        onVoltar={() => setTela('lista')}
+        onGerado={(s) => {
+          setSessaoResultado(s)
+          setTela('resultado')
+        }}
+      />
+    )
   }
   if (tela === 'upload') {
-    return <TelaUpload onCriada={(s) => { setSessao(s); setTela('revisao') }} onVoltar={() => setTela('lista')} />
+    return (
+      <TelaUpload
+        onCriada={(s) => {
+          setSessao(s)
+          setTela('revisao')
+        }}
+        onVoltar={() => setTela('lista')}
+      />
+    )
   }
   return <ListaSessoes onNova={() => setTela('upload')} onAbrir={abrirSessao} />
 }
