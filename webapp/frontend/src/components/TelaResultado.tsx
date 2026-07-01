@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FluxoMensal, LinhaPrevisaoFinal, Sessao } from '../types'
 import { urlDownload } from '../api'
-import { money, signedMoney } from '../utils/format'
+import { money, signedMoney, pct } from '../utils/format'
 import { scoreSaude } from '../utils/scoring'
 import { gerarInsights } from '../utils/insights'
 import { explicarDespesa, explicarInad } from '../utils/explicacoes'
@@ -78,10 +78,6 @@ function agruparLinhas(linhas: { grupo: string; final: number }[]) {
     .map(([label, value]) => ({ label, value }))
     .filter((i) => Math.abs(i.value) > 0.005)
     .sort((a, b) => b.value - a.value)
-}
-
-function pct(part: number, total: number) {
-  return total > 0 ? Math.max(0, Math.min(100, (part / total) * 100)) : 0
 }
 
 /* ─── sub-componentes ─────────────────── */

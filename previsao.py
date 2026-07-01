@@ -60,11 +60,11 @@ from openpyxl.utils import get_column_letter
 #   OpenAI:    OPENAI_API_KEY    ou arquivo chave_openai.txt
 # Forcar provedor: PREVISAO_IA_PROVEDOR=anthropic|openai
 # Modelo: PREVISAO_IA_MODELO (default: claude-opus-4-8 / gpt-5.4)
-CLAUDE_MODEL = os.environ.get('PREVISAO_IA_MODELO', 'claude-opus-4-8')
+CLAUDE_MODEL = os.environ.get('PREVISAO_IA_MODELO', 'claude-sonnet-4-20250514')
 OPENAI_MODEL = os.environ.get('PREVISAO_IA_MODELO_OPENAI',
-                              os.environ.get('PREVISAO_IA_MODELO', '') or 'gpt-5.4')
+                              os.environ.get('PREVISAO_IA_MODELO', '') or 'gpt-4.1')
 if OPENAI_MODEL.startswith('claude'):
-    OPENAI_MODEL = 'gpt-5.4'
+    OPENAI_MODEL = 'gpt-4.1'
 
 
 def _le_chave_arquivo(nome):
@@ -358,7 +358,8 @@ def _num(v):
         return float(v)
     if v is None:
         return 0.0
-    s = str(v).strip().replace('.', '').replace(',', '.') if ',' in str(v) else str(v).strip()
+    # Trata formato brasileiro: 1.234,56 → 1234.56 e 1.234 → 1234
+    s = str(v).strip().replace('.', '').replace(',', '.')
     try:
         return float(s)
     except Exception:

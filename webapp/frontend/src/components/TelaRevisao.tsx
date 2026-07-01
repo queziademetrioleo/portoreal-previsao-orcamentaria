@@ -242,6 +242,7 @@ export default function TelaRevisao({
     try {
       await gerarDocumento(sessao.sessao_id, buildPayload())
       const r = await fetch(`/api/sessao/${sessao.sessao_id}`)
+      if (!r.ok) throw new Error(`Erro ${r.status} ao carregar sessao gerada`)
       onGerado(await r.json())
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : 'Erro ao gerar documento.')

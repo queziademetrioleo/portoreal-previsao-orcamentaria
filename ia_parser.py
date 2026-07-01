@@ -37,7 +37,7 @@ def _num(v):
 
 def _xldate(wb, v):
     try:
-        return datetime.datetime(*xlrd.xldate_as_tuple(v, wb.datemode))
+        return datetime.datetime(*xlrd.xldate_as_tuple(v, wb.datemode)).date()
     except Exception:
         return None
 
@@ -61,10 +61,7 @@ def _dump_xls(path, max_rows=None):
             if isinstance(v, float):
                 if abs(v) < 1e-10:
                     continue
-                if v == int(v) and abs(v) < 100000:
-                    parts.append(f"C{c}={int(v)}")
-                else:
-                    parts.append(f"C{c}={v:,.2f}")
+                parts.append(f"C{c}={v:.2f}")
             else:
                 s = str(v).strip()
                 if s:
@@ -187,7 +184,7 @@ def ia_parse_pasta(pasta):
     partes = []
     for nome, path in arquivos.items():
         if os.path.exists(path):
-            max_r = None if nome != 'desbai06' else 500  # desbai pode ser enorme
+            max_r = None if nome != 'desbai06' else 2000  # desbai pode ser enorme
             dump = _dump_xls(path, max_rows=max_r)
             partes.append(f"=== {nome}.xls ===\n{dump}")
             if nome == 'desbai06' and max_r:

@@ -27,15 +27,19 @@ export default function App() {
   const [sessaoResultado, setSessaoResultado] = useState<Sessao | null>(null)
 
   const abrirSessao = async (id: string, status: string) => {
-    if (status === 'gerado') {
+    try {
       const r = await fetch(`/api/sessao/${id}`)
-      setSessaoResultado(await r.json())
-      setTela('resultado')
-      return
+      if (!r.ok) throw new Error(`Erro ${r.status}`)
+      if (status === 'gerado') {
+        setSessaoResultado(await r.json())
+        setTela('resultado')
+        return
+      }
+      setSessao(await r.json())
+      setTela('revisao')
+    } catch {
+      alert('Erro ao carregar sessao. Tente novamente.')
     }
-    const r = await fetch(`/api/sessao/${id}`)
-    setSessao(await r.json())
-    setTela('revisao')
   }
 
   if (tela === 'resultado' && sessaoResultado) {

@@ -9,9 +9,6 @@ export interface UseDecisoesReturn {
   setRevisar: React.Dispatch<React.SetStateAction<ItemRevisao[]>>
   inad: ItemInad[]
   setInad: React.Dispatch<React.SetStateAction<ItemInad[]>>
-  feitos: Set<number>
-  marcarFeito: (id: number) => void
-  reabrir: (id: number) => void
   vivo: { subtotal: number; total: number; impacto: number }
   calculando: boolean
   aoVivo: { dedExtra: number; dedRev: number; impacto: number }
@@ -46,19 +43,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
-  const [feitos, setFeitos] = useState<Set<number>>(new Set())
-
-  const marcarFeito = useCallback((id: number) => {
-    setFeitos(s => new Set(s).add(id))
-  }, [])
-
-  const reabrir = useCallback((id: number) => {
-    setFeitos(s => {
-      const n = new Set(s)
-      n.delete(id)
-      return n
-    })
-  }, [])
 
   const [vivo, setVivo] = useState({
     subtotal: sessao.resumo.subtotal,
@@ -98,6 +82,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
 
   // Preview debounced (backend recalcula subtotal/total)
   const primeiraRender = useRef(true)
+  const previewSeq = useRef(0)
 
   useEffect(() => {
     if (primeiraRender.current) {
@@ -105,10 +90,13 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       return
     }
     setCalculando(true)
+    const seq = ++previewSeq.current
     const t = setTimeout(async () => {
       try {
         const payload = buildPayload()
         const r = await previewDocumento(sessao.sessao_id, payload)
+        // So aplica se esta for a requisicao mais recente
+        if (seq !== previewSeq.current) return
         setVivo({
           subtotal: r.subtotal,
           total: r.total_previsto,
@@ -118,7 +106,9 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       } catch {
         /* mantem ultimo valor */
       } finally {
-        setCalculando(false)
+        if (seq === previewSeq.current) {
+          setCalculando(false)
+        }
       }
     }, 350)
     return () => clearTimeout(t)
@@ -128,9 +118,10 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   useEffect(() => {
     const handleBeforeUnload = () => {
       const payload = buildPayload()
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
       navigator.sendBeacon(
         `${BASE}/api/sessao/${sessao.sessao_id}/salvar-decisoes`,
-        JSON.stringify(payload),
+        blob,
       )
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -144,9 +135,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     setRevisar,
     inad,
     setInad,
-    feitos,
-    marcarFeito,
-    reabrir,
     vivo,
     calculando,
     aoVivo,

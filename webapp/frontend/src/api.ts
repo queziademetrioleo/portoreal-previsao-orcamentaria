@@ -70,6 +70,7 @@ export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),
   });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? `Erro ${r.status}`);
   return r.json();
 }
 

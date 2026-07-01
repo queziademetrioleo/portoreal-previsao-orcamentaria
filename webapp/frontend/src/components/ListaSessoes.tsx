@@ -15,11 +15,12 @@ interface Props {
 export default function ListaSessoes({ onNova, onAbrir }: Props) {
   const [sessoes, setSessoes] = useState<SessaoResumida[]>([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
 
   useEffect(() => {
     listarSessoes()
       .then(setSessoes)
-      .catch(() => {})
+      .catch((err) => setErro(err instanceof Error ? err.message : 'Erro ao carregar'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -55,7 +56,9 @@ export default function ListaSessoes({ onNova, onAbrir }: Props) {
 
         {loading && <Spinner text="Carregando..." />}
 
-        {!loading && sessoes.length === 0 && (
+        {erro && <div className="alert-error">{erro}</div>}
+
+        {!loading && !erro && sessoes.length === 0 && (
           <EmptyState
             message="Nenhuma previsão salva ainda."
             action={{ label: 'Criar primeira previsão', onClick: onNova }}

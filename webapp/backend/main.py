@@ -38,9 +38,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title='Previsao Orcamentaria', version='2.0')
 
+_cors_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],          # dev: vite roda em outra porta; prod: mesma origem
+    allow_origins=[o.strip() for o in _cors_origins if o.strip()] or ['*'],
     allow_methods=['*'],
     allow_headers=['*'],
 )
@@ -412,7 +413,7 @@ def _montar_estado(sid, nome, ano, R):
             'inflacao': core.INFLACAO,
             'total_previsto': round(R['total_previsto'], 2),
             'receita_anual': round(bal['total_receitas'] or 0, 2),
-            'receita_mensal': round((bal['total_receitas'] or 0) / 12, 2),
+            'receita_mensal': round((bal['total_receitas'] or 0) / max(1, bal.get('n_meses', 12)), 2),
             'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],
         },
         'extraordinarias': extraordinarias,
@@ -461,19 +462,25 @@ async def health():
 # ---------------------------------------------------------------------------
 # 1) UPLOAD + ANALISE
 # ---------------------------------------------------------------------------
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB por arquivo
+
 @app.post('/api/sessao')
 async def criar_sessao(
-    nome_condominio: str = Form(...),
-    ano_previsao: int = Form(...),
+    nome_condominio: str = Form(..., max_length=200),
+    ano_previsao: int = Form(..., ge=2000, le=2100),
     balanual: UploadFile = File(...),
     desbai: UploadFile = File(...),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
 ):
+    # Validar nome
+    if not nome_condominio.strip():
+        raise HTTPException(400, 'Nome do condominio e obrigatorio')
+
     sid = uuid.uuid4().hex[:12]
 
     # Criar registro PRIMEIRO (INSERT), depois salvar arquivos (UPDATE)
-    db.criar_sessao(sid, nome_condominio, ano_previsao)
+    db.criar_sessao(sid, nome_condominio.strip(), ano_previsao)
 
     uploads = {
         'balanual': balanual,
@@ -485,6 +492,14 @@ async def criar_sessao(
     for chave, up in uploads.items():
         if up is None:
             continue
+        # Validar extensao — xlrd so suporta .xls (BIFF)
+        if up.filename and not up.filename.lower().endswith('.xls'):
+            db.deletar_sessao(sid)
+            raise HTTPException(400, f'Arquivo {up.filename}: apenas .xls e suportado. Converta .xlsx para .xls antes de enviar.')
+        # Validar tamanho
+        if up.size and up.size > MAX_UPLOAD_BYTES:
+            db.deletar_sessao(sid)
+            raise HTTPException(413, f'Arquivo {up.filename} excede o limite de 20 MB.')
         conteudo = await up.read()
         file_bytes[chave] = conteudo
         db.salvar_arquivo(sid, chave, conteudo)
@@ -492,9 +507,9 @@ async def criar_sessao(
     if 'balanual' not in file_bytes or 'desbai' not in file_bytes:
         db.deletar_sessao(sid)
         raise HTTPException(400, 'Arquivos obrigatorios ausentes')
-    logger.info(f'Sessao {sid} criada: {nome_condominio} ({ano_previsao})')
+    logger.info(f'Sessao {sid} criada: {nome_condominio.strip()} ({ano_previsao})')
 
-    return {'sessao_id': sid, 'nome_condominio': nome_condominio,
+    return {'sessao_id': sid, 'nome_condominio': nome_condominio.strip(),
             'ano_previsao': ano_previsao, 'status': 'pendente'}
 
 
@@ -509,53 +524,66 @@ async def analisar_sse(sid: str):
 
     eventos = []
     lock = threading.Lock()
+    cancelado = threading.Event()  # sinaliza cancelamento para a thread de analise
 
     def on_progress(p):
+        if cancelado.is_set():
+            return
         with lock:
             eventos.append(p)
 
     async def gerar():
         loop = asyncio.get_event_loop()
 
-        # Reconstitui arquivos do MySQL para diretorio temporario
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for chave, fname in ARQUIVOS_ESPERADOS.items():
-                content = db.obter_arquivo(sid, chave)
-                if content:
-                    with open(os.path.join(tmpdir, fname), 'wb') as f:
-                        f.write(content)
+        try:
+            # Reconstitui arquivos do MySQL para diretorio temporario
+            with tempfile.TemporaryDirectory() as tmpdir:
+                for chave, fname in ARQUIVOS_ESPERADOS.items():
+                    content = db.obter_arquivo(sid, chave)
+                    if content:
+                        with open(os.path.join(tmpdir, fname), 'wb') as f:
+                            f.write(content)
 
-            # Inicia analise em thread
-            future = loop.run_in_executor(None, core.analisar, tmpdir, on_progress)
+                # Inicia analise em thread
+                future = loop.run_in_executor(None, core.analisar, tmpdir, on_progress)
 
-            # Stream progress enquanto analise roda
-            last_idx = 0
-            while not future.done():
-                await asyncio.sleep(0.3)
+                # Stream progress enquanto analise roda
+                last_idx = 0
+                while not future.done():
+                    await asyncio.sleep(0.3)
+                    with lock:
+                        while last_idx < len(eventos):
+                            ev = eventos[last_idx]
+                            last_idx += 1
+                            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+
+                # Pega ultimos eventos
                 with lock:
                     while last_idx < len(eventos):
                         ev = eventos[last_idx]
                         last_idx += 1
                         yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-                yield ": keepalive\n\n"
 
-            # Pega ultimos eventos
-            with lock:
-                while last_idx < len(eventos):
-                    ev = eventos[last_idx]
-                    last_idx += 1
-                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                # Resultado final
+                R = future.result()
+                db.salvar_cache_analise(sid, _json_dumps(R))
 
-            # Resultado final
-            R = future.result()
-            db.salvar_cache_analise(sid, _json_dumps(R))
+                nome = row['nome_condominio']
+                ano = row['ano_previsao']
+                estado = _montar_estado(sid, nome, ano, R)
+                _salvar_estado_sync(sid, estado)
 
-            nome = row['nome_condominio']
-            ano = row['ano_previsao']
-            estado = _montar_estado(sid, nome, ano, R)
-            _salvar_estado_sync(sid, estado)
+                yield f"data: {json.dumps({'done': True, 'sessao_id': sid}, ensure_ascii=False)}\n\n"
 
-            yield f"data: {json.dumps({'done': True, 'sessao_id': sid}, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            cancelado.set()
+            logger.warning('SSE cancelado pelo cliente — sessao %s', sid)
+            # Tenta cancelar a future se ainda nao terminou
+            if not future.done():
+                future.cancel()
+        except Exception as exc:
+            logger.error('Erro na analise SSE da sessao %s: %s', sid, exc)
+            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gerar(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
@@ -574,7 +602,7 @@ def obter_sessao(sid: str):
 
 
 @app.delete("/api/sessao/{sid}")
-async def deletar_sessao(sid: str):
+def deletar_sessao(sid: str):
     """Remove uma sessao e todos os seus dados."""
     try:
         db.deletar_sessao(sid)
@@ -668,7 +696,7 @@ def gerar(sid: str, dec: Decisoes):
 
 
 @app.post('/api/sessao/{sid}/salvar-decisoes')
-async def salvar_decisoes(sid: str, decisoes: Decisoes):
+def salvar_decisoes(sid: str, decisoes: Decisoes):
     """Salva decisoes parciais do usuario sem gerar o documento final.
     Permite que o usuario retome a revisao depois."""
     estado = _carregar_estado(sid)

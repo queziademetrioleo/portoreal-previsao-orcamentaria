@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { criarSessao } from '../api'
 import type { Sessao } from '../types'
 import Header from './ui/Header'
@@ -27,6 +27,14 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
     total: 6,
     detalhe: '',
   })
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close()
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,14 +67,28 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       const source = new EventSource(
         `${base}/api/sessao/${sessao_id}/analisar`,
       )
+      eventSourceRef.current = source
 
       source.onmessage = (event) => {
         const data = JSON.parse(event.data)
+        if (data.error) {
+          source.close()
+          setErro(data.error)
+          setLoading(false)
+          return
+        }
         if (data.done) {
           source.close()
           fetch(`${base}/api/sessao/${sessao_id}`)
-            .then((r) => r.json())
+            .then((r) => {
+              if (!r.ok) throw new Error(`Erro ${r.status}`)
+              return r.json()
+            })
             .then((s) => onCriada(s))
+            .catch((err) => {
+              setErro(err.message || 'Erro ao carregar resultado.')
+              setLoading(false)
+            })
         } else {
           setProgresso(data)
         }
@@ -74,7 +96,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
 
       source.onerror = () => {
         source.close()
-        setErro('Erro na conexão com o servidor.')
+        setErro('Erro na conexão com o servidor. Tente novamente.')
         setLoading(false)
       }
     } catch (err: unknown) {
@@ -217,7 +239,7 @@ function FileZone({
     <label className={`file-zone${file ? ' has-file' : ''}`}>
       <input
         type="file"
-        accept=".xls,.xlsx"
+        accept=".xls"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
       <span className="file-icon">{file ? '📄' : '📎'}</span>
