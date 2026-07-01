@@ -556,6 +556,7 @@ async def analisar_sse(sid: str):
                             ev = eventos[last_idx]
                             last_idx += 1
                             yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                    yield ": keepalive\n\n"  # mantem conexao viva durante fases longas (IA, parsing)
 
                 # Pega ultimos eventos
                 with lock:
