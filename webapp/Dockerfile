@@ -15,11 +15,14 @@ WORKDIR /app
 COPY webapp/backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# backend completo (inclui previsao.py e ia_parser.py copiados)
+# backend (main.py, db.py, gerador_previsao.py, etc.)
+# NOTA: previsao.py e ia_parser.py do webapp/backend/ foram removidos.
+# Usamos os modulos raiz como fonte unica.
 COPY webapp/backend/ ./
 
-# modulo raiz (previsao.py) — a ponte em webapp/backend/previsao.py importa dele
-COPY previsao.py /previsao.py
+# modulos raiz — fonte unica, sem duplicatas
+COPY previsao.py ./
+COPY ia_parser.py ./
 
 # frontend buildado
 COPY --from=front /app/dist/ ./static/
