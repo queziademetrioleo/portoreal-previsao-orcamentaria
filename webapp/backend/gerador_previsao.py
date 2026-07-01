@@ -357,6 +357,8 @@ def _ia_categorizar_despesas(despesas_ativas, nome_condominio):
 
     return resultado
 
+
+def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
                                num_fracoes=None, inflacao=0.10,
                                impacto_receita_mensal=0.0,
                                inad_detalhe=None, inad_meta=None,
