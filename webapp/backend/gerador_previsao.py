@@ -774,11 +774,10 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
         for rr, (label, anual) in zip(range(desp_ini, desp_fim + 1), linhas_prev):
             anual = round(float(anual), 2)
-            mensal = round(anual / 12, 2)
             ws_p.cell(rr, 3).value = label
-            ws_p.cell(rr, 4).value = mensal                # D: valor mensal (principal)
-            ws_p.cell(rr, 5).value = round(mensal / num_frac, 2) if num_frac else mensal
-            ws_p.cell(rr, 6).value = anual                 # F: valor anual (referencia)
+            ws_p.cell(rr, 4).value = anual                    # D: valor anual
+            ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
+            ws_p.cell(rr, 6).value = round(anual / 12, 2)     # F: valor mensal
 
         subtotal_val = round(sum(valor for _, valor in linhas_prev), 2)
 
@@ -786,18 +785,17 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                         for rr in range(rec_ini, total_rec_row)
                         if isinstance(ws_p.cell(rr, 4).value, (int, float)))
 
-        # SUBTOTAL, INFLACAO, TOTAL, SALDO — valores MENSAIS na coluna D
-        subtotal_mensal = round(subtotal_val / 12, 2)
+        # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
                 ws_p.cell(r, 3).value = 'SUBTOTAL'
-                _set_se_nao_formula(r, 4, subtotal_mensal)
-                _set_se_nao_formula(r, 6, subtotal_val)
+                _set_se_nao_formula(r, 4, round(subtotal_val, 2))
+                _set_se_nao_formula(r, 6, round(subtotal_val / 12, 2))
             elif 'infla' in n3 and 'previsao' in n3:
                 pct_txt = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
                 ws_p.cell(r, 3).value = f'PREVISÃO DE INFLAÇÃO - {pct_txt}%'
-                _set_se_nao_formula(r, 4, round(subtotal_mensal * inflacao, 2))
+                _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
                 _set_se_nao_formula(r, 5, round(inflacao, 4))
             elif n3 == 'total':
                 if r == total_rec_row:
@@ -805,15 +803,16 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     _set_se_nao_formula(r, 5, round(total_rec, 2))
                 else:
                     ws_p.cell(r, 3).value = 'TOTAL'
-                    total_mensal = subtotal_mensal * (1 + inflacao)
-                    _set_se_nao_formula(r, 4, round(total_mensal, 2))
-                    _set_se_nao_formula(r, 5, round(total_mensal / num_frac, 2))
+                    total = subtotal_val * (1 + inflacao)
+                    _set_se_nao_formula(r, 4, round(total, 2))
+                    _set_se_nao_formula(r, 5, round(total / num_frac, 2))
             elif 'saldo' in n3 or 'deficit' in n3 or 'superavit' in n3:
-                total_mensal = subtotal_mensal * (1 + inflacao)
-                saldo_mensal = round(total_rec - total_mensal, 2)
-                ws_p.cell(r, 3).value = 'SALDO ( SUPERÁVIT )' if saldo_mensal >= 0 else 'SALDO ( DÉFICIT )'
-                _set_se_nao_formula(r, 4, saldo_mensal)
-                _set_se_nao_formula(r, 5, round(saldo_mensal, 2))
+                rec_anual = total_rec * 12
+                total = subtotal_val * (1 + inflacao)
+                saldo = round(rec_anual - total, 2)
+                ws_p.cell(r, 3).value = 'SALDO ( SUPERÁVIT )' if saldo >= 0 else 'SALDO ( DÉFICIT )'
+                _set_se_nao_formula(r, 4, saldo)
+                _set_se_nao_formula(r, 5, round(saldo / 12, 2))
 
         def _num_cell(row, col):
             val = ws_p.cell(row, col).value
@@ -950,8 +949,8 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             for i, (nome, val_d, val_e) in enumerate(prev_desp):
                 r2 = desp_ini2 + i
                 ws_p2.cell(r2, 3).value = nome
-                # val_d ja e mensal (vem da PREVISAO col D que agora e mensal)
-                ws_p2.cell(r2, 4).value = round(float(val_d), 2) if isinstance(val_d, (int, float)) else val_d
+                val_d_div = round(float(val_d) / 12, 2) if isinstance(val_d, (int, float)) else val_d
+                ws_p2.cell(r2, 4).value = val_d_div
                 ws_p2.cell(r2, 5).value = round(float(val_e), 2) if isinstance(val_e, (int, float)) else val_e
 
             # Linhas de totais: identifica pelo texto da FORMULA (antes de ser limpa)
@@ -962,25 +961,26 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 # Tenta match pelo texto da formula ou pelo valor calculado
                 if 'SUBTOTAL' in val_text.upper():
                     ws_p2.cell(r2, 3).value = 'SUBTOTAL'
-                    ws_p2.cell(r2, 4).value = subtotal_mensal
+                    ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
                     ws_p2.cell(r2, 7).value = 'Inflação'
                 elif 'AUMENTO' in val_text.upper() or ('infla' in _norm(val_text) and 'aumento' in _norm(val_text)):
-                    ws_p2.cell(r2, 4).value = round(subtotal_mensal * inflacao, 2)
+                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
                 elif val_text.upper().strip() in ('TOTAL', '="TOTAL"') or (_norm(val_text) == 'total' and 'aumento' not in _norm(val_text)):
                     ws_p2.cell(r2, 3).value = 'TOTAL'
-                    total_mensal = subtotal_mensal * (1 + inflacao)
-                    ws_p2.cell(r2, 4).value = round(total_mensal, 2)
-                    ws_p2.cell(r2, 5).value = round(total_mensal, 2)
+                    total = subtotal_val * (1 + inflacao)
+                    ws_p2.cell(r2, 4).value = round(total, 2)
+                    ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
                 elif 'SALDO' in val_text.upper() or 'DEFICIT' in val_text.upper() or 'SUPERAVIT' in val_text.upper():
                     rec_mensal = sum(v for _, v, _ in prev_rec if isinstance(v, (int, float)))
-                    total_mensal = subtotal_mensal * (1 + inflacao)
-                    saldo_mensal = round(rec_mensal - total_mensal, 2)
-                    ws_p2.cell(r2, 4).value = saldo_mensal
-                    ws_p2.cell(r2, 5).value = saldo_mensal
+                    rec_anual = rec_mensal * 12
+                    total_anual = subtotal_val * (1 + inflacao)
+                    saldo_val = rec_anual - total_anual
+                    ws_p2.cell(r2, 4).value = round(saldo_val, 2)
+                    ws_p2.cell(r2, 5).value = round(saldo_val / 12, 2)
                 # Fallback: identifica pelo valor na coluna B (99 = inflacao)
                 val_b = ws_p2.cell(r2, 2).value
                 if val_b == 99:
-                    ws_p2.cell(r2, 4).value = round(subtotal_mensal * inflacao, 2)
+                    ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
 
             # Limpa colunas G/H (formulas c/ FR e s/ FR — preserva cabecalhos)
             for r2 in range(1, ws_p2.max_row + 1):
@@ -1151,29 +1151,28 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
         if abs(final_g) < 0.005:
             continue
         ws_p.cell(r, 2, idx)
-        mensal_g = round(final_g / 12, 2)
         ws_p.cell(r, 3, grupo_nome)
-        ws_p.cell(r, 4, mensal_g).number_format = MONEY              # D: mensal
-        ws_p.cell(r, 5, round(mensal_g / num_frac, 2)).number_format = MONEY
-        ws_p.cell(r, 6, round(final_g, 2)).number_format = MONEY     # F: anual
+        ws_p.cell(r, 4, round(final_g, 2)).number_format = MONEY
+        ws_p.cell(r, 5, round(final_g / num_frac, 2)).number_format = MONEY
+        ws_p.cell(r, 6, round(final_g / 12, 2)).number_format = MONEY
         despesa_total += final_g
         idx += 1
         r += 1
     r += 1
-    despesa_mensal = round(despesa_total / 12, 2)
     ws_p.cell(r, 3, 'SUBTOTAL').font = Font(bold=True)
-    ws_p.cell(r, 4, despesa_mensal).number_format = MONEY
+    ws_p.cell(r, 4, round(despesa_total, 2)).number_format = MONEY
     r += 1
-    inflacao_val = despesa_mensal * inflacao
+    inflacao_val = despesa_total * inflacao
     ws_p.cell(r, 2, 99)
     ws_p.cell(r, 3, f'PREVISÃO DE INFLAÇÃO - {inflacao*100:.0f}%')
     ws_p.cell(r, 4, round(inflacao_val, 2)).number_format = MONEY
     r += 2
-    total = despesa_mensal + inflacao_val
+    total = despesa_total + inflacao_val
     ws_p.cell(r, 3, 'TOTAL').font = Font(bold=True, size=12)
     ws_p.cell(r, 4, round(total, 2)).number_format = MONEY
     r += 2
-    saldo = round(rec_total - total, 2)
+    rec_anual = rec_total * 12
+    saldo = rec_anual - total
     ws_p.cell(r, 3, 'SALDO ( DÉFICIT )' if saldo < 0 else 'SALDO ( SUPERÁVIT )').font = Font(bold=True, size=12)
     ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
     _adicionar_consideracoes(ws_p, ano)
