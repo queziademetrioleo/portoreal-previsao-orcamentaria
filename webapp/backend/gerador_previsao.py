@@ -9,7 +9,7 @@ Template fixo = visual (cabecalhos, formatacao, abas)
 Conteudo dinamico = contas preenchidas conforme os dados reais
 """
 
-import os, re, datetime, unicodedata, warnings, shutil, json
+import os, re, datetime, unicodedata, warnings, shutil
 from copy import copy
 warnings.filterwarnings('ignore')
 import openpyxl
@@ -274,88 +274,6 @@ def _insert_rows_for_dynamic_section(ws, before_row, amount, style_row, cols):
     ws.insert_rows(before_row, amount)
     for row in range(before_row, before_row + amount):
         _copy_row_style(ws, style_row, row, cols)
-
-
-def _ia_categorizar_despesas(despesas_ativas, nome_condominio):
-    """Usa IA para categorizar e ordenar despesas para o XLSX.
-
-    A IA conhece o contexto do condominio e decide quais itens agrupar
-    (ex.: 'Despesas com Pessoal' soma varias classes) e quais listar
-    individualmente (ex.: cada contrato em linha propria).
-    """
-    try:
-        from previsao import _claude_chat, _ia_disponivel, _extrai_json
-    except ImportError:
-        return []
-
-    if not _ia_disponivel() or not despesas_ativas:
-        return []
-
-    # Monta dados para a IA
-    itens = []
-    for idx, ln in despesas_ativas:
-        itens.append({
-            'i': idx,
-            'g': str(ln.get('grupo') or ''),
-            'c': str(ln.get('classe') or ''),
-            'v': round(float(ln.get('final') or 0), 2),
-        })
-
-    sistema = (
-        'Voce e um analista financeiro de condominios. Sua tarefa e organizar '
-        'as despesas para uma planilha de previsao orcamentaria que sera entregue '
-        'ao sindico.\n\n'
-        'REGRAS:\n'
-        '1. Itens do MESMO grupo podem ser somados em uma unica linha (ex.: todos '
-        'os itens de "Despesas com Pessoal" viram uma linha so).\n'
-        '2. CONTRATOS devem SEMPRE aparecer em linhas individuais com seu nome '
-        'original — nunca agrupe contratos diferentes.\n'
-        '3. Pro-labore do sindico SEMPRE em linha individual.\n'
-        '4. Tarifas publicas (luz, agua, telefone, gas) SEMPRE em linhas individuais.\n'
-        '5. Use nomes claros e profissionais (ex.: "Contrato Manutencao de Elevador", '
-        'nao "Manutencao Elevador").\n'
-        '6. Ordene logicamente: Pessoal, Tarifas, Conservacao, Contratos, Administrativas, '
-        'Pro-labore.\n'
-        '7. Nao invente itens. Use APENAS os dados fornecidos.\n'
-        '8. O valor "v" e ANUAL. Some itens do mesmo grupo para obter o total do grupo.\n\n'
-        'Retorne APENAS JSON: {"despesas": [{"label": "Nome", "valor": 1234.56}, ...]}'
-    )
-
-    prompt = (
-        f'Condominio: {nome_condominio}\n\n'
-        f'Itens de despesa (g=grupo, c=classe, v=valor anual em R$):\n'
-        f'{json.dumps(itens, ensure_ascii=False, indent=2)}'
-    )
-
-    resp = _claude_chat(
-        sistema,
-        f'Condominio: {nome_condominio}\n\n'
-        f'Itens de despesa (g=grupo, c=classe, v=valor anual em R$):\n'
-        f'{json.dumps(itens, ensure_ascii=False)}',
-        max_tokens=2000,
-    )
-
-    if not resp:
-        return []
-
-    try:
-        data = _extrai_json(resp)
-        items = data.get('despesas', [])
-    except Exception:
-        return []
-
-    # Valida e converte
-    resultado = []
-    for item in items:
-        label = str(item.get('label', '')).strip()
-        try:
-            valor = round(float(item.get('valor', 0)), 2)
-        except (TypeError, ValueError):
-            continue
-        if label and abs(valor) > 0.005:
-            resultado.append((label, valor))
-
-    return resultado
 
 
 def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
@@ -724,39 +642,103 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             (idx, ln) for idx, ln in enumerate(linhas)
             if abs(_valor_linha(ln)) > 0.005
         ]
+        consumidos = set()
 
-        # --- IA: categoriza e ordena as despesas para o XLSX ---
-        linhas_prev = _ia_categorizar_despesas(despesas_ativas, nome_condominio)
-
-        # Se a IA nao respondeu, fallback simples: lista por classe
-        if not linhas_prev:
-            def _ng(ln):
-                return _norm(ln.get('grupo'))
-            def _nc(ln):
-                return _norm(ln.get('classe'))
-
-            # Agrupar por grupo para labels mais limpos
-            grupos_vistos = set()
+        def _somar(label, pred):
+            total = 0.0
             for idx, ln in despesas_ativas:
-                ng = _ng(ln)
-                nc = _nc(ln)
-                anual = _valor_linha(ln)
-                # Se o grupo ja foi sumarizado, pular itens individuais do mesmo grupo
-                grupos_vistos.add(ng)
+                if idx in consumidos:
+                    continue
+                if pred(ln):
+                    total += _valor_linha(ln)
+                    consumidos.add(idx)
+            return (label, total) if abs(total) > 0.005 else None
 
-            # Fallback: lista cada classe individualmente
-            for idx, ln in despesas_ativas:
-                label = str(ln.get('classe') or ln.get('grupo') or 'Despesa').strip()
-                linhas_prev.append((label, _valor_linha(ln)))
+        def _ng(ln):
+            return _norm(ln.get('grupo'))
 
-        # --- Adiciona provisoes que nao estao nos linhas ---
+        def _nc(ln):
+            return _norm(ln.get('classe'))
+
+        def _tarifa_publica(ln):
+            return 'tarifas publicas' in _ng(ln)
+
+        linhas_prev = []
+        categorias = [
+            ('Despesas com Pessoal',
+             lambda ln: 'pessoal' in _ng(ln)),
+            ('Luz do Condomínio',
+             lambda ln: _tarifa_publica(ln) and 'luz' in _nc(ln)),
+            ('Água do Condomínio',
+             lambda ln: _tarifa_publica(ln) and 'agua' in _nc(ln)),
+            ('Telefone do Condomínio',
+             lambda ln: _tarifa_publica(ln) and 'telefone' in _nc(ln)),
+            ('Gás do Condomínio',
+             lambda ln: _tarifa_publica(ln) and 'gas' in _nc(ln)),
+            ('Material de Limpeza',
+             lambda ln: 'material' in _nc(ln) and 'limpeza' in _nc(ln)),
+            ('Gastos com conservação',
+             lambda ln: 'conservacao' in _ng(ln)),
+            ('Tarifas Bancárias',
+             lambda ln: 'tarifas bancarias' in _ng(ln) or 'tarifas bancarias' in _nc(ln)),
+            ('Seguro de Incêndio Obrigatório',
+             lambda ln: 'seguro' in _nc(ln) and 'incendio' in _nc(ln)),
+            ('Outras despesas diversas',
+             lambda ln: 'diversas' in _ng(ln)),
+        ]
+        for label, pred in categorias:
+            item = _somar(label, pred)
+            if item:
+                linhas_prev.append(item)
+
+        labels_usados = set()
+        for ln in linhas_contratuais:
+            idx = ln.get('idx')
+            if idx in consumidos:
+                continue
+            anual = float(ln.get('final') or 0)
+            if abs(anual) <= 0.005:
+                continue
+            label_norm = _norm(ln['classe'])
+            if label_norm in labels_usados:
+                continue
+            linhas_prev.append((ln['classe'], anual))
+            labels_usados.add(label_norm)
+            if idx is not None:
+                consumidos.add(idx)
+
+        categorias_finais = [
+            ('Despesas Administrativas',
+             lambda ln: 'administrativa' in _ng(ln) or 'administrativas' in _ng(ln)),
+            ('Despesas Cartoriais e Honorários',
+             lambda ln: any(t in _ng(ln) or t in _nc(ln) for t in ('cartori', 'honorari'))),
+            ('Despesas com Obras/Benfeitorias',
+             lambda ln: any(t in _ng(ln) for t in ('obras', 'benfeitoria'))),
+        ]
+        for label, pred in categorias_finais:
+            item = _somar(label, pred)
+            if item:
+                linhas_prev.append(item)
+
         prov_laudo = float(R.get('prov_laudo') or 0)
         prov_incendio = float(R.get('prov_incendio') or 0)
-        labels_prev = {_norm(label) for label, _ in linhas_prev}
-        if abs(prov_laudo) > 0.005 and 'provisao laudo' not in labels_prev:
+        if abs(prov_laudo) > 0.005:
             linhas_prev.append(('Provisão Laudo Autovistoria', prov_laudo))
-        if abs(prov_incendio) > 0.005 and 'provisao sistema' not in labels_prev:
+        if abs(prov_incendio) > 0.005:
             linhas_prev.append(('Provisão Sistema de Incêndio/Registro', prov_incendio))
+
+        labels_existentes = {_norm(label) for label, _ in linhas_prev}
+        for idx, ln in despesas_ativas:
+            if idx in consumidos:
+                continue
+            label = str(ln.get('classe') or ln.get('grupo') or 'Despesa sem classificação').strip()
+            nlabel = _norm(label)
+            if nlabel in labels_existentes:
+                label = f"{ln.get('grupo') or 'Outros'} - {label}"
+                nlabel = _norm(label)
+            linhas_prev.append((label, _valor_linha(ln)))
+            labels_existentes.add(nlabel)
+            consumidos.add(idx)
 
         alvo_subtotal = float(R.get('subtotal') or 0)
         soma_prev = sum(valor for _, valor in linhas_prev)
@@ -775,9 +757,9 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
         for rr, (label, anual) in zip(range(desp_ini, desp_fim + 1), linhas_prev):
             anual = round(float(anual), 2)
             ws_p.cell(rr, 3).value = label
-            ws_p.cell(rr, 4).value = anual                    # D: valor anual
+            ws_p.cell(rr, 4).value = anual
             ws_p.cell(rr, 5).value = round(anual / num_frac, 2)
-            ws_p.cell(rr, 6).value = round(anual / 12, 2)     # F: valor mensal
+            ws_p.cell(rr, 6).value = round(anual / 12, 2)
 
         subtotal_val = round(sum(valor for _, valor in linhas_prev), 2)
 
