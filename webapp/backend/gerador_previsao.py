@@ -9,7 +9,7 @@ Template fixo = visual (cabecalhos, formatacao, abas)
 Conteudo dinamico = contas preenchidas conforme os dados reais
 """
 
-import os, re, datetime, unicodedata, warnings, shutil
+import os, re, datetime, unicodedata, warnings, shutil, json
 from copy import copy
 warnings.filterwarnings('ignore')
 import openpyxl
@@ -276,7 +276,87 @@ def _insert_rows_for_dynamic_section(ws, before_row, amount, style_row, cols):
         _copy_row_style(ws, style_row, row, cols)
 
 
-def gerar_previsao_adaptativa(destino, R, nome_condominio, ano,
+def _ia_categorizar_despesas(despesas_ativas, nome_condominio):
+    """Usa IA para categorizar e ordenar despesas para o XLSX.
+
+    A IA conhece o contexto do condominio e decide quais itens agrupar
+    (ex.: 'Despesas com Pessoal' soma varias classes) e quais listar
+    individualmente (ex.: cada contrato em linha propria).
+    """
+    try:
+        from previsao import _claude_chat, _ia_disponivel, _extrai_json
+    except ImportError:
+        return []
+
+    if not _ia_disponivel() or not despesas_ativas:
+        return []
+
+    # Monta dados para a IA
+    itens = []
+    for idx, ln in despesas_ativas:
+        itens.append({
+            'i': idx,
+            'g': str(ln.get('grupo') or ''),
+            'c': str(ln.get('classe') or ''),
+            'v': round(float(ln.get('final') or 0), 2),
+        })
+
+    sistema = (
+        'Voce e um analista financeiro de condominios. Sua tarefa e organizar '
+        'as despesas para uma planilha de previsao orcamentaria que sera entregue '
+        'ao sindico.\n\n'
+        'REGRAS:\n'
+        '1. Itens do MESMO grupo podem ser somados em uma unica linha (ex.: todos '
+        'os itens de "Despesas com Pessoal" viram uma linha so).\n'
+        '2. CONTRATOS devem SEMPRE aparecer em linhas individuais com seu nome '
+        'original — nunca agrupe contratos diferentes.\n'
+        '3. Pro-labore do sindico SEMPRE em linha individual.\n'
+        '4. Tarifas publicas (luz, agua, telefone, gas) SEMPRE em linhas individuais.\n'
+        '5. Use nomes claros e profissionais (ex.: "Contrato Manutencao de Elevador", '
+        'nao "Manutencao Elevador").\n'
+        '6. Ordene logicamente: Pessoal, Tarifas, Conservacao, Contratos, Administrativas, '
+        'Pro-labore.\n'
+        '7. Nao invente itens. Use APENAS os dados fornecidos.\n'
+        '8. O valor "v" e ANUAL. Some itens do mesmo grupo para obter o total do grupo.\n\n'
+        'Retorne APENAS JSON: {"despesas": [{"label": "Nome", "valor": 1234.56}, ...]}'
+    )
+
+    prompt = (
+        f'Condominio: {nome_condominio}\n\n'
+        f'Itens de despesa (g=grupo, c=classe, v=valor anual em R$):\n'
+        f'{json.dumps(itens, ensure_ascii=False, indent=2)}'
+    )
+
+    resp = _claude_chat(
+        sistema,
+        f'Condominio: {nome_condominio}\n\n'
+        f'Itens de despesa (g=grupo, c=classe, v=valor anual em R$):\n'
+        f'{json.dumps(itens, ensure_ascii=False)}',
+        max_tokens=2000,
+    )
+
+    if not resp:
+        return []
+
+    try:
+        data = _extrai_json(resp)
+        items = data.get('despesas', [])
+    except Exception:
+        return []
+
+    # Valida e converte
+    resultado = []
+    for item in items:
+        label = str(item.get('label', '')).strip()
+        try:
+            valor = round(float(item.get('valor', 0)), 2)
+        except (TypeError, ValueError):
+            continue
+        if label and abs(valor) > 0.005:
+            resultado.append((label, valor))
+
+    return resultado
+
                                num_fracoes=None, inflacao=0.10,
                                impacto_receita_mensal=0.0,
                                inad_detalhe=None, inad_meta=None,
@@ -642,127 +722,39 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             (idx, ln) for idx, ln in enumerate(linhas)
             if abs(_valor_linha(ln)) > 0.005
         ]
-        consumidos = set()
 
-        def _ng(ln):
-            return _norm(ln.get('grupo'))
+        # --- IA: categoriza e ordena as despesas para o XLSX ---
+        linhas_prev = _ia_categorizar_despesas(despesas_ativas, nome_condominio)
 
-        def _nc(ln):
-            return _norm(ln.get('classe'))
+        # Se a IA nao respondeu, fallback simples: lista por classe
+        if not linhas_prev:
+            def _ng(ln):
+                return _norm(ln.get('grupo'))
+            def _nc(ln):
+                return _norm(ln.get('classe'))
 
-        def _somar(label, pred):
-            total = 0.0
+            # Agrupar por grupo para labels mais limpos
+            grupos_vistos = set()
             for idx, ln in despesas_ativas:
-                if idx in consumidos:
-                    continue
-                if pred(ln):
-                    total += _valor_linha(ln)
-                    consumidos.add(idx)
-            return (label, total) if abs(total) > 0.005 else None
+                ng = _ng(ln)
+                nc = _nc(ln)
+                anual = _valor_linha(ln)
+                # Se o grupo ja foi sumarizado, pular itens individuais do mesmo grupo
+                grupos_vistos.add(ng)
 
-        def _e_tarifa(ln):
-            return 'tarifas publicas' in _ng(ln)
+            # Fallback: lista cada classe individualmente
+            for idx, ln in despesas_ativas:
+                label = str(ln.get('classe') or ln.get('grupo') or 'Despesa').strip()
+                linhas_prev.append((label, _valor_linha(ln)))
 
-        # Estrategia data-driven: agrupar pelo que os dados realmente contem,
-        # nao por nomes fixos que variam entre condominios.
-        linhas_prev = []
-
-        # 1. Grupos sumarizados (uma linha = soma do grupo inteiro)
-        GRUPOS_SUMARIZADOS = [
-            ('pessoal', 'Despesas com Pessoal'),
-            ('conservacao', 'Gastos com conservação'),
-            ('tarifas bancarias', 'Tarifas Bancárias'),
-            ('administrativa', 'Despesas Administrativas'),
-            ('cartori', 'Despesas Cartoriais e Honorários'),
-            ('honorari', 'Despesas Cartoriais e Honorários'),
-            ('obras', 'Despesas com Obras/Benfeitorias'),
-            ('benfeitoria', 'Despesas com Obras/Benfeitorias'),
-        ]
-        for termo, label in GRUPOS_SUMARIZADOS:
-            item = _somar(label, lambda ln, t=termo: t in _ng(ln))
-            if item:
-                linhas_prev.append(item)
-
-        # 2. Tarifas publicas — desmembrar por classe (Luz, Agua, Telefone, Gas)
-        TARIFA_LABELS = [
-            ('luz', 'Luz do Condomínio'),
-            ('agua', 'Água do Condomínio'),
-            ('telefone', 'Telefone do Condomínio'),
-            ('gas', 'Gás do Condomínio'),
-        ]
-        for termo, label in TARIFA_LABELS:
-            item = _somar(label, lambda ln, t=termo: _e_tarifa(ln) and t in _nc(ln))
-            if item:
-                linhas_prev.append(item)
-
-        # 3. Classes especificas que merecem linha propria
-        CLASSES_PROPRIA = [
-            (('material', 'limpeza'), 'Material de Limpeza'),
-            (('seguro', 'incendio'), 'Seguro de Incêndio Obrigatório'),
-        ]
-        for (t1, t2), label in CLASSES_PROPRIA:
-            item = _somar(label, lambda ln, a=t1, b=t2: a in _nc(ln) and b in _nc(ln))
-            if item:
-                linhas_prev.append(item)
-
-        # 4. Contratos — sempre individuais (um por classe contratual)
-        def _e_contratual(ln):
-            """Item que deve ser listado como contrato individual."""
-            ng = _ng(ln)
-            nc = _nc(ln)
-            return (
-                'contrato' in ng or 'contrato' in nc or
-                'prestacao' in nc or 'assinatura' in nc or
-                ('manut' in nc and any(k in nc for k in ('elevador', 'hidraul', 'eletric',
-                       'interf', 'camera', 'portao', 'antena', 'jardim', 'tv')))
-            )
-        labels_contratos = set()
-        for idx, ln in despesas_ativas:
-            if idx in consumidos:
-                continue
-            if not _e_contratual(ln):
-                continue
-            anual = _valor_linha(ln)
-            if abs(anual) <= 0.005:
-                continue
-            label = ln.get('classe') or ln.get('grupo') or 'Contrato'
-            nl = _norm(label)
-            if nl in labels_contratos:
-                continue
-            linhas_prev.append((str(label).strip(), anual))
-            labels_contratos.add(nl)
-            consumidos.add(idx)
-
-        # 5. Pro-labore — sempre individual
-        for idx, ln in despesas_ativas:
-            if idx in consumidos:
-                continue
-            nc = _nc(ln)
-            ng = _ng(ln)
-            if not ('pro-labore' in nc or 'prolabore' in nc or 'pro-labore' in ng or
-                    'prolabore' in ng or 'sindico' in ng):
-                continue
-            anual = _valor_linha(ln)
-            if abs(anual) <= 0.005:
-                continue
-            linhas_prev.append(('Pró-labore do Síndico', anual))
-            consumidos.add(idx)
-
-        # 6. Provisoes (Laudo e Incendio)
+        # --- Adiciona provisoes que nao estao nos linhas ---
         prov_laudo = float(R.get('prov_laudo') or 0)
         prov_incendio = float(R.get('prov_incendio') or 0)
-        if abs(prov_laudo) > 0.005:
+        labels_prev = {_norm(label) for label, _ in linhas_prev}
+        if abs(prov_laudo) > 0.005 and 'provisao laudo' not in labels_prev:
             linhas_prev.append(('Provisão Laudo Autovistoria', prov_laudo))
-        if abs(prov_incendio) > 0.005:
+        if abs(prov_incendio) > 0.005 and 'provisao sistema' not in labels_prev:
             linhas_prev.append(('Provisão Sistema de Incêndio/Registro', prov_incendio))
-
-        # 7. Catch-all: itens nao consumidos viram linha com nome original
-        for idx, ln in despesas_ativas:
-            if idx in consumidos:
-                continue
-            label = str(ln.get('classe') or ln.get('grupo') or 'Outras despesas').strip()
-            linhas_prev.append((label, _valor_linha(ln)))
-            consumidos.add(idx)
 
         alvo_subtotal = float(R.get('subtotal') or 0)
         soma_prev = sum(valor for _, valor in linhas_prev)
