@@ -556,7 +556,11 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             if nc in ('tx. condominio', 'tx condominio', 'taxa condominio',
                       'taxas de condominio'):
                 return 'Taxas de Condomínio'
-            return str(ln.get('classe') or '').strip()
+            if 'compl' in nc and 'condominio' in nc:
+                return 'Complemento Tx. Condomínio'
+            # Expande abreviacoes comuns do Condominio21
+            raw = str(ln.get('classe') or '').strip()
+            return raw
 
         def _ordem_receita(item):
             nc = _norm(item[0])
