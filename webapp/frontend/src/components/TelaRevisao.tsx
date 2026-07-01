@@ -42,15 +42,15 @@ function agruparPorGrupo(linhas: LinhaConta[]) {
 function StatusBadge({ decisao }: { decisao: string }) {
   switch (decisao) {
     case 'aprovada':
-      return <Badge label="Removido da previsão" variant="danger" />
+      return <Badge label="Fora da previsão — gasto pontual" variant="danger" />
     case 'reprovada':
-      return <Badge label="Mantido na previsão" variant="success" />
+      return <Badge label="Na previsão — gasto recorrente" variant="success" />
     case 'abater':
-      return <Badge label="Abater da receita" variant="danger" />
+      return <Badge label="Vai descontar da receita" variant="danger" />
     case 'ignorar':
-      return <Badge label="Ignorar" variant="neutral" />
+      return <Badge label="Não descontar" variant="neutral" />
     default:
-      return <Badge label="Pendente" variant="warning" />
+      return <Badge label="Aguardando sua decisão" variant="warning" />
   }
 }
 
@@ -104,21 +104,21 @@ function EditorDespesa({
             variant={item.decisao === 'aprovada' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'aprovada' })}
           >
-            Remover
+            É gasto pontual — tirar da previsão
           </Button>
           <Button
             size="sm"
             variant={item.decisao === 'reprovada' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'reprovada' })}
           >
-            Manter
+            É gasto recorrente — manter na previsão
           </Button>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => onChange({ decisao: 'pendente' })}
           >
-            Pendente
+            Decidir depois
           </Button>
         </div>
       </div>
@@ -175,14 +175,14 @@ function EditorInad({
             variant={item.decisao === 'abater' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'abater' })}
           >
-            Abater
+            Descontar da receita
           </Button>
           <Button
             size="sm"
             variant={item.decisao === 'ignorar' ? 'primary' : 'secondary'}
             onClick={() => onChange({ decisao: 'ignorar' })}
           >
-            Ignorar
+            Não descontar
           </Button>
         </div>
       </div>
@@ -252,10 +252,10 @@ export default function TelaRevisao({
   }
 
   const tabs: { id: Aba; label: string; count?: number }[] = [
-    { id: 'relatorio', label: 'Relatório' },
-    { id: 'extraordinarios', label: 'Extraordinários', count: extra.length },
-    { id: 'ordinarias', label: 'Despesas ordinárias', count: revisar.length },
-    { id: 'inadimplentes', label: 'Inadimplentes', count: inad.length },
+    { id: 'relatorio', label: 'Visão geral' },
+    { id: 'extraordinarios', label: 'Gastos pontuais', count: extra.length },
+    { id: 'ordinarias', label: 'Gastos a revisar', count: revisar.length },
+    { id: 'inadimplentes', label: 'Inadimplência', count: inad.length },
     { id: 'contas', label: 'Contas calculadas', count: sessao.linhas_contas.length },
   ]
 
@@ -390,15 +390,15 @@ export default function TelaRevisao({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2 className="section-title">Extraordinários</h2>
-                    <p className="section-desc">Gastos fora da rotina. Remova o que for pontual.</p>
+                    <h2 className="section-title">Gastos pontuais</h2>
+                    <p className="section-desc">O sistema identificou esses gastos como fora da rotina. Se o gasto não vai se repetir no próximo ano, ele deve sair da previsão.</p>
                   </div>
                   <div className="choice-row">
                     <Button size="sm" variant="secondary" onClick={() => setExtra((prev) => prev.map((i) => ({ ...i, decisao: 'aprovada' })))}>
-                      Remover todos
+                      Todos são pontuais
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setExtra((prev) => prev.map((i) => ({ ...i, decisao: 'reprovada' })))}>
-                      Manter todos
+                      Todos são recorrentes
                     </Button>
                   </div>
                 </div>
@@ -416,15 +416,15 @@ export default function TelaRevisao({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2 className="section-title">Despesas ordinárias</h2>
-                    <p className="section-desc">Itens ambíguos. Decida se entram como gasto recorrente.</p>
+                    <h2 className="section-title">Gastos a revisar</h2>
+                    <p className="section-desc">Esses itens podem ou não se repetir. Analise cada um e decida se entra na previsão do próximo ano.</p>
                   </div>
                   <div className="choice-row">
                     <Button size="sm" variant="secondary" onClick={() => setRevisar((prev) => prev.map((i) => ({ ...i, decisao: 'reprovada' })))}>
-                      Manter todos
+                      Todos são recorrentes
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setRevisar((prev) => prev.map((i) => ({ ...i, decisao: 'aprovada' })))}>
-                      Remover todos
+                      Todos são pontuais
                     </Button>
                   </div>
                 </div>
@@ -442,15 +442,15 @@ export default function TelaRevisao({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
-                    <h2 className="section-title">Inadimplentes</h2>
-                    <p className="section-desc">Abatimentos reduzem a receita projetada.</p>
+                    <h2 className="section-title">Inadimplência</h2>
+                    <p className="section-desc">Unidades com pagamento em atraso. Descontar da receita reduz o valor que o condomínio espera receber no próximo ano.</p>
                   </div>
                   <div className="choice-row">
                     <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'abater' })))}>
-                      Abater todos
+                      Descontar todos da receita
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'ignorar' })))}>
-                      Ignorar todos
+                      Não descontar nenhum
                     </Button>
                   </div>
                 </div>
