@@ -455,7 +455,12 @@ export default function TelaRevisao({
                   </div>
                 </div>
                 {inad.length === 0 ? (
-                  <p className="table-empty">Nenhuma inadimplência carregada.</p>
+                  <div className="empty">
+                    <p>✅ Nenhuma inadimplência registrada.</p>
+                    <p style={{fontSize:14, color:'var(--text-secondary)', marginTop:4}}>
+                      O condomínio está em dia. Esta aba pode ser ignorada.
+                    </p>
+                  </div>
                 ) : (
                   inad.map((item) => (
                     <EditorInad key={item.id} item={item} onChange={(p) => updateInad(item.id, p)} />

@@ -198,13 +198,13 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     setFile={setDessin}
                   />
                   <FileZone
-                    label="inad01.xls"
+                    label="inad01.xls (opcional)"
                     file={inad}
                     setFile={setInad}
                   />
                 </div>
                 <p className="form-hint">
-                  * balanual.xls e desbai06.xls são obrigatórios.
+                  * balanual.xls e desbai06.xls são obrigatórios. inad01.xls é opcional — só anexe se houver inadimplência.
                 </p>
               </div>
 
