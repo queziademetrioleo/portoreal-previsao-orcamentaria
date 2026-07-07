@@ -33,8 +33,8 @@ Aprendidas por engenharia reversa dos arquivos `Previsão 20XX.xlsx` manuais (20
 | **R1** | Obras/Benfeitorias → desconsideradas integralmente |
 | **R2** | Rescisão, indenização trabalhista, pensão alimentícia → deduz 100% |
 | **R3** | Manutenções "lumpy" (pintura, portão, elétrica…) → deduz NFs extraordinárias identificadas pela IA |
-| **R4** | Despesas Diversas (exceto Seguro) → zeradas e realocadas como provisão para Laudo de Autovistoria |
-| **R5** | Cartoriais e Honorários → zerados e realocados como provisão para Sistema de Incêndio/Registro |
+| **R4** | Despesas Diversas (exceto Seguro) → provisão para Laudo de Autovistoria (cálculo interno; no documento final aparece somada em Conservação, sem linha própria) |
+| **R5** | Cartoriais e Honorários → provisão para Sistema de Incêndio/Registro (idem — absorvida em Conservação no documento) |
 | **R6** | Contratos, pró-labore, taxa de administração → último valor mensal × 12 (anualização) |
 | **R7** | Inflação → +10% sobre o subtotal (percentual editável na interface de revisão) |
 | **R8** | Inadimplência ≥ 3 meses consecutivos → abate a taxa do devedor da receita (não é despesa) |
