@@ -41,6 +41,11 @@ function isNotaFinal(label: string) {
   return n.includes('consideracoes importantes') || n.startsWith('1) para o calculo')
 }
 
+function isFundoReserva(label: string) {
+  const n = norm(label)
+  return n.includes('fundo') && n.includes('reserva')
+}
+
 function fallbackRows(sessao: Sessao): LinhaPrevisaoFinal[] {
   const r = sessao.resumo
   const inflacao = r.inflacao || 0
@@ -169,18 +174,25 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   const [visao, setVisao] = useState<Visao>('mensal')
   const [aba, setAba] = useState<AbaResultado>('executivo')
   const [mostrarDetalhes, setMostrarDetalhes] = useState(false)
+  const [comFundo, setComFundo] = useState(true)
 
   const rows = sessao.previsao_final?.length ? sessao.previsao_final : fallbackRows(sessao)
   const fluxoMensal = sessao.fluxo_mensal ?? []
 
-  const receitas = rows.filter(
+  const cenarios = sessao.resumo.cenarios
+  const temFundoReserva = !!cenarios && Math.abs(cenarios.fundo_reserva_anual) > 0.005
+  const cenarioAtivo = cenarios ? (comFundo ? cenarios.com_fundo : cenarios.sem_fundo) : null
+
+  const receitasTodas = rows.filter(
     (r) => r.row >= 10 && r.row <= 20 && r.label && !isTotal(r.label) && !isNotaFinal(r.label),
   )
+  const receitas = comFundo ? receitasTodas : receitasTodas.filter((r) => !isFundoReserva(r.label))
   const despesas = rows.filter(
     (r) => r.row >= 22 && r.row <= 80 && r.label && !isTotal(r.label) && !isNotaFinal(r.label),
   )
   const totalReceitasMensal =
-    receitas.reduce((s, r) => s + valorMensal(r), 0) || sessao.resumo.receita_mensal
+    receitas.reduce((s, r) => s + valorMensal(r), 0)
+    || (cenarioAtivo ? cenarioAtivo.receita_mensal : sessao.resumo.receita_mensal)
   const totalDespesasMensal = sessao.resumo.total_previsto / 12
 
   const receitaAtual = visao === 'anual' ? totalReceitasMensal * 12 : totalReceitasMensal
@@ -198,8 +210,9 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   )
   const totalGrupo = grupos.reduce((s, g) => s + g.value, 0)
 
+  const receitaAnualCenario = cenarioAtivo ? cenarioAtivo.receita_anual : sessao.resumo.receita_anual
   const saude = scoreSaude(
-    sessao.resumo.receita_anual,
+    receitaAnualCenario,
     sessao.resumo.total_previsto,
     impactoInadMensal * 12,
   )
@@ -283,6 +296,28 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
               Anual
             </button>
           </div>
+          {temFundoReserva && (
+            <div
+              className="tab-bar"
+              style={{ margin: 0, border: 'none', background: 'transparent', padding: 0, gap: 2 }}
+              title={`Fundo de reserva: ${money(cenarios!.fundo_reserva_anual / 12)}/mês`}
+            >
+              <button
+                className={`tab-btn ${comFundo ? 'active' : ''}`}
+                onClick={() => setComFundo(true)}
+                style={comFundo ? { background: 'rgba(255,255,255,0.2)', color: '#fff' } : { color: 'rgba(255,255,255,0.7)' }}
+              >
+                Com fundo de reserva
+              </button>
+              <button
+                className={`tab-btn ${!comFundo ? 'active' : ''}`}
+                onClick={() => setComFundo(false)}
+                style={!comFundo ? { background: 'rgba(255,255,255,0.2)', color: '#fff' } : { color: 'rgba(255,255,255,0.7)' }}
+              >
+                Sem fundo
+              </button>
+            </div>
+          )}
           <a href={urlDownload(sessao.sessao_id)} className="btn btn-primary btn-sm" style={{ background: '#fff', color: 'var(--accent)', borderColor: '#fff' }}>
             Baixar XLSX
           </a>

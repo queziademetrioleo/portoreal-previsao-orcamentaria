@@ -212,6 +212,8 @@ export default function TelaRevisao({
     calculando,
     aoVivo,
     buildPayload,
+    inflacao,
+    setInflacao,
   } = useDecisoes(sessao)
 
   const [aba, setAba] = useState<Aba>('relatorio')
@@ -331,7 +333,25 @@ export default function TelaRevisao({
               <div className="calc-row"><span>Provisão laudo</span><strong>{money(sessao.resumo.prov_laudo)}</strong></div>
               <div className="calc-row"><span>Provisão incêndio</span><strong>{money(sessao.resumo.prov_incendio)}</strong></div>
               <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
-              <div className="calc-row"><span>Inflação</span><strong>{money(vivo.total - vivo.subtotal)}</strong></div>
+              <div className="calc-row inflacao-row">
+                <span>
+                  Inflação{' '}
+                  <input
+                    type="number"
+                    className="inflacao-input"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={Number((inflacao * 100).toFixed(2))}
+                    onChange={e => {
+                      const pct = parseFloat(e.target.value)
+                      if (Number.isFinite(pct) && pct >= 0 && pct <= 100) setInflacao(pct / 100)
+                    }}
+                    aria-label="Percentual de inflação"
+                  />%
+                </span>
+                <strong>{money(vivo.total - vivo.subtotal)}</strong>
+              </div>
               <div className="calc-row strong"><span>Total previsto</span><strong>{money(vivo.total)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>

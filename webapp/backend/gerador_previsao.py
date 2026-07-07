@@ -772,6 +772,10 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                         if isinstance(ws_p.cell(rr, 4).value, (int, float)))
 
         # SUBTOTAL, INFLACAO, TOTAL, SALDO (so para templates sem formula)
+        fundo_mensal = sum(v for lbl, v in receitas_prev
+                           if 'fundo' in _norm(lbl) and 'reserva' in _norm(lbl))
+        saldo_row = None
+        saldo_com_fundo = 0.0
         for r in range(1, ws_p.max_row + 1):
             n3 = _norm(ws_p.cell(r, 3).value)
             if 'subtotal' in n3:
@@ -799,6 +803,27 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 ws_p.cell(r, 3).value = 'SALDO ( SUPERÁVIT )' if saldo >= 0 else 'SALDO ( DÉFICIT )'
                 _set_se_nao_formula(r, 4, saldo)
                 _set_se_nao_formula(r, 5, round(saldo / 12, 2))
+                saldo_row = r
+                saldo_com_fundo = saldo
+
+        # Cenario SEM fundo de reserva (feedback CEO 07/2026): a receita do
+        # fundo nao cobre despesa ordinaria, entao o documento mostra tambem
+        # o saldo excluindo essa arrecadacao.
+        if saldo_row is not None and abs(fundo_mensal) > 0.005:
+            ws_p.cell(saldo_row, 3).value = (
+                'SALDO COM FUNDO DE RESERVA ( SUPERÁVIT )' if saldo_com_fundo >= 0
+                else 'SALDO COM FUNDO DE RESERVA ( DÉFICIT )')
+            alvo_p = saldo_row + 1
+            if any(str(ws_p.cell(alvo_p, c).value or '').strip() for c in (3, 4, 5, 6)):
+                # inserir desloca merges abaixo — evitar quando possivel
+                ws_p.insert_rows(alvo_p)
+            _copy_row_style(ws_p, saldo_row, alvo_p, (3, 4, 5, 6))
+            saldo_sem = round(saldo_com_fundo - fundo_mensal * 12, 2)
+            ws_p.cell(alvo_p, 3).value = (
+                'SALDO SEM FUNDO DE RESERVA ( SUPERÁVIT )' if saldo_sem >= 0
+                else 'SALDO SEM FUNDO DE RESERVA ( DÉFICIT )')
+            ws_p.cell(alvo_p, 4).value = saldo_sem
+            ws_p.cell(alvo_p, 5).value = round(saldo_sem / 12, 2)
 
         def _num_cell(row, col):
             val = ws_p.cell(row, col).value
@@ -941,6 +966,11 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
             # Linhas de totais: identifica pelo texto da FORMULA (antes de ser limpa)
             # A formula contem "SUBTOTAL", "TOTAL", "SALDO" etc.
+            fundo_mensal2 = sum(
+                v for nome, v, _ in prev_rec
+                if isinstance(v, (int, float))
+                and 'fundo' in _norm(nome) and 'reserva' in _norm(nome))
+            saldo_row2 = None
             for r2 in range(1, ws_p2.max_row + 1):
                 val_c3 = ws_p2.cell(r2, 3).value
                 val_text = str(val_c3 or '')
@@ -951,6 +981,9 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     ws_p2.cell(r2, 7).value = 'Inflação'
                 elif 'AUMENTO' in val_text.upper() or ('infla' in _norm(val_text) and 'aumento' in _norm(val_text)):
                     ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
+                    # F guarda a fracao usada pelo rotulo '="Aumento previsto..." & F48*100'
+                    if isinstance(ws_p2.cell(r2, 6).value, (int, float)):
+                        ws_p2.cell(r2, 6).value = round(inflacao, 4)
                 elif val_text.upper().strip() in ('TOTAL', '="TOTAL"') or (_norm(val_text) == 'total' and 'aumento' not in _norm(val_text)):
                     ws_p2.cell(r2, 3).value = 'TOTAL'
                     total = subtotal_val * (1 + inflacao)
@@ -961,19 +994,56 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     rec_anual = rec_mensal * 12
                     total_anual = subtotal_val * (1 + inflacao)
                     saldo_val = rec_anual - total_anual
+                    ws_p2.cell(r2, 3).value = ('SALDO ( SUPERÁVIT )' if saldo_val >= 0
+                                               else 'SALDO ( DÉFICIT )')
                     ws_p2.cell(r2, 4).value = round(saldo_val, 2)
                     ws_p2.cell(r2, 5).value = round(saldo_val / 12, 2)
+                    saldo_row2 = r2
+                    saldo_val2 = saldo_val
                 # Fallback: identifica pelo valor na coluna B (99 = inflacao)
                 val_b = ws_p2.cell(r2, 2).value
                 if val_b == 99:
                     ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
 
-            # Limpa colunas G/H (formulas c/ FR e s/ FR — preserva cabecalhos)
+            # Cenario duplo COM/SEM fundo de reserva (feedback CEO 07/2026):
+            # segunda linha de saldo excluindo a arrecadacao do fundo.
+            if saldo_row2 is not None and abs(fundo_mensal2) > 0.005:
+                ws_p2.cell(saldo_row2, 3).value = (
+                    'SALDO COM FUNDO DE RESERVA ( SUPERÁVIT )' if saldo_val2 >= 0
+                    else 'SALDO COM FUNDO DE RESERVA ( DÉFICIT )')
+                alvo = saldo_row2 + 1
+                ocupado = any(str(ws_p2.cell(alvo, c).value or '').strip()
+                              for c in (3, 4, 5, 6))
+                if ocupado:
+                    # inserir desloca merges das Consideracoes — evitar quando possivel
+                    ws_p2.insert_rows(alvo)
+                _copy_row_style(ws_p2, saldo_row2, alvo, (3, 4, 5, 6))
+                saldo_sem2 = round(saldo_val2 - fundo_mensal2 * 12, 2)
+                ws_p2.cell(alvo, 3).value = (
+                    'SALDO SEM FUNDO DE RESERVA ( SUPERÁVIT )' if saldo_sem2 >= 0
+                    else 'SALDO SEM FUNDO DE RESERVA ( DÉFICIT )')
+                ws_p2.cell(alvo, 4).value = saldo_sem2
+                ws_p2.cell(alvo, 5).value = round(saldo_sem2 / 12, 2)
+
+            # Colunas G/H do template manual: "Aumento c/ FR" e "s/ FR" —
+            # substituir as formulas (que apontavam para abas removidas)
+            # pelos valores calculados, em vez de apenas limpa-las.
+            rec_mensal2 = sum(v for _, v, _ in prev_rec if isinstance(v, (int, float)))
+            rec_anual2 = rec_mensal2 * 12
+            total_anual2 = subtotal_val * (1 + inflacao)
             for r2 in range(1, ws_p2.max_row + 1):
                 for c in (7, 8):
                     val = ws_p2.cell(r2, c).value
                     if isinstance(val, str) and val.startswith('='):
-                        ws_p2.cell(r2, c).value = None
+                        novo = None
+                        if 'd50' in val.lower() and 'd19' in val.lower():
+                            sem_fr = '(d19' in val.lower().replace(' ', '')
+                            rec_base = (rec_anual2 - fundo_mensal2 * 12) if sem_fr else rec_anual2
+                            if rec_base > 0.005:
+                                novo = round(total_anual2 / rec_base - 1, 4)
+                                ws_p2.cell(r2 - 1, c).value = (
+                                    'Aumento s/ FR' if sem_fr else 'Aumento c/ FR')
+                        ws_p2.cell(r2, c).value = novo
             _adicionar_consideracoes(ws_p2, ano)
             break
 
@@ -1159,8 +1229,24 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 2
     rec_anual = rec_total * 12
     saldo = rec_anual - total
-    ws_p.cell(r, 3, 'SALDO ( DÉFICIT )' if saldo < 0 else 'SALDO ( SUPERÁVIT )').font = Font(bold=True, size=12)
-    ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
+    fundo_mensal = sum(
+        _receita_mensal(ln) or 0 for ln in bal.get('receitas', [])
+        if 'fundo' in _norm(ln.get('classe')) and 'reserva' in _norm(ln.get('classe')))
+    if abs(fundo_mensal) > 0.005:
+        # Cenario duplo COM/SEM fundo de reserva (feedback CEO 07/2026)
+        rotulo = ('SALDO COM FUNDO DE RESERVA ( DÉFICIT )' if saldo < 0
+                  else 'SALDO COM FUNDO DE RESERVA ( SUPERÁVIT )')
+        ws_p.cell(r, 3, rotulo).font = Font(bold=True, size=12)
+        ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
+        r += 1
+        saldo_sem = saldo - fundo_mensal * 12
+        rotulo_sem = ('SALDO SEM FUNDO DE RESERVA ( DÉFICIT )' if saldo_sem < 0
+                      else 'SALDO SEM FUNDO DE RESERVA ( SUPERÁVIT )')
+        ws_p.cell(r, 3, rotulo_sem).font = Font(bold=True, size=12)
+        ws_p.cell(r, 4, round(saldo_sem, 2)).number_format = MONEY
+    else:
+        ws_p.cell(r, 3, 'SALDO ( DÉFICIT )' if saldo < 0 else 'SALDO ( SUPERÁVIT )').font = Font(bold=True, size=12)
+        ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
     _adicionar_consideracoes(ws_p, ano)
 
     _manter_apenas_previsao2(wb)

@@ -684,6 +684,24 @@ body {
   border-bottom-width: 2px;
 }
 
+.inflacao-input {
+  width: 64px;
+  padding: 3px 6px;
+  margin: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  background: var(--surface, #fff);
+  color: var(--text);
+}
+
+.inflacao-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ── REVIEW EDITOR CARDS ──────────────── */
 .editor-card {
   display: grid;

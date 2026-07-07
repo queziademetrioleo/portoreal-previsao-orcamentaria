@@ -36,7 +36,7 @@ Aprendidas por engenharia reversa dos arquivos `Previsão 20XX.xlsx` manuais (20
 | **R4** | Despesas Diversas (exceto Seguro) → zeradas e realocadas como provisão para Laudo de Autovistoria |
 | **R5** | Cartoriais e Honorários → zerados e realocados como provisão para Sistema de Incêndio/Registro |
 | **R6** | Contratos, pró-labore, taxa de administração → último valor mensal × 12 (anualização) |
-| **R7** | Inflação → +10% sobre o subtotal |
+| **R7** | Inflação → +10% sobre o subtotal (percentual editável na interface de revisão) |
 | **R8** | Inadimplência ≥ 3 meses consecutivos → abate a taxa do devedor da receita (não é despesa) |
 
 > **Importante**: a IA **sugere** a classificação das NFs ambíguas — **quem decide é o humano** na interface de revisão.  

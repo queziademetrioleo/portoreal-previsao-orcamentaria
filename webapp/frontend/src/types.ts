@@ -60,6 +60,18 @@ export interface FluxoMensal {
   saldo: number
 }
 
+export interface Cenario {
+  receita_anual: number
+  receita_mensal: number
+  resultado: number
+}
+
+export interface Cenarios {
+  com_fundo: Cenario
+  sem_fundo: Cenario
+  fundo_reserva_anual: number
+}
+
 export interface Resumo {
   base_total: number
   desconsideracoes: number
@@ -72,6 +84,7 @@ export interface Resumo {
   receita_mensal: number
   periodo: [string, string]
   impacto_receita_mensal?: number
+  cenarios?: Cenarios
 }
 
 export interface Sessao {

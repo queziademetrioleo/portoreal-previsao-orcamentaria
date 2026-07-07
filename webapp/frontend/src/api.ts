@@ -12,6 +12,7 @@ export interface PayloadDecisoes {
   extraordinarias: Record<string, DecisaoEditavel>
   revisar: Record<string, DecisaoEditavel>
   inadimplencia: Record<string, DecisaoEditavel>
+  inflacao_pct?: number | null
 }
 
 export async function criarSessao(form: {
@@ -50,7 +51,7 @@ export async function gerarDocumento(
 export async function previewDocumento(
   sid: string,
   decisoes: PayloadDecisoes,
-): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number }> {
+): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number; inflacao?: number }> {
   const r = await fetch(`${BASE}/api/sessao/${sid}/preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

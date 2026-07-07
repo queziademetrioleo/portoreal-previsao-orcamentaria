@@ -272,6 +272,8 @@ def _fluxo_mensal_balanco(bal):
 
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
+    if getattr(dec, 'inflacao_pct', None) is not None:
+        estado['resumo']['inflacao'] = float(dec.inflacao_pct)
     for item in estado['extraordinarias']:
         d, valor, nota = _decisao_payload(dec.extraordinarias, item['id'])
         _aplicar_decisao_editavel(item, d, valor, nota, ('aprovada', 'reprovada'))
@@ -290,6 +292,7 @@ def _recalcular_com_decisoes(sid, estado):
     ids_remover |= {i['id'] for i in estado['revisar'] if i['decisao'] == 'aprovada'}
 
     R = copy.deepcopy(_obter_R(sid))
+    R['inflacao_pct'] = float(estado['resumo'].get('inflacao') or core.INFLACAO)
     valores_editados = {
         i['id']: _valor_revisado(i)
         for i in (estado['extraordinarias'] + estado['revisar'])
@@ -414,6 +417,7 @@ def _montar_estado(sid, nome, ano, R):
             'total_previsto': round(R['total_previsto'], 2),
             'receita_anual': round(bal['total_receitas'] or 0, 2),
             'receita_mensal': round((bal['total_receitas'] or 0) / max(1, bal.get('n_meses', 12)), 2),
+            'cenarios': R.get('cenarios'),
             'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],
         },
         'extraordinarias': extraordinarias,
@@ -438,6 +442,8 @@ class Decisoes(BaseModel):
     extraordinarias: dict = Field(default_factory=dict)
     revisar: dict = Field(default_factory=dict)
     inadimplencia: dict = Field(default_factory=dict)
+    # Fracao (ex.: 0.10). None = manter o valor atual da sessao.
+    inflacao_pct: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -637,7 +643,9 @@ def preview(sid: str, dec: Decisoes):
     return {'ok': True,
             'subtotal': round(R2['subtotal'], 2),
             'total_previsto': round(R2['total_previsto'], 2),
-            'impacto_receita_mensal': round(impacto, 2)}
+            'impacto_receita_mensal': round(impacto, 2),
+            'inflacao': R2.get('inflacao_pct'),
+            'cenarios': R2.get('cenarios')}
 
 
 @app.post('/api/sessao/{sid}/gerar')
@@ -669,6 +677,7 @@ def gerar(sid: str, dec: Decisoes):
             R=R2,
             nome_condominio=estado['nome_condominio'],
             ano=estado['ano_previsao'],
+            inflacao=float(estado['resumo'].get('inflacao') or core.INFLACAO),
             impacto_receita_mensal=impacto_receita,
             inad_detalhe=estado['inadimplencia'],
             inad_meta=estado['inad_meta'],
@@ -686,6 +695,7 @@ def gerar(sid: str, dec: Decisoes):
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
+    estado['resumo']['cenarios'] = R2.get('cenarios')
     estado['previsao_final'] = previsao_final
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
 

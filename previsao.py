@@ -329,7 +329,7 @@ def ia_parecer(R, nome_condo):
         f"Provisao laudo autovistoria: R${R['prov_laudo']:,.2f}\n"
         f"Provisao sist. incendio/registro: R${R['prov_incendio']:,.2f}\n"
         f"Base recorrente ajustada (subtotal): R${R['subtotal']:,.2f}\n"
-        f"Previsao anual (+{INFLACAO:.0%}): R${R['total_previsto']:,.2f} "
+        f"Previsao anual (+{float(R.get('inflacao_pct') or INFLACAO):.0%}): R${R['total_previsto']:,.2f} "
         f"(mensal R${R['total_previsto']/12:,.2f})\n"
         f"Receita mensal media atual: R${(bal['total_receitas'] or 0)/12:,.2f}\n"
         f"Principais despesas extraordinarias removidas:\n{ex_txt or '  (nenhuma)'}\n"
@@ -784,7 +784,36 @@ LUMPY_KEYS = list(FATOR_DEDUCAO_HIST.keys())
 PESSOAL_PONTUAL = ['rescisao', 'indenizacao trabalhista', 'pensao aliment']
 ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
              '13. taxa de administrac', '13o taxa']
-INFLACAO = float(os.environ.get('PREVISAO_INFLACAO_PCT', '0.0472'))
+# Default 10% (taxa da Porto Real sobre as despesas — feedback CEO 07/2026);
+# editavel por sessao na interface e via env PREVISAO_INFLACAO_PCT.
+INFLACAO = float(os.environ.get('PREVISAO_INFLACAO_PCT', '0.10'))
+
+
+def _eh_fundo_reserva(classe):
+    nc = _norm(classe)
+    return 'fundo' in nc and 'reserva' in nc
+
+
+def calcular_cenarios(bal, total_previsto):
+    """Cenarios COM e SEM fundo de reserva (feedback CEO 07/2026).
+    O fundo de reserva e uma linha de receita do balanual; o cenario 'sem_fundo'
+    exclui essa arrecadacao ao confrontar receita x previsao de despesas."""
+    receitas = (bal or {}).get('receitas') or []
+    fundo = sum(float(l.get('total') or 0) for l in receitas
+                if _eh_fundo_reserva(l.get('classe')))
+    receita_total = float((bal or {}).get('total_receitas') or 0)
+    if receita_total <= 0:
+        receita_total = sum(float(l.get('total') or 0) for l in receitas)
+    cenarios = {}
+    for chave, receita in (('com_fundo', receita_total),
+                           ('sem_fundo', receita_total - fundo)):
+        cenarios[chave] = {
+            'receita_anual': round(receita, 2),
+            'receita_mensal': round(receita / 12, 2),
+            'resultado': round(receita - (total_previsto or 0), 2),
+        }
+    cenarios['fundo_reserva_anual'] = round(fundo, 2)
+    return cenarios
 
 THIN = Side(style='thin', color='CCCCCC')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -978,9 +1007,11 @@ def _ws_header(ws, row, headers, widths=None):
             ws.column_dimensions[get_column_letter(j)].width = w
 
 
-def analisar(folder, progress_callback=None):
+def analisar(folder, progress_callback=None, inflacao_pct=None):
     """Executa parsing + classificacao + regras; retorna dict com tudo.
-    Usa IA (Claude API) como parser principal; fallback para parsers rigidos."""
+    Usa IA (Claude API) como parser principal; fallback para parsers rigidos.
+    inflacao_pct: fracao (ex.: 0.10); default INFLACAO (editavel na interface)."""
+    inflacao_pct = INFLACAO if inflacao_pct is None else float(inflacao_pct)
     t0 = time.time()
     nome = os.path.basename(folder.rstrip('/'))
     logger.info('=== INICIO analisar(): %s ===', folder)
@@ -1233,7 +1264,7 @@ def analisar(folder, progress_callback=None):
 
     base_total = sum(l['base'] for l in linhas)
     subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
-    total_previsto = subtotal * (1 + INFLACAO)
+    total_previsto = subtotal * (1 + inflacao_pct)
 
     # Log R1-R8 summary
     r1 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R1')]
@@ -1259,7 +1290,7 @@ def analisar(folder, progress_callback=None):
     logger.info('  Base total:    R$ %12.2f', base_total)
     logger.info('  Desconsideracoes: R$ %10.2f', desconsider)
     logger.info('  Subtotal:      R$ %12.2f', subtotal)
-    logger.info('  Inflacao (%.1f%%): R$ %10.2f', INFLACAO * 100, subtotal * INFLACAO)
+    logger.info('  Inflacao (%.1f%%): R$ %10.2f', inflacao_pct * 100, subtotal * inflacao_pct)
     logger.info('  Total previsto: R$ %12.2f', total_previsto)
     logger.info('  Provisao Laudo:  R$ %10.2f', prov_laudo)
     logger.info('  Provisao SCIP:   R$ %10.2f', prov_incendio)
@@ -1356,16 +1387,23 @@ def analisar(folder, progress_callback=None):
             'desconsideracoes': desconsider, 'prov_laudo': prov_laudo,
             'prov_incendio': prov_incendio, 'base_total': base_total,
             'subtotal': subtotal, 'total_previsto': total_previsto,
+            'inflacao_pct': inflacao_pct,
+            'cenarios': calcular_cenarios(bal, total_previsto),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias}
 
 
 # ---------------------------------------------------------------------------
-def recalcular(R):
+def recalcular(R, inflacao_pct=None):
     """Reaplica as regras R1-R8 com a classificacao ja decidida pelo humano.
     Usado pelo webapp apos o usuario aprovar/reprovar itens na interface.
-    Retorna o mesmo dict R, atualizado com as novas linhas e subtotais."""
+    Retorna o mesmo dict R, atualizado com as novas linhas e subtotais.
+    inflacao_pct: fracao; default = valor ja gravado em R ou INFLACAO."""
+    if inflacao_pct is None:
+        inflacao_pct = float(R.get('inflacao_pct') or INFLACAO)
+    else:
+        inflacao_pct = float(inflacao_pct)
     # --- recalcular com as mesmas regras do analisar() ---
     # extra_por_classe reflete as decisoes humanas (itens aprovados como Extraordinaria)
     # keep_por_classe reflete NFs que o humano REPROVOU (decidiu manter na base)
@@ -1478,10 +1516,13 @@ def recalcular(R):
 
     base_total = sum(l['base'] for l in linhas)
     subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
+    total_previsto = subtotal * (1 + inflacao_pct)
     R.update({'linhas': linhas, 'desconsideracoes': desconsider,
               'prov_laudo': prov_laudo, 'prov_incendio': prov_incendio,
               'base_total': base_total, 'subtotal': subtotal,
-              'total_previsto': subtotal * (1 + INFLACAO)})
+              'total_previsto': total_previsto,
+              'inflacao_pct': inflacao_pct,
+              'cenarios': calcular_cenarios(R.get('bal'), total_previsto)})
     return R
 
 
