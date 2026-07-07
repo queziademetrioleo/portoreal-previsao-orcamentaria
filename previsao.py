@@ -794,10 +794,33 @@ def _eh_fundo_reserva(classe):
     return 'fundo' in nc and 'reserva' in nc
 
 
+# Superavit "de verdade" e acima de R$2.000 (feedback CEO 07/2026); entre
+# R$0 e R$1.999,99 o resultado e positivo mas nao constitui margem de
+# seguranca suficiente. Editavel via env para eventual ajuste por condominio.
+SUPERAVIT_MINIMO = float(os.environ.get('PREVISAO_SUPERAVIT_MIN', '2000'))
+
+MSG_SUPERAVIT_INSUFICIENTE = (
+    'Atenção: embora a previsão aponte superávit de {valor}, o valor é inferior '
+    'a R$ 2.000 e não constitui margem de segurança suficiente. Qualquer despesa '
+    'imprevista (manutenção corretiva, reajuste de contrato, inadimplência) pode '
+    'converter o resultado em déficit. Recomenda-se avaliar reajuste da taxa '
+    'condominial ou reforço do fundo de reserva.'
+)
+
+
+def _status_resultado(resultado):
+    if resultado >= SUPERAVIT_MINIMO:
+        return 'superavit'
+    if resultado >= 0:
+        return 'superavit_insuficiente'
+    return 'deficit'
+
+
 def calcular_cenarios(bal, total_previsto):
     """Cenarios COM e SEM fundo de reserva (feedback CEO 07/2026).
     O fundo de reserva e uma linha de receita do balanual; o cenario 'sem_fundo'
-    exclui essa arrecadacao ao confrontar receita x previsao de despesas."""
+    exclui essa arrecadacao ao confrontar receita x previsao de despesas.
+    Cada cenario tambem classifica o resultado (superavit/insuficiente/deficit)."""
     receitas = (bal or {}).get('receitas') or []
     fundo = sum(float(l.get('total') or 0) for l in receitas
                 if _eh_fundo_reserva(l.get('classe')))
@@ -807,10 +830,12 @@ def calcular_cenarios(bal, total_previsto):
     cenarios = {}
     for chave, receita in (('com_fundo', receita_total),
                            ('sem_fundo', receita_total - fundo)):
+        resultado = round(receita - (total_previsto or 0), 2)
         cenarios[chave] = {
             'receita_anual': round(receita, 2),
             'receita_mensal': round(receita / 12, 2),
-            'resultado': round(receita - (total_previsto or 0), 2),
+            'resultado': resultado,
+            'status_resultado': _status_resultado(resultado),
         }
     cenarios['fundo_reserva_anual'] = round(fundo, 2)
     return cenarios

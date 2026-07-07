@@ -60,10 +60,13 @@ export interface FluxoMensal {
   saldo: number
 }
 
+export type StatusResultado = 'superavit' | 'superavit_insuficiente' | 'deficit'
+
 export interface Cenario {
   receita_anual: number
   receita_mensal: number
   resultado: number
+  status_resultado: StatusResultado
 }
 
 export interface Cenarios {

@@ -1217,6 +1217,15 @@ body {
   margin-bottom: var(--s-md);
 }
 
+.alert-warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+  padding: var(--s-md);
+  border-radius: var(--radius);
+  font-size: 14px;
+  margin-bottom: var(--s-md);
+}
+
 .alert-success {
   background: var(--positive-bg);
   color: var(--positive);

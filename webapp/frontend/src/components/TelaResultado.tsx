@@ -351,6 +351,16 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
           />
         </div>
 
+        {cenarioAtivo?.status_resultado === 'superavit_insuficiente' && (
+          <div className="alert-warning">
+            Atenção: embora a previsão aponte superávit de {money(cenarioAtivo.resultado)}, o valor é
+            inferior a R$ 2.000 e não constitui margem de segurança suficiente. Qualquer despesa
+            imprevista (manutenção corretiva, reajuste de contrato, inadimplência) pode converter o
+            resultado em déficit. Recomenda-se avaliar reajuste da taxa condominial ou reforço do
+            fundo de reserva.
+          </div>
+        )}
+
         {/* saúde financeira */}
         <div className="health-bar">
           <div className={`health-dot ${saude.classe}`} />

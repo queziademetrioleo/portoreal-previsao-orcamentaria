@@ -9,13 +9,24 @@ Template fixo = visual (cabecalhos, formatacao, abas)
 Conteudo dinamico = contas preenchidas conforme os dados reais
 """
 
-import os, re, datetime, unicodedata, warnings, shutil
+import os, re, datetime, unicodedata, warnings, shutil, sys
 from copy import copy
 warnings.filterwarnings('ignore')
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from collections import defaultdict
+
+# Em producao (Docker), previsao.py fica copiado no mesmo diretorio deste
+# arquivo; em dev local, fica na raiz do repo (dois niveis acima). Tenta o
+# import direto primeiro e so ajusta o path se precisar.
+try:
+    from previsao import MSG_SUPERAVIT_INSUFICIENTE
+except ImportError:
+    _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if _ROOT not in sys.path:
+        sys.path.insert(0, _ROOT)
+    from previsao import MSG_SUPERAVIT_INSUFICIENTE
 
 THIN = Side(style='thin', color='B0B7C3')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -81,7 +92,7 @@ def _data_extenso(dt=None):
     return f'{dt.day} de {MESES_PT[dt.month - 1]} de {dt.year}'
 
 
-def _adicionar_consideracoes(ws, ano):
+def _adicionar_consideracoes(ws, ano, R=None):
     """Insere ou substitui a nota final exigida abaixo da tabela da PREVISAO (2)."""
     start = None
     for r in range(1, ws.max_row + 1):
@@ -128,7 +139,23 @@ def _adicionar_consideracoes(ws, ano):
     except ValueError:
         pass
 
-    assinatura_row = nota_row + 28
+    # Alerta de superavit insuficiente (feedback CEO 07/2026): usa o cenario
+    # COM fundo de reserva como referencia textual (o documento ja mostra os
+    # dois saldos nas linhas de total; a nota complementa a leitura).
+    aviso_row = nota_row
+    cenario = (R or {}).get('cenarios', {}).get('com_fundo') if R else None
+    if cenario and cenario.get('status_resultado') == 'superavit_insuficiente':
+        aviso_row = nota_row + 1
+        valor_fmt = f"{cenario['resultado']:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.')
+        ws.cell(aviso_row, 1).value = MSG_SUPERAVIT_INSUFICIENTE.format(valor=f"R$ {valor_fmt}")
+        ws.cell(aviso_row, 1).font = Font(bold=True, size=9, color='7A5B00')
+        ws.cell(aviso_row, 1).fill = PatternFill('solid', fgColor='FFF3CD')
+        try:
+            ws.merge_cells(start_row=aviso_row, start_column=1, end_row=aviso_row, end_column=8)
+        except ValueError:
+            pass
+
+    assinatura_row = nota_row + 28 + (1 if aviso_row != nota_row else 0)
     ws.cell(assinatura_row, 2).value = 'Cabo Frio,'
     ws.cell(assinatura_row, 3).value = _data_extenso()
     ws.cell(assinatura_row, 5).value = 'PORTO REAL IMÓVEIS'
@@ -1032,7 +1059,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                                 ws_p2.cell(r2 - 1, c).value = (
                                     'Aumento s/ FR' if sem_fr else 'Aumento c/ FR')
                         ws_p2.cell(r2, c).value = novo
-            _adicionar_consideracoes(ws_p2, ano)
+            _adicionar_consideracoes(ws_p2, ano, R)
             break
 
     # ---------- Recalculo ----------
@@ -1260,7 +1287,7 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     else:
         ws_p.cell(r, 3, 'SALDO ( DÉFICIT )' if saldo < 0 else 'SALDO ( SUPERÁVIT )').font = Font(bold=True, size=12)
         ws_p.cell(r, 4, round(saldo, 2)).number_format = MONEY
-    _adicionar_consideracoes(ws_p, ano)
+    _adicionar_consideracoes(ws_p, ano, R)
 
     _manter_apenas_previsao2(wb)
     wb.save(destino)

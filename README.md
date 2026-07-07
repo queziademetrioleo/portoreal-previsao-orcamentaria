@@ -38,6 +38,7 @@ Aprendidas por engenharia reversa dos arquivos `Previsão 20XX.xlsx` manuais (20
 | **R6** | Contratos, pró-labore, taxa de administração → último valor mensal × 12 (anualização) |
 | **R7** | Inflação → +10% sobre o subtotal (percentual editável na interface de revisão) |
 | **R8** | Inadimplência ≥ 3 meses consecutivos → abate a taxa do devedor da receita (não é despesa) |
+| **R9** | Superávit ≥ R$2.000 → confortável; entre R$0 e R$1.999 → superávit insuficiente (alerta no documento e na interface); < R$0 → déficit |
 
 > **Importante**: a IA **sugere** a classificação das NFs ambíguas — **quem decide é o humano** na interface de revisão.  
 > A aritmética é 100% determinística e auditável.
