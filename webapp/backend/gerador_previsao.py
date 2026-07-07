@@ -686,8 +686,15 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
              lambda ln: _tarifa_publica(ln) and 'telefone' in _nc(ln)),
             ('Gás do Condomínio',
              lambda ln: _tarifa_publica(ln) and 'gas' in _nc(ln)),
+            # Aceita variantes de nome ("Material de Limpeza", "Produtos de
+            # Limpeza", "Mat. Limpeza"...) — o essencial e o token 'limpeza'
+            # combinado com material/produto, para nao capturar outras
+            # contas de Conservacao que tambem citam 'limpeza' (ex.: "Limpeza
+            # de Fossa", "Limpeza Caixa D'agua", que sao servicos, nao
+            # material de consumo).
             ('Material de Limpeza',
-             lambda ln: 'material' in _nc(ln) and 'limpeza' in _nc(ln)),
+             lambda ln: 'limpeza' in _nc(ln)
+             and any(k in _nc(ln) for k in ('material', 'produto', 'mat.'))),
             # Despesas Diversas entra em Conservacao (feedback CEO 07/2026) —
             # exceto Seguro, que tem categoria propria logo abaixo.
             ('Gastos com conservação',
@@ -695,8 +702,14 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
              or ('diversas' in _ng(ln) and 'seguro' not in _nc(ln))),
             ('Tarifas Bancárias',
              lambda ln: 'tarifas bancarias' in _ng(ln) or 'tarifas bancarias' in _nc(ln)),
+            # Aceita qualquer "Seguro" (Incendio, Predial, Obrigatorio...) —
+            # exigir literalmente 'incendio' no nome fazia contas como
+            # "Seguro Incêndio" (sem match de 'incendio' apos normalizacao
+            # por algum motivo de digitacao/OCR) ou "Seguro Predial" carem
+            # no balde generico de Conservacao/Diversas. Exclui seguro de
+            # vida (beneficio de pessoal, categoria diferente).
             ('Seguro de Incêndio Obrigatório',
-             lambda ln: 'seguro' in _nc(ln) and 'incendio' in _nc(ln)),
+             lambda ln: 'seguro' in _nc(ln) and 'vida' not in _nc(ln)),
         ]
         for label, pred in categorias:
             item = _somar(label, pred)
