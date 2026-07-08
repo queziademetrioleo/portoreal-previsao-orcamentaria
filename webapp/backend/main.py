@@ -12,6 +12,7 @@ Dev:  uvicorn main:app --reload --port 8000
 Prod: ver Dockerfile na raiz do projeto.
 """
 import os
+import re
 import sys
 import json
 import uuid
@@ -147,12 +148,50 @@ def _valor_revisado(item):
         return float(item.get('valor', 0) or 0)
 
 
+# Traduz o motivo tecnico (vindo de classify()/outliers/IA) em motivos curtos
+# e objetivos, na ordem em que fazem sentido para leitura. Cada regra devolve
+# no maximo 1 frase; a primeira que bater e usada.
+_MOTIVOS_PADROES = [
+    (re.compile(r'obras?|benfeitoria', re.I), 'é uma obra ou reforma'),
+    (re.compile(r'rescis|indeniza', re.I), 'é rescisão ou indenização de funcionário'),
+    (re.compile(r'reparo|conserto', re.I), 'foi um conserto pontual, fora da rotina'),
+    (re.compile(r'outlier|\bmad\b', re.I), 'o valor ficou bem acima do normal para essa conta'),
+    (re.compile(r'valor alto', re.I), 'o valor ficou bem mais alto que o de costume'),
+    (re.compile(r'capital', re.I), 'a descrição indica gasto de obra/capital'),
+    (re.compile(r'sem regra explicita', re.I), 'não segue um padrão claro nas contas do condomínio'),
+    (re.compile(r'periodic|ambigu', re.I), 'pode ou não se repetir — fica em revisão'),
+    (re.compile(r'recorrente', re.I), 'é um gasto do dia a dia do condomínio'),
+]
+
+
+def _motivos_legiveis(motivo, n_meses):
+    """Extrai motivos curtos e objetivos a partir do texto tecnico do motor.
+    Sempre retorna pelo menos 1 item (fallback por frequencia ou generico)."""
+    motivos = []
+    texto = str(motivo or '')
+    if texto.startswith('IA:'):
+        texto_ia = texto[3:].strip()
+        if texto_ia:
+            motivos.append(texto_ia.rstrip('.'))
+    else:
+        for padrao, frase in _MOTIVOS_PADROES:
+            if padrao.search(texto):
+                motivos.append(frase)
+                break
+    if n_meses is not None and n_meses <= 2 and not any('rotina' in m or 'repetir' in m for m in motivos):
+        motivos.append(f'só apareceu em {n_meses} de 12 meses')
+    if not motivos:
+        motivos.append('identificado pela análise como fora do padrão de gasto recorrente')
+    return motivos
+
+
 def _explicacao_deterministica_despesa(item):
     decisao = item.get('decisao')
+    motivos = _motivos_legiveis(item.get('motivo'), item.get('n_meses'))
     if decisao == 'aprovada':
-        resumo = 'Retirado da previsão por ter indício de gasto pontual ou extraordinário.'
+        resumo = f"Removido por motivo{'s' if len(motivos) > 1 else ''} de: {', '.join(motivos)}."
     elif decisao == 'reprovada':
-        resumo = 'Mantido na previsão por ter sido considerado parte da rotina do condomínio.'
+        resumo = f"Mantido por motivo{'s' if len(motivos) > 1 else ''} de: {', '.join(motivos)}."
     else:
         resumo = 'Item aguardando decisão humana.'
     evidencias = []
@@ -169,13 +208,21 @@ def _explicacao_deterministica_despesa(item):
 
 
 def _explicacao_deterministica_inad(item):
+    critica = bool(item.get('critica'))
+    meses = item.get('meses_atraso', 0)
     if item.get('decisao') == 'abater':
-        resumo = 'Abatido da leitura de receita por reduzir a arrecadação provável.'
+        resumo = (
+            f'Abatido da receita por motivo de: {meses} mês(es) consecutivos em atraso, '
+            'o que reduz o quanto o condomínio deve efetivamente receber.'
+        )
     else:
-        resumo = 'Ignorado no abatimento porque não foi considerado crítico para a projeção.'
+        resumo = (
+            f'Ignorado por motivo de: atraso de {meses} mês(es), abaixo do limite '
+            'considerado crítico (3 meses seguidos).'
+        )
     evidencias = [
-        'Inadimplência crítica.' if item.get('critica') else 'Inadimplência recente.',
-        f'{item.get("meses_atraso", 0)} mês(es) em atraso.',
+        'Inadimplência crítica (3+ meses seguidos).' if critica else 'Inadimplência recente.',
+        f'{meses} mês(es) em atraso.',
     ]
     if item.get('nota'):
         evidencias.append(f'Nota humana: {item.get("nota")}.')

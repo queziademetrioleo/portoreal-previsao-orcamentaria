@@ -270,15 +270,14 @@ export default function TelaRevisao({
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           Dedução
           <InfoModal
-            titulo="O que é Dedução"
-            texto="É o valor que tiramos do gasto porque ele não deve se repetir no próximo ano — por exemplo, uma reforma ou o pagamento de rescisão de um funcionário. O que sobra depois de tirar essa parte é o valor Final, que entra na previsão."
+            titulo="O que são Dedução e Final"
+            texto="Base é o total gasto nessa conta durante o ano. Dedução é a parte desse valor que não vai se repetir no próximo ano — por exemplo, uma reforma ou o pagamento de rescisão de um funcionário — por isso ela é tirada da conta. Final é o que sobra depois de tirar a Dedução: é esse valor (não o Base) que realmente entra na previsão do próximo ano, por ser o gasto que tende a se repetir."
           />
         </span>
       ),
       render: (r: Record<string, unknown>) => money(r.deducao as number),
     },
     { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
-    { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
   ]
 
   return (

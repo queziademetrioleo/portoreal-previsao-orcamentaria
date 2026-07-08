@@ -201,8 +201,20 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   const impactoInadAtual = visao === 'anual' ? impactoInadMensal * 12 : impactoInadMensal
   const receitaLiquidaAtual = receitaAtual - impactoInadAtual
   const saldoAjustado = receitaAtual - impactoInadAtual - despesaAtual
-  const sinalSaldo = saldoAjustado < 0 ? 'Déficit ajustado' : 'Superávit ajustado'
-  const tipoResultado = saldoAjustado < 0 ? 'DÉFICIT' : 'SUPERÁVIT'
+
+  // Classificacao do resultado (feedback CEO 07/2026): superavit "de verdade" e
+  // acima de R$2.000/ano — mesmo limite usado no backend (previsao.py:
+  // SUPERAVIT_MINIMO). Sempre calculada sobre o valor ANUAL, independente do
+  // toggle Mensal/Anual da tela, para nao classificar errado quando visao
+  // === 'mensal' (onde os numeros exibidos sao 1/12 do total).
+  const SUPERAVIT_MINIMO = 2000
+  const saldoAjustadoAnual = (totalReceitasMensal - impactoInadMensal) * 12 - sessao.resumo.total_previsto
+  const statusAjustado: 'superavit' | 'superavit_insuficiente' | 'deficit' =
+    saldoAjustadoAnual >= SUPERAVIT_MINIMO ? 'superavit'
+      : saldoAjustadoAnual >= 0 ? 'superavit_insuficiente'
+        : 'deficit'
+  const sinalSaldo = statusAjustado === 'deficit' ? 'Déficit ajustado' : 'Superávit ajustado'
+  const tipoResultado = statusAjustado === 'deficit' ? 'DÉFICIT' : 'SUPERÁVIT'
 
   const grupos = useMemo(
     () => agruparLinhas(sessao.linhas_contas.map((l) => ({ grupo: l.grupo, final: l.final }))),
@@ -273,7 +285,6 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
     { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
     { key: 'deducao', header: 'Dedução', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.deducao as number) },
     { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
-    { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
   ]
 
   return (
@@ -351,9 +362,9 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
           />
         </div>
 
-        {cenarioAtivo?.status_resultado === 'superavit_insuficiente' && (
+        {statusAjustado === 'superavit_insuficiente' && (
           <div className="alert-warning">
-            Atenção: embora a previsão aponte superávit de {money(cenarioAtivo.resultado)}, o valor é
+            Atenção: embora a previsão aponte superávit de {money(saldoAjustadoAnual)} no ano, o valor é
             inferior a R$ 2.000 e não constitui margem de segurança suficiente. Qualquer despesa
             imprevista (manutenção corretiva, reajuste de contrato, inadimplência) pode converter o
             resultado em déficit. Recomenda-se avaliar reajuste da taxa condominial ou reforço do
@@ -388,12 +399,22 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
               <SectionTitle title="Conclusão" subtitle="Leitura objetiva para apresentação." />
               <div className="conclusion">
                 <strong>
-                  {saldoAjustado < 0 ? 'Atenção: orçamento em déficit' : 'Cenário com superávit'}
+                  {statusAjustado === 'deficit' && 'Atenção: orçamento em déficit'}
+                  {statusAjustado === 'superavit_insuficiente' && 'Superávit insuficiente — atenção'}
+                  {statusAjustado === 'superavit' && 'Cenário com superávit'}
                 </strong>
                 <p>
                   A previsão usa a média dos últimos 12 meses, separa eventos pontuais da rotina e
-                  trata a inadimplência como redução de receita. O resultado final é{' '}
-                  <b>{tipoResultado}</b>.
+                  trata a inadimplência como redução de receita.{' '}
+                  {statusAjustado === 'superavit_insuficiente' ? (
+                    <>
+                      O resultado é positivo, mas fica abaixo de R$ 2.000 no ano — por isso{' '}
+                      <b>não é saudável nem suficiente</b> como margem de segurança. Qualquer
+                      imprevisto (conserto, reajuste, atraso de pagamento) pode virar déficit.
+                    </>
+                  ) : (
+                    <>O resultado final é <b>{tipoResultado}</b>.</>
+                  )}
                 </p>
               </div>
             </Card>
