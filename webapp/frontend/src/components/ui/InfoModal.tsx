@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function InfoModal({ titulo, texto }: { titulo: string; texto: string }) {
   const [aberto, setAberto] = useState(false)
@@ -14,7 +15,7 @@ export default function InfoModal({ titulo, texto }: { titulo: string; texto: st
         ?
       </button>
 
-      {aberto && (
+      {aberto && createPortal(
         <div className="info-modal-overlay" onClick={() => setAberto(false)}>
           <div
             className="info-modal-box"
@@ -36,7 +37,8 @@ export default function InfoModal({ titulo, texto }: { titulo: string; texto: st
             </div>
             <p>{texto}</p>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

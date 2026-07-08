@@ -228,7 +228,6 @@ export default function TelaRevisao({
   const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
   const saldo = sessao.resumo.receita_anual - vivo.total
   const grupos = useMemo(() => agruparPorGrupo(sessao.linhas_contas), [sessao.linhas_contas])
-  const contasComDeducao = sessao.linhas_contas.filter((l) => Math.abs(l.deducao) > 0.005)
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
     setExtra((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
@@ -264,18 +263,6 @@ export default function TelaRevisao({
     { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
     { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
     { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
-    { key: 'deducao', header: 'Dedução', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.deducao as number) },
-    { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
-    { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
-  ]
-
-  // Versao simplificada p/ o card "Gastos deduzidos ou provisionados": sem a
-  // coluna Regra (texto tecnico) — a explicacao do calculo vira um (?) fixo
-  // no cabecalho, em vez de uma frase tecnica por linha.
-  const deducoesColumns = [
-    { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
-    { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
-    { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
     {
       key: 'deducao',
       align: 'right' as const,
@@ -283,14 +270,15 @@ export default function TelaRevisao({
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           Dedução
           <InfoModal
-            titulo="Como a dedução é calculada"
-            texto="Valor tirado da despesa porque identificamos um gasto fora do comum (uma obra, um conserto pontual, uma rescisão) ou porque uma parte foi separada para outra finalidade. O que sobra (Final) é o que entra na previsão do próximo ano."
+            titulo="O que é Dedução"
+            texto="É o valor que tiramos do gasto porque ele não deve se repetir no próximo ano — por exemplo, uma reforma ou o pagamento de rescisão de um funcionário. O que sobra depois de tirar essa parte é o valor Final, que entra na previsão."
           />
         </span>
       ),
       render: (r: Record<string, unknown>) => money(r.deducao as number),
     },
     { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
+    { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
   ]
 
   return (
@@ -410,16 +398,6 @@ export default function TelaRevisao({
                     ))}
                   </div>
                 </Card>
-
-                {contasComDeducao.length > 0 && (
-                  <Card>
-                    <h2 className="section-title">Gastos deduzidos ou provisionados</h2>
-                    <DataTable
-                      columns={deducoesColumns}
-                      rows={contasComDeducao.slice(0, 12) as unknown as Record<string, unknown>[]}
-                    />
-                  </Card>
-                )}
               </div>
             )}
 
