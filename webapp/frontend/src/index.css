@@ -702,6 +702,83 @@ body {
   outline-offset: 1px;
 }
 
+/* ── INFO MODAL (icone "?" com explicacao) ────────── */
+.info-modal-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.info-modal-trigger:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.info-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--s-md);
+}
+
+.info-modal-box {
+  background: var(--surface, #fff);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: var(--s-lg, 20px);
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.info-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.info-modal-header strong {
+  font-size: 16px;
+}
+
+.info-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+
+.info-modal-close:hover {
+  color: var(--text);
+}
+
+.info-modal-box p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
 /* ── REVIEW EDITOR CARDS ──────────────── */
 .editor-card {
   display: grid;

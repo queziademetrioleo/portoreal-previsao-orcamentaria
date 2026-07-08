@@ -10,6 +10,7 @@ import Badge from './ui/Badge'
 import NumberBlock from './ui/NumberBlock'
 import TabBar from './ui/TabBar'
 import DataTable from './ui/DataTable'
+import InfoModal from './ui/InfoModal'
 
 /* ─── helpers ─────────────────────────── */
 
@@ -281,16 +282,10 @@ export default function TelaRevisao({
       header: (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           Dedução
-          <span
-            title="Valor tirado da despesa porque identificamos um gasto fora do comum (uma obra, um conserto pontual, uma rescisão) ou porque uma parte foi separada para outra finalidade. O que sobra (Final) é o que entra na previsão do próximo ano."
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 15, height: 15, borderRadius: '50%', background: 'var(--border)',
-              color: 'var(--text-secondary)', fontSize: 10, fontWeight: 700, cursor: 'help',
-            }}
-          >
-            ?
-          </span>
+          <InfoModal
+            titulo="Como a dedução é calculada"
+            texto="Valor tirado da despesa porque identificamos um gasto fora do comum (uma obra, um conserto pontual, uma rescisão) ou porque uma parte foi separada para outra finalidade. O que sobra (Final) é o que entra na previsão do próximo ano."
+          />
         </span>
       ),
       render: (r: Record<string, unknown>) => money(r.deducao as number),
