@@ -16,7 +16,7 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 (Condomínio21)     (Claude Opus 4.8)     (cálculo determinístico)   (interface web)   (documento final)
 ```
 
-1. **Upload** de 4 arquivos exportados do Condomínio21: `balanual.xls`, `desbai06.xls`, `dessin02.xls`, `inad01.xls`
+1. **Upload** de 5 arquivos exportados do Condomínio21: `balanual.xls`, `desbai06.xls`, `rec02.xls` (obrigatórios), `dessin02.xls`, `inad01.xls` (opcionais)
 2. **IA analisa** cada nota fiscal do desbai06, classificando como *Recorrente* ou *Extraordinária*
 3. **Regras determinísticas** (R1 a R8) são aplicadas — deduções, provisões, anualizações
 4. **Revisão humana** na interface web: o síndico aprova ou reprova cada item classificado
@@ -42,6 +42,19 @@ Aprendidas por engenharia reversa dos arquivos `Previsão 20XX.xlsx` manuais (20
 
 > **Importante**: a IA **sugere** a classificação das NFs ambíguas — **quem decide é o humano** na interface de revisão.  
 > A aritmética é 100% determinística e auditável.
+
+---
+
+## 💰 Receita: REC + balanual (híbrido)
+
+Desde 07/2026 a receita anual usa duas fontes, cada uma no que faz melhor (validado contra previsões manuais reais):
+
+| Origem | O que fornece | Por quê |
+|--------|---------------|---------|
+| **REC** (`rec02.xls` — Demonstrativo de Receitas por Unidade) | Taxa de Condomínio + Fundo de Reserva, do mês mais recente × 12 | Cobrança fixa mensal — o mês mais recente reflete a taxa vigente (reajustes) melhor que uma média anual |
+| **Balanual** | Água, Gás, Luz, TV, Internet — mantém o valor bruto observado, sem extrapolar contas parciais | Repasse de consumo, varia mês a mês; contas que só aparecem em parte do ano (ex.: uma cota extra) não são projetadas como se repetissem todo mês |
+
+Se o REC não for enviado, o sistema usa o balanual para tudo (comportamento anterior) — mas o upload do REC é obrigatório no fluxo normal do webapp.
 
 ---
 

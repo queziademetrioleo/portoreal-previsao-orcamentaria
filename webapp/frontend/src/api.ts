@@ -20,6 +20,7 @@ export async function criarSessao(form: {
   ano: number
   balanual: File
   desbai: File
+  rec: File
   dessin?: File | null
   inad?: File | null
 }): Promise<Sessao> {
@@ -28,6 +29,7 @@ export async function criarSessao(form: {
   fd.append('ano_previsao', String(form.ano))
   fd.append('balanual', form.balanual)
   fd.append('desbai', form.desbai)
+  fd.append('rec', form.rec)
   if (form.dessin) fd.append('dessin', form.dessin)
   if (form.inad) fd.append('inad', form.inad)
   const r = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })

@@ -267,7 +267,11 @@ def _achar_valor(nn, valores, usados):
 
 
 def _receita_mensal(ln):
-    """Valor mensal de uma receita = media dos meses ATIVOS (total / n_meses).
+    """Valor mensal de uma receita, espalhado pelos 12 meses do ano (nao
+    pelos meses em que a conta apareceu) — mantem o valor bruto observado
+    sem extrapolar contas parciais/sazonais (ex.: "Cota de agua" em 3 de 12
+    meses) como se repetissem todo mes (feedback confirmado 07/2026). Para
+    contas presentes nos 12 meses o resultado e identico a total/n_meses.
 
     Receitas pontuais (1 mes) nao sao recorrentes e nao entram na previsao
     mensal — retorna None para que a conta seja ignorada.
@@ -275,7 +279,14 @@ def _receita_mensal(ln):
     nm = ln.get('n_meses') or 0
     if nm <= 1:
         return None
-    return round(ln['total'] / nm, 2)
+    return round(ln['total'] / 12, 2)
+
+
+def _eh_tx_ou_fundo(ln):
+    """Taxa de Condominio ou Fundo de Reserva — vem do REC quando disponivel
+    (feedback CEO 07/2026), nao do balanual. Ver previsao.py:parse_rec."""
+    nc = _norm(ln.get('classe'))
+    return 'condominio' in nc or nc.startswith('tx') or 'fundo' in nc
 
 
 def _copy_row_style(ws, src_row, dst_row, cols):
@@ -591,7 +602,23 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
 
         receitas_prev = []
         usados_receita = set()
+
+        # Taxa de Condominio e Fundo de Reserva vem do REC quando disponivel
+        # (cobranca fixa mensal — o mes mais recente reflete a taxa vigente,
+        # feedback CEO 07/2026). Agua/Gas/Luz/TV/Internet continuam vindo do
+        # balanual (repasse de consumo, a media de 12 meses e mais confiavel).
+        rec_doc = R.get('rec')
+        if rec_doc:
+            if abs(rec_doc.get('tx_condominio_mensal') or 0) > 0.005:
+                receitas_prev.append(('Taxas de Condomínio', round(rec_doc['tx_condominio_mensal'], 2)))
+                usados_receita.add(_norm('Taxas de Condomínio'))
+            if abs(rec_doc.get('fundo_reserva_mensal') or 0) > 0.005:
+                receitas_prev.append(('Fundo de Reserva', round(rec_doc['fundo_reserva_mensal'], 2)))
+                usados_receita.add(_norm('Fundo de Reserva'))
+
         for ln in bal.get('receitas', []):
+            if rec_doc and _eh_tx_ou_fundo(ln):
+                continue  # ja veio do REC acima
             val = _receita_mensal(ln)
             if val is None or abs(val) <= 0.005 or not _receita_entra(ln):
                 continue
@@ -1014,9 +1041,17 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                         ws_p2.cell(r2, 6).value = round(inflacao, 4)
                 elif val_text.upper().strip() in ('TOTAL', '="TOTAL"') or (_norm(val_text) == 'total' and 'aumento' not in _norm(val_text)):
                     ws_p2.cell(r2, 3).value = 'TOTAL'
-                    total = subtotal_val * (1 + inflacao)
-                    ws_p2.cell(r2, 4).value = round(total, 2)
-                    ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
+                    if r2 == rec_total_row2:
+                        # TOTAL da secao de RECEITAS (nao de despesas!) — bug
+                        # preexistente sobrescrevia com o total de despesas
+                        # por falta desse guard.
+                        rec_mensal_total = sum(v for _, v, _ in prev_rec if isinstance(v, (int, float)))
+                        ws_p2.cell(r2, 4).value = round(rec_mensal_total, 2)
+                        ws_p2.cell(r2, 5).value = round(rec_mensal_total, 2)
+                    else:
+                        total = subtotal_val * (1 + inflacao)
+                        ws_p2.cell(r2, 4).value = round(total, 2)
+                        ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
                 elif 'SALDO' in val_text.upper() or 'DEFICIT' in val_text.upper() or 'SUPERAVIT' in val_text.upper():
                     rec_mensal = sum(v for _, v, _ in prev_rec if isinstance(v, (int, float)))
                     rec_anual = rec_mensal * 12
@@ -1225,7 +1260,23 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     ws_p.cell(r, 4, 'VALOR MENSAL').font = Font(bold=True)
     r += 1
     rec_total = 0
+    rec_doc = R.get('rec')
+    if rec_doc:
+        if abs(rec_doc.get('tx_condominio_mensal') or 0) > 0.005:
+            ws_p.cell(r, 3, 'Taxas de Condomínio')
+            ws_p.cell(r, 4, rec_doc['tx_condominio_mensal']).number_format = MONEY
+            ws_p.cell(r, 5, rec_doc['tx_condominio_mensal']).number_format = MONEY
+            rec_total += rec_doc['tx_condominio_mensal']
+            r += 1
+        if abs(rec_doc.get('fundo_reserva_mensal') or 0) > 0.005:
+            ws_p.cell(r, 3, 'Fundo de Reserva')
+            ws_p.cell(r, 4, rec_doc['fundo_reserva_mensal']).number_format = MONEY
+            ws_p.cell(r, 5, rec_doc['fundo_reserva_mensal']).number_format = MONEY
+            rec_total += rec_doc['fundo_reserva_mensal']
+            r += 1
     for ln in bal.get('receitas', []):
+        if rec_doc and _eh_tx_ou_fundo(ln):
+            continue  # ja veio do REC acima
         val = _receita_mensal(ln)
         if val is None:
             continue
@@ -1282,9 +1333,9 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 2
     rec_anual = rec_total * 12
     saldo = rec_anual - total
-    fundo_mensal = sum(
+    fundo_mensal = (rec_doc['fundo_reserva_mensal'] if rec_doc else sum(
         _receita_mensal(ln) or 0 for ln in bal.get('receitas', [])
-        if 'fundo' in _norm(ln.get('classe')) and 'reserva' in _norm(ln.get('classe')))
+        if 'fundo' in _norm(ln.get('classe')) and 'reserva' in _norm(ln.get('classe'))))
     if abs(fundo_mensal) > 0.005:
         # Cenario duplo COM/SEM fundo de reserva (feedback CEO 07/2026)
         rotulo = ('SALDO COM FUNDO DE RESERVA ( DÉFICIT )' if saldo < 0

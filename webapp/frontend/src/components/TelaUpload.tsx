@@ -17,6 +17,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [ano, setAno] = useState(new Date().getFullYear())
   const [balanual, setBalanual] = useState<File | null>(null)
   const [desbai, setDesbai] = useState<File | null>(null)
+  const [rec, setRec] = useState<File | null>(null)
   const [dessin, setDessin] = useState<File | null>(null)
   const [inad, setInad] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
@@ -46,8 +47,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       setErro('Informe um ano válido (2020–2035).')
       return
     }
-    if (!balanual || !desbai) {
-      setErro('Os arquivos balanual.xls e desbai06.xls são obrigatórios.')
+    if (!balanual || !desbai || !rec) {
+      setErro('Os arquivos balanual.xls, desbai06.xls e rec02.xls são obrigatórios.')
       return
     }
     setErro('')
@@ -59,6 +60,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         ano,
         balanual,
         desbai,
+        rec,
         dessin,
         inad,
       })
@@ -193,6 +195,12 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     required
                   />
                   <FileZone
+                    label="rec02.xls"
+                    file={rec}
+                    setFile={setRec}
+                    required
+                  />
+                  <FileZone
                     label="dessin02.xls"
                     file={dessin}
                     setFile={setDessin}
@@ -204,7 +212,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                   />
                 </div>
                 <p className="form-hint">
-                  * balanual.xls e desbai06.xls são obrigatórios. inad01.xls é opcional — só anexe se houver inadimplência.
+                  * balanual.xls, desbai06.xls e rec02.xls são obrigatórios — o REC traz a receita real e atual do condomínio. inad01.xls é opcional — só anexe se houver inadimplência.
                 </p>
               </div>
 

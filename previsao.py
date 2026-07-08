@@ -794,6 +794,111 @@ def _eh_fundo_reserva(classe):
     return 'fundo' in nc and 'reserva' in nc
 
 
+# Classes que NAO entram na projecao de receita (ajustes pontuais, nao
+# recorrentes): credito/estorno, cobranca de debito antigo, rendimento de
+# aplicacao financeira, "outros". Mesma lista usada em
+# gerador_previsao.py:_receita_entra — manter as duas em sincronia.
+_REC_CLASSES_EXCLUIDAS = ('credito', 'debito', 'debitos', 'rendimento',
+                          'outros', 'multa', 'juros', 'acrescimo')
+
+
+def _rec_classe_entra(nome_classe):
+    nc = _norm(nome_classe)
+    return not any(t in nc for t in _REC_CLASSES_EXCLUIDAS)
+
+
+def parse_rec(path):
+    """Parse do REC — Demonstrativo de Receitas por Unidade (Condominio21).
+    Fonte principal da receita anual (feedback CEO 07/2026): usa o total
+    LANCADO (cobrado) do mes mais recente x 12, mais precisa que a media
+    de 12 meses do balanual (que dilui reajustes de taxa feitos no meio
+    do ano). A inadimplencia continua tratada separadamente pela regra R8
+    — por isso usamos Lancado (cobranca), nao Liquidado (pago).
+    Retorna None se o arquivo nao tiver o formato esperado."""
+    wb = xlrd.open_workbook(path)
+    sh = wb.sheet_by_index(0)
+
+    mes_ref = None
+    nome_condominio = None
+    for r in range(min(20, sh.nrows)):
+        c0 = str(sh.cell_value(r, 0)).strip()
+        m = re.match(r'Contas de (\d{2}/\d{4})', c0)
+        if m:
+            mes_ref = m.group(1)
+        elif (c0 and r > 5 and nome_condominio is None
+              and 'DEMONSTRATIVO' not in c0.upper() and 'V.H.R' not in c0.upper()):
+            nome_condominio = c0
+
+    header_row = None
+    for r in range(sh.nrows):
+        joined = ' '.join(str(sh.cell_value(r, c)).strip() for c in range(sh.ncols)).lower()
+        if 'classe de conta' in joined and 'total lan' in joined:
+            header_row = r
+            break
+    if header_row is None:
+        return None
+
+    por_classe = {}
+    r = header_row + 1
+    while r < sh.nrows:
+        nome = str(sh.cell_value(r, 0)).strip()
+        if not nome:
+            break
+        lancado = sh.cell_value(r, 6)
+        liquidado = sh.cell_value(r, 7)
+        if isinstance(lancado, (int, float)):
+            por_classe[nome] = {
+                'lancado': float(lancado),
+                'liquidado': float(liquidado) if isinstance(liquidado, (int, float)) else float(lancado),
+            }
+        r += 1
+
+    total_lancado_mes = sum(v['lancado'] for k, v in por_classe.items() if _rec_classe_entra(k))
+    total_liquidado_mes = sum(v['liquidado'] for k, v in por_classe.items() if _rec_classe_entra(k))
+    fundo_lancado_mes = sum(v['lancado'] for k, v in por_classe.items() if _eh_fundo_reserva(k))
+
+    # Taxa de condominio: classe cujo nome contem "condominio" ou comeca com
+    # "tx" (mesma convencao usada em gerador_previsao.py:_receita_entra).
+    def _eh_tx_condominio(nome_classe):
+        nc = _norm(nome_classe)
+        return 'condominio' in nc or nc.startswith('tx')
+
+    tx_condominio_lancado_mes = sum(v['lancado'] for k, v in por_classe.items()
+                                     if _eh_tx_condominio(k))
+    # "Fixo" = Taxa de Condominio + Fundo de Reserva — os unicos valores que
+    # o REC representa melhor que o balanual, por serem cobranca fixa mensal
+    # (nao repasse de consumo). Ver _eh_utilidade_repasse() para o resto da
+    # receita (agua/gas/luz/tv/internet), que continua vindo do balanual.
+    fixo_lancado_mes = tx_condominio_lancado_mes + fundo_lancado_mes
+
+    return {
+        'mes_ref': mes_ref,
+        'nome_condominio': nome_condominio,
+        'por_classe': por_classe,
+        'total_lancado_mes': round(total_lancado_mes, 2),
+        'total_liquidado_mes': round(total_liquidado_mes, 2),
+        'tx_condominio_mensal': round(tx_condominio_lancado_mes, 2),
+        'fundo_reserva_mensal': round(fundo_lancado_mes, 2),
+        'tx_condominio_anual': round(tx_condominio_lancado_mes * 12, 2),
+        'fundo_reserva_anual': round(fundo_lancado_mes * 12, 2),
+        'fixo_anual': round(fixo_lancado_mes * 12, 2),
+    }
+
+
+def _eh_utilidade_repasse(classe):
+    """Agua/Gas/Luz/TV/Internet: repasse de consumo, varia mes a mes — a
+    media de 12 meses do balanual e mais confiavel que um mes so do REC.
+    (Confirmado comparando com previsoes manuais reais: Barramares e
+    Caminho do Mar batem exatamente com a media do balanual nessas contas,
+    07/2026.)"""
+    nc = _norm(classe)
+    if any(t in nc for t in _REC_CLASSES_EXCLUIDAS):
+        return False
+    if 'condominio' in nc or nc.startswith('tx') or _eh_fundo_reserva(classe):
+        return False  # essas vem do REC, nao do balanual
+    return any(t in nc for t in ('agua', 'gas', 'luz', 'tv', 'internet'))
+
+
 # Superavit "de verdade" e acima de R$2.000 (feedback CEO 07/2026); entre
 # R$0 e R$1.999,99 o resultado e positivo mas nao constitui margem de
 # seguranca suficiente. Editavel via env para eventual ajuste por condominio.
@@ -816,20 +921,28 @@ def _status_resultado(resultado):
     return 'deficit'
 
 
-def calcular_cenarios(bal, total_previsto):
-    """Cenarios COM e SEM fundo de reserva (feedback CEO 07/2026).
-    O fundo de reserva e uma linha de receita do balanual; o cenario 'sem_fundo'
-    exclui essa arrecadacao ao confrontar receita x previsao de despesas.
-    Cada cenario tambem classifica o resultado (superavit/insuficiente/deficit)."""
+def _receita_fundo_do_balanual(bal):
+    """Fallback: deriva receita anual e fundo de reserva do balanual, como
+    era feito antes do REC. Usado so quando o REC nao foi enviado (nao
+    deveria acontecer no fluxo normal do webapp, onde o REC e obrigatorio;
+    existe para manter o motor utilizavel em scripts/analise avulsa)."""
     receitas = (bal or {}).get('receitas') or []
     fundo = sum(float(l.get('total') or 0) for l in receitas
                 if _eh_fundo_reserva(l.get('classe')))
     receita_total = float((bal or {}).get('total_receitas') or 0)
     if receita_total <= 0:
         receita_total = sum(float(l.get('total') or 0) for l in receitas)
+    return receita_total, fundo
+
+
+def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto):
+    """Cenarios COM e SEM fundo de reserva (feedback CEO 07/2026).
+    receita_anual/fundo_reserva_anual vem do REC (fonte principal desde
+    07/2026) ou, na ausencia dele, do balanual (fallback).
+    Cada cenario tambem classifica o resultado (superavit/insuficiente/deficit)."""
     cenarios = {}
-    for chave, receita in (('com_fundo', receita_total),
-                           ('sem_fundo', receita_total - fundo)):
+    for chave, receita in (('com_fundo', receita_anual),
+                           ('sem_fundo', receita_anual - fundo_reserva_anual)):
         resultado = round(receita - (total_previsto or 0), 2)
         cenarios[chave] = {
             'receita_anual': round(receita, 2),
@@ -837,7 +950,7 @@ def calcular_cenarios(bal, total_previsto):
             'resultado': resultado,
             'status_resultado': _status_resultado(resultado),
         }
-    cenarios['fundo_reserva_anual'] = round(fundo, 2)
+    cenarios['fundo_reserva_anual'] = round(fundo_reserva_anual, 2)
     return cenarios
 
 THIN = Side(style='thin', color='CCCCCC')
@@ -1062,6 +1175,42 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         sin = parse_dessin(os.path.join(folder, 'dessin02.xls'))
         inad_path = os.path.join(folder, 'inad01.xls')
         ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
+
+    # --- REC (Demonstrativo de Receitas por Unidade) — fonte principal da
+    # receita anual desde 07/2026. Parse independente do ia_parser (arquivo
+    # estruturado, nao precisa de IA). Obrigatorio no fluxo do webapp
+    # (main.py exige o upload); aqui fica opcional para permitir uso deste
+    # motor em scripts/analises avulsas sem REC disponivel.
+    rec_doc = None
+    rec_path = os.path.join(folder, 'rec02.xls')
+    if os.path.exists(rec_path):
+        try:
+            rec_doc = parse_rec(rec_path)
+        except Exception as e:
+            logger.warning('Falha ao parsear REC (%s) — usando balanual para receita', e)
+    if rec_doc:
+        # Hibrido (validado contra previsoes manuais reais, 07/2026): Taxa de
+        # Condominio e Fundo de Reserva vem do REC (cobranca fixa mensal, o
+        # mes mais recente reflete a taxa vigente); Agua/Gas/Luz/TV/Internet
+        # continuam vindo da media de 12 meses do balanual (repasse de
+        # consumo, varia mes a mes — a media e mais confiavel que 1 mes so).
+        # Sem extrapolar contas parciais (feedback confirmado 07/2026): uma
+        # receita que so aparece em parte do ano (ex.: "Cota de agua" em 3 de
+        # 12 meses) mantem o valor bruto observado, sem projetar como se
+        # repetisse todo mes.
+        utilidades_anual = round(sum(
+            float(l.get('total') or 0) for l in bal.get('receitas', [])
+            if _eh_utilidade_repasse(l.get('classe'))), 2)
+        receita_anual = round(rec_doc['fixo_anual'] + utilidades_anual, 2)
+        fundo_reserva_anual = rec_doc['fundo_reserva_anual']
+        logger.info('REC: %s, mes %s | fixo (Tx.Condominio+Fundo) R$ %.2f + '
+                    'utilidades (media balanual) R$ %.2f = receita anual R$ %.2f',
+                    rec_doc.get('nome_condominio'), rec_doc.get('mes_ref'),
+                    rec_doc['fixo_anual'], utilidades_anual, receita_anual)
+    else:
+        receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(bal)
+        logger.warning('REC nao encontrado — usando receita do balanual (fallback): R$ %.2f',
+                       receita_anual)
 
     logger.info('balanual: %d receitas, %d despesas, total=R$ %.2f',
                 len(bal['receitas']), len(bal['despesas']), bal.get('total_despesas', 0))
@@ -1413,7 +1562,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'prov_incendio': prov_incendio, 'base_total': base_total,
             'subtotal': subtotal, 'total_previsto': total_previsto,
             'inflacao_pct': inflacao_pct,
-            'cenarios': calcular_cenarios(bal, total_previsto),
+            'rec': rec_doc, 'receita_anual': receita_anual,
+            'fundo_reserva_anual': fundo_reserva_anual,
+            'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias}
@@ -1542,12 +1693,20 @@ def recalcular(R, inflacao_pct=None):
     base_total = sum(l['base'] for l in linhas)
     subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
     total_previsto = subtotal * (1 + inflacao_pct)
+    # receita_anual/fundo_reserva_anual ja foram resolvidos no analisar()
+    # inicial (REC, ou balanual como fallback) — as decisoes humanas so
+    # afetam despesas, entao reaproveitamos o mesmo valor de receita aqui.
+    receita_anual = R.get('receita_anual')
+    fundo_reserva_anual = R.get('fundo_reserva_anual')
+    if receita_anual is None:
+        receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(R.get('bal'))
+
     R.update({'linhas': linhas, 'desconsideracoes': desconsider,
               'prov_laudo': prov_laudo, 'prov_incendio': prov_incendio,
               'base_total': base_total, 'subtotal': subtotal,
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,
-              'cenarios': calcular_cenarios(R.get('bal'), total_previsto)})
+              'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto)})
     return R
 
 

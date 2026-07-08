@@ -52,6 +52,7 @@ ARQUIVOS_ESPERADOS = {
     'desbai': 'desbai06.xls',
     'dessin': 'dessin02.xls',
     'inad': 'inad01.xls',
+    'rec': 'rec02.xls',
 }
 
 
@@ -462,8 +463,9 @@ def _montar_estado(sid, nome, ano, R):
             'subtotal': round(R['subtotal'], 2),
             'inflacao': core.INFLACAO,
             'total_previsto': round(R['total_previsto'], 2),
-            'receita_anual': round(bal['total_receitas'] or 0, 2),
-            'receita_mensal': round((bal['total_receitas'] or 0) / max(1, bal.get('n_meses', 12)), 2),
+            'receita_anual': round(R.get('receita_anual') or 0, 2),
+            'receita_mensal': round((R.get('receita_anual') or 0) / 12, 2),
+            'rec_mes_ref': (R.get('rec') or {}).get('mes_ref'),
             'cenarios': R.get('cenarios'),
             'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],
         },
@@ -523,6 +525,7 @@ async def criar_sessao(
     ano_previsao: int = Form(..., ge=2000, le=2100),
     balanual: UploadFile = File(...),
     desbai: UploadFile = File(...),
+    rec: UploadFile = File(...),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
 ):
@@ -538,6 +541,7 @@ async def criar_sessao(
     uploads = {
         'balanual': balanual,
         'desbai': desbai,
+        'rec': rec,
         'dessin': dessin,
         'inad': inad,
     }
@@ -557,9 +561,9 @@ async def criar_sessao(
         file_bytes[chave] = conteudo
         db.salvar_arquivo(sid, chave, conteudo)
 
-    if 'balanual' not in file_bytes or 'desbai' not in file_bytes:
+    if 'balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes:
         db.deletar_sessao(sid)
-        raise HTTPException(400, 'Arquivos obrigatorios ausentes')
+        raise HTTPException(400, 'Arquivos obrigatorios ausentes (balanual, desbai06 e REC)')
     logger.info(f'Sessao {sid} criada: {nome_condominio.strip()} ({ano_previsao})')
 
     return {'sessao_id': sid, 'nome_condominio': nome_condominio.strip(),
