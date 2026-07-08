@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 interface Column {
   key: string
-  header: string
+  header: ReactNode
   align?: 'left' | 'right'
   render: (row: Record<string, unknown>, idx: number) => ReactNode
 }

@@ -225,8 +225,6 @@ export default function TelaRevisao({
     revisar.filter((i) => i.decisao === 'pendente').length
 
   const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
-  const mantidos = [...extra, ...revisar].filter((i) => i.decisao === 'reprovada')
-  const abatidos = inad.filter((i) => i.decisao === 'abater')
   const saldo = sessao.resumo.receita_anual - vivo.total
   const grupos = useMemo(() => agruparPorGrupo(sessao.linhas_contas), [sessao.linhas_contas])
   const contasComDeducao = sessao.linhas_contas.filter((l) => Math.abs(l.deducao) > 0.005)
@@ -268,6 +266,36 @@ export default function TelaRevisao({
     { key: 'deducao', header: 'Dedução', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.deducao as number) },
     { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
     { key: 'regra', header: 'Regra', render: (r: Record<string, unknown>) => r.regra as string },
+  ]
+
+  // Versao simplificada p/ o card "Gastos deduzidos ou provisionados": sem a
+  // coluna Regra (texto tecnico) — a explicacao do calculo vira um (?) fixo
+  // no cabecalho, em vez de uma frase tecnica por linha.
+  const deducoesColumns = [
+    { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
+    { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
+    { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
+    {
+      key: 'deducao',
+      align: 'right' as const,
+      header: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          Dedução
+          <span
+            title="Valor tirado da despesa porque identificamos um gasto fora do comum (uma obra, um conserto pontual, uma rescisão) ou porque uma parte foi separada para outra finalidade. O que sobra (Final) é o que entra na previsão do próximo ano."
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 15, height: 15, borderRadius: '50%', background: 'var(--border)',
+              color: 'var(--text-secondary)', fontSize: 10, fontWeight: 700, cursor: 'help',
+            }}
+          >
+            ?
+          </span>
+        </span>
+      ),
+      render: (r: Record<string, unknown>) => money(r.deducao as number),
+    },
+    { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
   ]
 
   return (
@@ -330,8 +358,6 @@ export default function TelaRevisao({
               <h2 className="section-title">Cálculo</h2>
               <div className="calc-row"><span>Base 12 meses</span><strong>{money(sessao.resumo.base_total)}</strong></div>
               <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev)}</strong></div>
-              <div className="calc-row"><span>Provisão laudo</span><strong>{money(sessao.resumo.prov_laudo)}</strong></div>
-              <div className="calc-row"><span>Provisão incêndio</span><strong>{money(sessao.resumo.prov_incendio)}</strong></div>
               <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
               <div className="calc-row inflacao-row">
                 <span>
@@ -366,19 +392,15 @@ export default function TelaRevisao({
                 <Card>
                   <h2 className="section-title">Relatório da revisão</h2>
                   <p className="section-desc">
-                    O que entrou, o que saiu e qual regra levou ao número final.
+                    Quantidade de gastos extraordinários retirados da previsão.
                   </p>
-                  <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                    <NumberBlock label="Análise IA" value={sessao.ia_ativa ? 'Ativa' : 'Inativa'} />
-                    <NumberBlock label="Extraordinários remov." value={String(removidos.length)} />
-                    <NumberBlock label="Itens mantidos" value={String(mantidos.length)} />
-                    <NumberBlock label="Inad. abatidas" value={String(abatidos.length)} />
-                    <NumberBlock label="Notas manuais" value={String([...extra, ...revisar, ...inad].filter((i) => i.nota).length)} />
+                  <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                    <NumberBlock label="Itens extraordinários removidos" value={String(removidos.length)} />
                   </div>
                 </Card>
 
                 <Card>
-                  <h2 className="section-title">Despesas por grupo</h2>
+                  <h2 className="section-title">Despesas por Grupo Resumidas</h2>
                   <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                     {grupos.map(([grupo, total]) => (
                       <div key={grupo} style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 'var(--s-md)' }}>
@@ -398,7 +420,7 @@ export default function TelaRevisao({
                   <Card>
                     <h2 className="section-title">Gastos deduzidos ou provisionados</h2>
                     <DataTable
-                      columns={contasColumns}
+                      columns={deducoesColumns}
                       rows={contasComDeducao.slice(0, 12) as unknown as Record<string, unknown>[]}
                     />
                   </Card>
