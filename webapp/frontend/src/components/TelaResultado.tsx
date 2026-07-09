@@ -202,12 +202,14 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   const receitaLiquidaAtual = receitaAtual - impactoInadAtual
   const saldoAjustado = receitaAtual - impactoInadAtual - despesaAtual
 
-  // Classificacao do resultado (feedback CEO 07/2026): superavit "de verdade" e
-  // acima de R$2.000/ano — mesmo limite usado no backend (previsao.py:
-  // SUPERAVIT_MINIMO). Sempre calculada sobre o valor ANUAL, independente do
-  // toggle Mensal/Anual da tela, para nao classificar errado quando visao
-  // === 'mensal' (onde os numeros exibidos sao 1/12 do total).
-  const SUPERAVIT_MINIMO = 2000
+  // Classificacao do resultado (feedback confirmado 09/07/2026): a margem de
+  // seguranca precisa ser de pelo menos R$2.000 POR MES (nao por ano) — R$2.000
+  // diluidos no ano inteiro (~R$167/mes) e folga trivial. Piso ANUAL = R$2.000 x
+  // 12 = R$24.000, mesmo limite do backend (previsao.py: SUPERAVIT_MINIMO).
+  // Sempre calculada sobre o valor ANUAL, independente do toggle Mensal/Anual
+  // da tela, para nao classificar errado quando visao === 'mensal'.
+  const SUPERAVIT_MINIMO_MENSAL = 2000
+  const SUPERAVIT_MINIMO = SUPERAVIT_MINIMO_MENSAL * 12
   const saldoAjustadoAnual = (totalReceitasMensal - impactoInadMensal) * 12 - sessao.resumo.total_previsto
   const statusAjustado: 'superavit' | 'superavit_insuficiente' | 'deficit' =
     saldoAjustadoAnual >= SUPERAVIT_MINIMO ? 'superavit'
@@ -358,17 +360,21 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
           <NumberBlock
             label={sinalSaldo}
             value={money(Math.abs(saldoAjustado))}
-            variant={saldoAjustado < 0 ? 'negative' : 'positive'}
+            variant={
+              statusAjustado === 'deficit' ? 'negative'
+                : statusAjustado === 'superavit_insuficiente' ? 'warning'
+                  : 'positive'
+            }
           />
         </div>
 
         {statusAjustado === 'superavit_insuficiente' && (
           <div className="alert-warning">
             Atenção: embora a previsão aponte superávit de {money(saldoAjustadoAnual)} no ano, o valor é
-            inferior a R$ 2.000 e não constitui margem de segurança suficiente. Qualquer despesa
-            imprevista (manutenção corretiva, reajuste de contrato, inadimplência) pode converter o
-            resultado em déficit. Recomenda-se avaliar reajuste da taxa condominial ou reforço do
-            fundo de reserva.
+            inferior a R$ 2.000 por mês (R$ 24.000 no ano) e não constitui margem de segurança
+            suficiente. Qualquer despesa imprevista (manutenção corretiva, reajuste de contrato,
+            inadimplência) pode converter o resultado em déficit. Recomenda-se avaliar reajuste da
+            taxa condominial ou reforço do fundo de reserva.
           </div>
         )}
 
@@ -397,7 +403,7 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
           <div className="result-grid">
             <Card>
               <SectionTitle title="Conclusão" subtitle="Leitura objetiva para apresentação." />
-              <div className="conclusion">
+              <div className={`conclusion ${statusAjustado === 'superavit_insuficiente' ? 'warning' : ''}`}>
                 <strong>
                   {statusAjustado === 'deficit' && 'Atenção: orçamento em déficit'}
                   {statusAjustado === 'superavit_insuficiente' && 'Superávit insuficiente — atenção'}
@@ -408,9 +414,10 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
                   trata a inadimplência como redução de receita.{' '}
                   {statusAjustado === 'superavit_insuficiente' ? (
                     <>
-                      O resultado é positivo, mas fica abaixo de R$ 2.000 no ano — por isso{' '}
-                      <b>não é saudável nem suficiente</b> como margem de segurança. Qualquer
-                      imprevisto (conserto, reajuste, atraso de pagamento) pode virar déficit.
+                      O resultado é positivo, mas fica abaixo de R$ 2.000 por mês (R$ 24.000 no
+                      ano) — por isso <b>não é saudável nem suficiente</b> como margem de
+                      segurança. Qualquer imprevisto (conserto, reajuste, atraso de pagamento)
+                      pode virar déficit.
                     </>
                   ) : (
                     <>O resultado final é <b>{tipoResultado}</b>.</>

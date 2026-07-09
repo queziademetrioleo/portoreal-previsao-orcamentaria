@@ -899,17 +899,22 @@ def _eh_utilidade_repasse(classe):
     return any(t in nc for t in ('agua', 'gas', 'luz', 'tv', 'internet'))
 
 
-# Superavit "de verdade" e acima de R$2.000 (feedback CEO 07/2026); entre
-# R$0 e R$1.999,99 o resultado e positivo mas nao constitui margem de
-# seguranca suficiente. Editavel via env para eventual ajuste por condominio.
-SUPERAVIT_MINIMO = float(os.environ.get('PREVISAO_SUPERAVIT_MIN', '2000'))
+# Superavit "de verdade" precisa de uma margem de seguranca de pelo menos
+# R$2.000 POR MES (nao por ano) — feedback confirmado 09/07/2026: R$2.000
+# diluidos ao longo do ano (~R$167/mes) e uma folga trivial, nao uma margem
+# de seguranca real. O piso ANUAL usado na comparacao (R['cenarios'][...]
+# ['resultado'], sempre anual) e portanto R$2.000 x 12 = R$24.000.
+# Editavel via env (valor MENSAL) para eventual ajuste por condominio.
+SUPERAVIT_MINIMO_MENSAL = float(os.environ.get('PREVISAO_SUPERAVIT_MIN_MENSAL', '2000'))
+SUPERAVIT_MINIMO = SUPERAVIT_MINIMO_MENSAL * 12
 
 MSG_SUPERAVIT_INSUFICIENTE = (
-    'Atenção: embora a previsão aponte superávit de {valor}, o valor é inferior '
-    'a R$ 2.000 e não constitui margem de segurança suficiente. Qualquer despesa '
-    'imprevista (manutenção corretiva, reajuste de contrato, inadimplência) pode '
-    'converter o resultado em déficit. Recomenda-se avaliar reajuste da taxa '
-    'condominial ou reforço do fundo de reserva.'
+    'Atenção: embora a previsão aponte superávit de {valor} no ano, o valor é '
+    'inferior a R$ 2.000 por mês (R$ 24.000 no ano) e não constitui margem de '
+    'segurança suficiente. Qualquer despesa imprevista (manutenção corretiva, '
+    'reajuste de contrato, inadimplência) pode converter o resultado em '
+    'déficit. Recomenda-se avaliar reajuste da taxa condominial ou reforço do '
+    'fundo de reserva.'
 )
 
 

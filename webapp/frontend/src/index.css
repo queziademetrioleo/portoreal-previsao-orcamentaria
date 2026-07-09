@@ -314,6 +314,10 @@ body {
   color: var(--accent);
 }
 
+.num-warning .number-block-value {
+  color: var(--warning);
+}
+
 .number-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1238,6 +1242,14 @@ body {
   font-size: 17px;
   color: var(--text);
   margin-bottom: 6px;
+}
+
+.conclusion.warning {
+  border-left-color: var(--warning);
+}
+
+.conclusion.warning strong {
+  color: var(--warning);
 }
 
 .conclusion p {

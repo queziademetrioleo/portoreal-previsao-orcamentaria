@@ -1,7 +1,7 @@
 interface Props {
   label: string
   value: string
-  variant?: 'default' | 'positive' | 'negative' | 'accent'
+  variant?: 'default' | 'positive' | 'negative' | 'accent' | 'warning'
 }
 
 const variantClass: Record<string, string> = {
@@ -9,6 +9,7 @@ const variantClass: Record<string, string> = {
   positive: 'num-positive',
   negative: 'num-negative',
   accent: 'num-accent',
+  warning: 'num-warning',
 }
 
 export default function NumberBlock({ label, value, variant = 'default' }: Props) {
