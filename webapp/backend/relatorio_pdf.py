@@ -576,7 +576,7 @@ _HTML_TEMPLATE = r"""
       <thead><tr><th>Conta</th><th class="num">Valor médio mensal</th></tr></thead>
       <tbody>
         {% for label, valor in receitas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
-        <tr class="total"><td>Total</td><td class="num">{{ total_receitas }}</td></tr>
+        <tr class="total"><td>Total mensal</td><td class="num">{{ total_receitas }}</td></tr>
       </tbody>
     </table>
   </div>
@@ -587,7 +587,7 @@ _HTML_TEMPLATE = r"""
       <thead><tr><th>Conta</th><th class="num">Valor médio mensal</th></tr></thead>
       <tbody>
         {% for label, valor in despesas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
-        <tr class="total"><td>Total previsto</td><td class="num">{{ total_despesas }}</td></tr>
+        <tr class="total"><td>Total previsto mensal</td><td class="num">{{ total_despesas }}</td></tr>
       </tbody>
     </table>
   </div>
