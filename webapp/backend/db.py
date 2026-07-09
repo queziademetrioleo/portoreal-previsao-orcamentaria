@@ -48,9 +48,23 @@ CREATE TABLE IF NOT EXISTS sessoes (
     arquivo_desbai LONGBLOB,
     arquivo_dessin LONGBLOB,
     arquivo_inad LONGBLOB,
+    arquivo_rec LONGBLOB,
     arquivo_xlsx LONGBLOB
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
+
+def _adicionar_coluna_se_ausente(cursor, tabela, coluna, definicao):
+    """MySQL nao suporta 'ALTER TABLE ... ADD COLUMN IF NOT EXISTS' (isso e
+    extensao do MariaDB) — checa o information_schema antes de alterar, o
+    que funciona em qualquer versao."""
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.columns "
+        "WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s",
+        (tabela, coluna),
+    )
+    (existe,) = cursor.fetchone()
+    if not existe:
+        cursor.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
 
 
 def _init_schema():
@@ -59,6 +73,10 @@ def _init_schema():
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute(_BOOTSTRAP_SQL)
+        # Migracao para bancos ja existentes (a tabela ja existia antes do
+        # REC virar upload obrigatorio, 07/2026) — CREATE TABLE IF NOT
+        # EXISTS acima nao adiciona coluna em tabela ja criada.
+        _adicionar_coluna_se_ausente(cursor, 'sessoes', 'arquivo_rec', 'LONGBLOB')
         conn.commit()
         cursor.close()
         conn.close()
@@ -131,6 +149,7 @@ def salvar_arquivo(sid, campo, conteudo_bytes):
             'desbai': 'arquivo_desbai',
             'dessin': 'arquivo_dessin',
             'inad': 'arquivo_inad',
+            'rec': 'arquivo_rec',
             'xlsx': 'arquivo_xlsx',
         }
         col = colunas_validas.get(campo)
@@ -151,6 +170,7 @@ def obter_arquivo(sid, campo):
             'desbai': 'arquivo_desbai',
             'dessin': 'arquivo_dessin',
             'inad': 'arquivo_inad',
+            'rec': 'arquivo_rec',
             'xlsx': 'arquivo_xlsx',
         }
         col = colunas_validas.get(campo)
