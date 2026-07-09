@@ -469,6 +469,7 @@ def _montar_estado(sid, nome, ano, R):
             'receita_anual': round(R.get('receita_anual') or 0, 2),
             'receita_mensal': round((R.get('receita_anual') or 0) / 12, 2),
             'rec_mes_ref': (R.get('rec') or {}).get('mes_ref'),
+            'n_meses_balanco': bal.get('n_meses'),
             'ultimo_reajuste': None,  # 'AAAA-MM', preenchido na revisao p/ o relatorio PDF
             'cenarios': R.get('cenarios'),
             'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],

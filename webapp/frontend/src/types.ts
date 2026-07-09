@@ -89,6 +89,7 @@ export interface Resumo {
   impacto_receita_mensal?: number
   cenarios?: Cenarios
   rec_mes_ref?: string | null
+  n_meses_balanco?: number | null
   ultimo_reajuste?: string | null
 }
 
