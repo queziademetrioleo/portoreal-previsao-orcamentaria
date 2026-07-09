@@ -21,6 +21,7 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 3. **Regras determinísticas** (R1 a R8) são aplicadas — deduções, provisões, anualizações
 4. **Revisão humana** na interface web: o síndico aprova ou reprova cada item classificado
 5. **Documento final** gerado com a mesma estrutura do manual da Porto Real
+6. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, insights, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
 
 ---
 
@@ -177,7 +178,7 @@ Testado contra os manuais da Quezia (2022–2026, 4 condomínios):
 - **Frontend**: React 19 + TypeScript + Vite
 - **IA**: Claude API (Anthropic) + OpenAI (fallback)
 - **Parsing**: xlrd (arquivos .xls legados)
-- **Geração**: openpyxl (arquivos .xlsx)
+- **Geração**: openpyxl (arquivos .xlsx) + WeasyPrint/Jinja2 (relatório .pdf)
 - **Deploy**: Docker + Docker Compose → EasyPanel / VPS
 
 ---

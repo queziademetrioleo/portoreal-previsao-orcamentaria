@@ -88,6 +88,8 @@ export interface Resumo {
   periodo: [string, string]
   impacto_receita_mensal?: number
   cenarios?: Cenarios
+  rec_mes_ref?: string | null
+  ultimo_reajuste?: string | null
 }
 
 export interface Sessao {

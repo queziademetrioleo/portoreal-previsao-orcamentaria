@@ -215,6 +215,8 @@ export default function TelaRevisao({
     buildPayload,
     inflacao,
     setInflacao,
+    ultimoReajuste,
+    setUltimoReajuste,
   } = useDecisoes(sessao)
 
   const [aba, setAba] = useState<Aba>('relatorio')
@@ -359,6 +361,16 @@ export default function TelaRevisao({
                   />%
                 </span>
                 <strong>{money(vivo.total - vivo.subtotal)}</strong>
+              </div>
+              <div className="calc-row inflacao-row">
+                <span>Último reajuste da taxa</span>
+                <input
+                  type="month"
+                  className="reajuste-input"
+                  value={ultimoReajuste}
+                  onChange={e => setUltimoReajuste(e.target.value)}
+                  aria-label="Mês e ano do último reajuste da taxa condominial"
+                />
               </div>
               <div className="calc-row strong"><span>Total previsto</span><strong>{money(vivo.total)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>

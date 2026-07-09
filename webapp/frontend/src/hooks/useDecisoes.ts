@@ -15,6 +15,8 @@ export interface UseDecisoesReturn {
   buildPayload: () => PayloadDecisoes
   inflacao: number
   setInflacao: (v: number) => void
+  ultimoReajuste: string
+  setUltimoReajuste: (v: string) => void
 }
 
 function valorAtual(i: { valor: number; valor_editado?: number }) {
@@ -46,6 +48,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
   const [inflacao, setInflacao] = useState<number>(sessao.resumo.inflacao ?? 0.10)
+  const [ultimoReajuste, setUltimoReajuste] = useState<string>(sessao.resumo.ultimo_reajuste ?? '')
 
   const [vivo, setVivo] = useState({
     subtotal: sessao.resumo.subtotal,
@@ -81,8 +84,9 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       revisar: payloadRevisao(revisar),
       inadimplencia: payloadInad(inad),
       inflacao_pct: inflacao,
+      ultimo_reajuste: ultimoReajuste || null,
     }
-  }, [extra, revisar, inad, inflacao])
+  }, [extra, revisar, inad, inflacao, ultimoReajuste])
 
   // Preview debounced (backend recalcula subtotal/total)
   const primeiraRender = useRef(true)
@@ -116,7 +120,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       }
     }, 350)
     return () => clearTimeout(t)
-  }, [extra, revisar, inad, inflacao, sessao.sessao_id, buildPayload])
+  }, [extra, revisar, inad, inflacao, ultimoReajuste, sessao.sessao_id, buildPayload])
 
   // Salvar decisoes ao fechar/recarregar (beforeunload)
   useEffect(() => {
@@ -145,5 +149,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     buildPayload,
     inflacao,
     setInflacao,
+    ultimoReajuste,
+    setUltimoReajuste,
   }
 }

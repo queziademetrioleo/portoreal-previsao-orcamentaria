@@ -13,6 +13,7 @@ export interface PayloadDecisoes {
   revisar: Record<string, DecisaoEditavel>
   inadimplencia: Record<string, DecisaoEditavel>
   inflacao_pct?: number | null
+  ultimo_reajuste?: string | null
 }
 
 export async function criarSessao(form: {
@@ -65,6 +66,10 @@ export async function previewDocumento(
 
 export function urlDownload(sid: string): string {
   return `${BASE}/api/sessao/${sid}/download`
+}
+
+export function urlRelatorioPdf(sid: string): string {
+  return `${BASE}/api/sessao/${sid}/relatorio-pdf`
 }
 
 export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {

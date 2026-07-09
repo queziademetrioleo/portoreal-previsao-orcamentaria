@@ -706,6 +706,21 @@ body {
   outline-offset: 1px;
 }
 
+.reajuste-input {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--surface, #fff);
+  color: var(--text);
+}
+
+.reajuste-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ── INFO MODAL (icone "?" com explicacao) ────────── */
 .info-modal-trigger {
   display: inline-flex;

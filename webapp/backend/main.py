@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 import db
 import previsao as core
 from gerador_previsao import gerar_previsao_adaptativa
+from relatorio_pdf import gerar_relatorio_pdf
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -322,6 +323,8 @@ def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
     if getattr(dec, 'inflacao_pct', None) is not None:
         estado['resumo']['inflacao'] = float(dec.inflacao_pct)
+    if getattr(dec, 'ultimo_reajuste', None) is not None:
+        estado['resumo']['ultimo_reajuste'] = dec.ultimo_reajuste or None
     for item in estado['extraordinarias']:
         d, valor, nota = _decisao_payload(dec.extraordinarias, item['id'])
         _aplicar_decisao_editavel(item, d, valor, nota, ('aprovada', 'reprovada'))
@@ -466,6 +469,7 @@ def _montar_estado(sid, nome, ano, R):
             'receita_anual': round(R.get('receita_anual') or 0, 2),
             'receita_mensal': round((R.get('receita_anual') or 0) / 12, 2),
             'rec_mes_ref': (R.get('rec') or {}).get('mes_ref'),
+            'ultimo_reajuste': None,  # 'AAAA-MM', preenchido na revisao p/ o relatorio PDF
             'cenarios': R.get('cenarios'),
             'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],
         },
@@ -493,6 +497,9 @@ class Decisoes(BaseModel):
     inadimplencia: dict = Field(default_factory=dict)
     # Fracao (ex.: 0.10). None = manter o valor atual da sessao.
     inflacao_pct: float | None = Field(default=None, ge=0.0, le=1.0)
+    # 'AAAA-MM' (ex.: '2022-03') — mes/ano do ultimo reajuste da taxa
+    # condominial, usado no item 6 do relatorio PDF. None = nao informado.
+    ultimo_reajuste: str | None = Field(default=None, max_length=7)
 
 
 # ---------------------------------------------------------------------------
@@ -765,6 +772,24 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
     _aplicar_decisoes(estado, decisoes)
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     return {'ok': True, 'sessao_id': sid}
+
+
+@app.get('/api/sessao/{sid}/relatorio-pdf')
+def relatorio_pdf(sid: str):
+    """Relatorio final em PDF, para entrega ao condominio (logo + receitas/
+    despesas/quadro/insights/graficos/conclusao + Considerações Importantes).
+    Requer que o documento xlsx ja tenha sido gerado (mesma fonte de dados)."""
+    estado = _carregar_estado(sid)
+    if estado.get('status') != 'gerado':
+        raise HTTPException(400, 'Gere o documento (xlsx) antes do relatório em PDF.')
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
+    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None)
+    filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get('/api/sessao/{sid}/download')

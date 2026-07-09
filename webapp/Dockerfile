@@ -14,6 +14,14 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 
+# Libs nativas do WeasyPrint (relatorio PDF do condominio). Nome do pacote
+# gdk-pixbuf mudou pra libgdk-pixbuf-2.0-0 no Debian 13 (trixie) — testado
+# contra a imagem base real antes de subir.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libglib2.0-0 \
+    libffi-dev shared-mime-info fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY webapp/backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
