@@ -1082,43 +1082,67 @@ body {
   color: var(--text);
 }
 
-/* ── BAR CHART (grupos despesa) ────────── */
-.bar-list {
+/* ── PIE CHART (composição das despesas) ── */
+.pie-chart-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--s-lg);
+  flex-wrap: wrap;
+}
+
+.pie-chart-svg {
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+}
+
+.pie-chart-label {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #14110c;
+  pointer-events: none;
+}
+
+.pie-chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  flex: 1;
+  min-width: 200px;
 }
 
-.bar-item-header {
+.pie-chart-legend li {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-md);
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
-.bar-item-header strong {
+.pie-chart-legend li.dim {
+  opacity: 0.45;
+}
+
+.pie-chart-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.pie-chart-legend-label {
   font-size: 14px;
   color: var(--text);
+  flex: 1;
 }
 
-.bar-item-header span {
+.pie-chart-legend-value {
   font-size: 13px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
-}
-
-.bar-track {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--border);
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
 }
 
 /* ── MONTHLY CHART ─────────────────────── */

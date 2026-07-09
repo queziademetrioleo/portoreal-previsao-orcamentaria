@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FluxoMensal, LinhaPrevisaoFinal, Sessao } from '../types'
 import { urlDownload } from '../api'
-import { money, signedMoney, pct } from '../utils/format'
+import { money, signedMoney } from '../utils/format'
 import { scoreSaude } from '../utils/scoring'
 import { gerarInsights } from '../utils/insights'
 import { explicarDespesa, explicarInad } from '../utils/explicacoes'
@@ -121,6 +121,118 @@ function MonthlyChart({ data }: { data: FluxoMensal[] }) {
         </span>
         {piorMes && <strong>Maior pressão: {piorMes.mes} ({signedMoney(piorMes.saldo)})</strong>}
       </div>
+    </div>
+  )
+}
+
+// Paleta categorica validada (8 hues -> validate_palette.js), reduzida a 6
+// fatias para o grafico de pizza: acima de ~6 segmentos um pie fica ilegivel
+// (por isso agrupamos o resto em "Outros" abaixo). Ordem fixa, nunca ciclada.
+const PIE_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#e34948', '#eb6834']
+const PIE_LIMITE_FATIAS = 5
+
+function agruparComOutros(grupos: { label: string; value: number }[], limite = PIE_LIMITE_FATIAS) {
+  if (grupos.length <= limite + 1) return grupos
+  const principais = grupos.slice(0, limite)
+  const outros = grupos.slice(limite).reduce((s, g) => s + g.value, 0)
+  return [...principais, { label: 'Outros', value: outros }]
+}
+
+function polarParaCartesiano(cx: number, cy: number, r: number, anguloDeg: number) {
+  const rad = ((anguloDeg - 90) * Math.PI) / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
+
+function fatiaPath(cx: number, cy: number, r: number, anguloIni: number, anguloFim: number) {
+  // Fatia unica (360 graus inteiros): circulo completo nao aceita arco "Z" direto.
+  if (anguloFim - anguloIni >= 359.99) {
+    const meio = polarParaCartesiano(cx, cy, r, anguloIni + 180)
+    const inicio = polarParaCartesiano(cx, cy, r, anguloIni)
+    return `M ${inicio.x} ${inicio.y} A ${r} ${r} 0 1 1 ${meio.x} ${meio.y} A ${r} ${r} 0 1 1 ${inicio.x} ${inicio.y} Z`
+  }
+  const inicio = polarParaCartesiano(cx, cy, r, anguloFim)
+  const fim = polarParaCartesiano(cx, cy, r, anguloIni)
+  const largeArc = anguloFim - anguloIni > 180 ? 1 : 0
+  return `M ${cx} ${cy} L ${inicio.x} ${inicio.y} A ${r} ${r} 0 ${largeArc} 0 ${fim.x} ${fim.y} Z`
+}
+
+function PieChartDespesas({ grupos, total }: { grupos: { label: string; value: number }[]; total: number }) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const dados = useMemo(() => agruparComOutros(grupos), [grupos])
+  const cx = 100
+  const cy = 100
+  const r = 90
+
+  let cursor = 0
+  const fatias = dados.map((g, i) => {
+    const frac = total > 0 ? g.value / total : 0
+    const anguloIni = cursor * 360
+    const anguloFim = (cursor + frac) * 360
+    cursor += frac
+    const anguloMeio = (anguloIni + anguloFim) / 2
+    const rotuloPos = polarParaCartesiano(cx, cy, r * 0.66, anguloMeio)
+    return {
+      ...g,
+      frac,
+      anguloIni,
+      anguloFim,
+      rotuloPos,
+      cor: PIE_COLORS[i % PIE_COLORS.length],
+    }
+  })
+
+  return (
+    <div className="pie-chart-wrap">
+      <svg
+        viewBox="0 0 200 200"
+        className="pie-chart-svg"
+        role="img"
+        aria-label="Composição das despesas por grupo"
+      >
+        {fatias.map((f, i) => (
+          <path
+            key={f.label}
+            d={fatiaPath(cx, cy, r, f.anguloIni, f.anguloFim)}
+            fill={f.cor}
+            stroke="var(--surface)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.45}
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
+            style={{ cursor: 'pointer', transition: 'opacity .15s' }}
+          >
+            <title>{`${f.label}: ${money(f.value / 12)}/mês (${f.frac * 100 >= 0.1 ? (f.frac * 100).toFixed(1) : '<0,1'}%)`}</title>
+          </path>
+        ))}
+        {/* Rotulos diretos so nas fatias grandes o bastante para caber (>=8%) */}
+        {fatias.filter((f) => f.frac >= 0.08).map((f) => (
+          <text
+            key={`label-${f.label}`}
+            x={f.rotuloPos.x}
+            y={f.rotuloPos.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="pie-chart-label"
+          >
+            {(f.frac * 100).toFixed(0)}%
+          </text>
+        ))}
+      </svg>
+      <ul className="pie-chart-legend">
+        {fatias.map((f, i) => (
+          <li
+            key={f.label}
+            className={hoverIdx !== null && hoverIdx !== i ? 'dim' : ''}
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
+          >
+            <i style={{ background: f.cor }} />
+            <span className="pie-chart-legend-label">{f.label}</span>
+            <span className="pie-chart-legend-value">{money(f.value / 12)}/mês</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -473,19 +585,7 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
             {mostrarDetalhes && (
               <Card className="full">
                 <SectionTitle title="Composição das despesas" subtitle="Maiores grupos considerados." />
-                <div className="bar-list">
-                  {grupos.slice(0, 8).map((g) => (
-                    <div key={g.label}>
-                      <div className="bar-item-header">
-                        <strong>{g.label}</strong>
-                        <span>{money(g.value / 12)}/mês</span>
-                      </div>
-                      <div className="bar-track">
-                        <div className="bar-fill" style={{ width: `${pct(g.value, totalGrupo)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PieChartDespesas grupos={grupos} total={totalGrupo} />
               </Card>
             )}
           </div>
