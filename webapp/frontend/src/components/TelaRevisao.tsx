@@ -322,14 +322,14 @@ export default function TelaRevisao({
 
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <NumberBlock label="Valor transportado" value={money(sessao.resumo.base_total)} />
+          <NumberBlock label="Valor transportado (anual)" value={money(sessao.resumo.base_total)} />
           <NumberBlock label="Removido na revisão" value={money(aoVivo.dedExtra + aoVivo.dedRev)} />
           <NumberBlock
-            label="Total previsto"
+            label="Total previsto (anual)"
             value={calculando ? '...' : money(vivo.total)}
           />
           <NumberBlock
-            label="Saldo estimado"
+            label="Saldo estimado (anual)"
             value={money(saldo)}
             variant={saldo < 0 ? 'negative' : 'positive'}
           />
@@ -372,7 +372,7 @@ export default function TelaRevisao({
                   aria-label="Mês e ano do último reajuste da taxa condominial"
                 />
               </div>
-              <div className="calc-row strong"><span>Total previsto</span><strong>{money(vivo.total)}</strong></div>
+              <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
             </Card>
