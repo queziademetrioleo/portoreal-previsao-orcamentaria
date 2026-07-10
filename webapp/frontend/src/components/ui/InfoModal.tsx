@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function InfoModal({ titulo, texto }: { titulo: string; texto: string }) {
+export default function InfoModal({ titulo, texto }: { titulo: string; texto: ReactNode }) {
   const [aberto, setAberto] = useState(false)
 
   return (
@@ -35,7 +35,7 @@ export default function InfoModal({ titulo, texto }: { titulo: string; texto: st
                 ×
               </button>
             </div>
-            <p>{texto}</p>
+            <div className="info-modal-texto">{texto}</div>
           </div>
         </div>,
         document.body,

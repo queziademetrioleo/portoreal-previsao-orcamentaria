@@ -800,6 +800,14 @@ body {
   margin: 0;
 }
 
+.info-modal-texto p + p {
+  margin-top: 10px;
+}
+
+.info-modal-texto strong {
+  color: var(--text);
+}
+
 /* ── REVIEW EDITOR CARDS ──────────────── */
 .editor-card {
   display: grid;

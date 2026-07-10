@@ -273,7 +273,13 @@ export default function TelaRevisao({
           Dedução
           <InfoModal
             titulo="O que são Dedução e Final"
-            texto="Base é o total gasto nessa conta durante o ano. Dedução é a parte desse valor que não vai se repetir no próximo ano — por exemplo, uma reforma ou o pagamento de rescisão de um funcionário — por isso ela é tirada da conta. Final é o que sobra depois de tirar a Dedução: é esse valor (não o Base) que realmente entra na previsão do próximo ano, por ser o gasto que tende a se repetir."
+            texto={
+              <>
+                <p><strong>Base</strong>: o total gasto nessa conta ao longo do ano, sem nenhum ajuste — o valor bruto que aparece no balanço.</p>
+                <p><strong>Dedução</strong>: a parte desse total que foi um gasto pontual e não deve se repetir no próximo ano (ex: uma reforma, a rescisão de um funcionário) — por isso é subtraída.</p>
+                <p><strong>Final = Base − Dedução</strong>: o valor que realmente entra na previsão do próximo ano, por representar o gasto que tende a se repetir mês a mês.</p>
+              </>
+            }
           />
         </span>
       ),
