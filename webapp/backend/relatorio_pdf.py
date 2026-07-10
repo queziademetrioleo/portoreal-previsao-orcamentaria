@@ -371,8 +371,13 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     saldo_ajustado_anual = resultado_com - impacto_inad_mensal * 12
     status = com_fundo.get('status_resultado') or core._status_resultado(saldo_ajustado_anual)
 
-    reajuste_com = max(0.0, (total_previsto / receita_anual_com - 1)) if receita_anual_com > 0 else 0.0
-    reajuste_sem = max(0.0, (total_previsto / receita_anual_sem - 1)) if receita_anual_sem > 0 else 0.0
+    # Meta do reajuste NAO e zerar o resultado (ponto de equilibrio) — e atingir a
+    # mesma margem de seguranca (SUPERAVIT_MINIMO, R$2.000/mes) usada no restante
+    # do relatorio. Sem isso, o reajuste ficava 0,0% mesmo quando o Quadro de
+    # leitura classificava o resultado como "Superavit insuficiente" logo acima.
+    meta_receita = total_previsto + core.SUPERAVIT_MINIMO
+    reajuste_com = max(0.0, (meta_receita / receita_anual_com - 1)) if receita_anual_com > 0 else 0.0
+    reajuste_sem = max(0.0, (meta_receita / receita_anual_sem - 1)) if receita_anual_sem > 0 else 0.0
 
     insights = _gerar_insights_estrategicos(
         resultado_com / 12, receita_anual_com / 12, total_previsto / 12,
