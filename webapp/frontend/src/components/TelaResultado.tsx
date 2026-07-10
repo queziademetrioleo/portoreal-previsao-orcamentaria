@@ -10,10 +10,9 @@ import Card from './ui/Card'
 import Button from './ui/Button'
 import NumberBlock from './ui/NumberBlock'
 import TabBar from './ui/TabBar'
-import DataTable from './ui/DataTable'
 
 type Visao = 'anual' | 'mensal'
-type AbaResultado = 'executivo' | 'previsao' | 'decisoes' | 'auditoria'
+type AbaResultado = 'executivo' | 'previsao' | 'decisoes'
 
 /* ─── helpers ─────────────────────────── */
 
@@ -389,16 +388,7 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   const tabs: { id: AbaResultado; label: string; count?: number }[] = [
     { id: 'executivo', label: 'Resumo' },
     { id: 'previsao', label: 'Previsão', count: despesas.length + receitas.length },
-    { id: 'decisoes', label: 'Decisões', count: trilha.length },
-    { id: 'auditoria', label: 'Memória', count: sessao.linhas_contas.length },
-  ]
-
-  const auditoriaColumns = [
-    { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
-    { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
-    { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
-    { key: 'deducao', header: 'Dedução', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.deducao as number) },
-    { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
+    { id: 'decisoes', label: 'Explicação das Despesas Extraordinárias', count: trilha.length },
   ]
 
   return (
@@ -642,21 +632,6 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
                   </article>
                 ))}
               </div>
-            )}
-          </Card>
-        )}
-
-        {/* aba: auditoria */}
-        {aba === 'auditoria' && (
-          <Card>
-            <SectionTitle title="Memória de cálculo" subtitle="Tabela técnica para conferência." />
-            {!mostrarDetalhes ? (
-              <p className="table-empty">Ative "Mostrar detalhes" para ver a tabela completa.</p>
-            ) : (
-              <DataTable
-                columns={auditoriaColumns}
-                rows={sessao.linhas_contas as unknown as Record<string, unknown>[]}
-              />
             )}
           </Card>
         )}
