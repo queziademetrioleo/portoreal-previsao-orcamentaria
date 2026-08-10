@@ -391,7 +391,7 @@ export default function TelaRevisao({
                   disabled={calculando}
                   full
                 >
-                  {calculando ? 'Recalculando...' : '🔄 Recalcular'}
+                  {calculando ? 'Reanalisando com IA...' : '🔄 Recalcular (nova análise)'}
                 </Button>
               </div>
             </Card>

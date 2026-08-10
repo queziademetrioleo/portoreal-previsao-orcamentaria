@@ -95,6 +95,12 @@ export async function deletarSessao(sid: string): Promise<void> {
   if (!r.ok) throw new Error(`Erro ${r.status}`)
 }
 
+export async function reanalisarSessao(sid: string): Promise<Sessao> {
+  const r = await fetch(`${BASE}/api/sessao/${sid}/reanalisar`, { method: 'POST' })
+  if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
+  return r.json()
+}
+
 export async function listarSessoes(): Promise<SessaoResumida[]> {
   const r = await fetch(`${BASE}/api/sessoes`)
   if (!r.ok) throw new Error(`Erro ${r.status}`)

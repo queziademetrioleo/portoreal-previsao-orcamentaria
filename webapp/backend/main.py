@@ -514,13 +514,11 @@ class Decisoes(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Startup — limpeza de sessoes antigas
+# Startup — sessões NUNCA são removidas automaticamente
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
-    removidas = db.limpar_sessoes_antigas(90)
-    if removidas:
-        logger.info(f'{removidas} sessoes antigas removidas (TTL=90d)')
+    logger.info('Backend iniciado — sessões preservadas permanentemente')
 
 
 # ---------------------------------------------------------------------------
@@ -672,6 +670,45 @@ async def analisar_sse(sid: str):
 
     return StreamingResponse(gerar(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+@app.post('/api/sessao/{sid}/reanalisar')
+async def reanalisar_sincrono(sid: str):
+    """Re-executa a analise completa (IA + regras) nos arquivos ja enviados.
+    Equivale a fazer upload novamente — gera um calculo novo do zero."""
+    row = db.carregar_sessao(sid)
+    if not row:
+        raise HTTPException(404, 'Sessao nao encontrada')
+
+    loop = asyncio.get_event_loop()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for chave, fname in ARQUIVOS_ESPERADOS.items():
+                content = db.obter_arquivo(sid, chave)
+                if content:
+                    with open(os.path.join(tmpdir, fname), 'wb') as f:
+                        f.write(content)
+
+            # Executa analise completa em thread separada
+            R = await loop.run_in_executor(None, core.analisar, tmpdir)
+            db.salvar_cache_analise(sid, _json_dumps(R))
+
+            nome = row['nome_condominio']
+            ano = row['ano_previsao']
+
+            # Nome automatico
+            rec_nome = (R.get('rec') or {}).get('nome_condominio')
+            if rec_nome and rec_nome.strip():
+                nome = rec_nome.strip()
+                db.atualizar_nome_condominio(sid, nome)
+
+            estado = _montar_estado(sid, nome, ano, R)
+            _salvar_estado_sync(sid, estado)
+
+            return estado
+    except Exception as exc:
+        logger.error('Erro na reanalise da sessao %s: %s', sid, exc)
+        raise HTTPException(500, f'Erro ao reanalisar: {exc}')
 
 
 def _salvar_estado_sync(sid, estado):

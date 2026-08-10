@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BASE, previewDocumento, salvarDecisoes, type PayloadDecisoes } from '../api'
+import { BASE, previewDocumento, reanalisarSessao, salvarDecisoes, type PayloadDecisoes } from '../api'
 import type { ItemInad, ItemRevisao, Sessao } from '../types'
 
 export interface UseDecisoesReturn {
@@ -138,23 +138,31 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   }, [buildPayload, sessao.sessao_id])
 
   // Recalculo manual imediato (botao "Recalcular" na interface)
+  // Re-executa a analise COMPLETA (IA + regras) — equivale a fazer upload novamente
   const recalcularAgora = useCallback(async () => {
     setCalculando(true)
     try {
-      const payload = buildPayload()
-      const r = await previewDocumento(sessao.sessao_id, payload)
+      const nova = await reanalisarSessao(sessao.sessao_id)
+      // Reseta todo o estado interno com os resultados frescos da reanalise
+      setExtra(nova.extraordinarias)
+      setRevisar(nova.revisar)
+      setInad(nova.inadimplencia)
       setVivo({
-        subtotal: r.subtotal,
-        total: r.total_previsto,
-        impacto: r.impacto_receita_mensal,
+        subtotal: nova.resumo.subtotal,
+        total: nova.resumo.total_previsto,
+        impacto: nova.resumo.impacto_receita_mensal ?? 0,
       })
-      await salvarDecisoes(sessao.sessao_id, payload)
-    } catch {
+      setInflacao(nova.resumo.inflacao ?? 0.10)
+      setUltimoReajuste(nova.resumo.ultimo_reajuste ?? '')
+      // Pula o proximo preview debounced — os numeros ja estao atualizados
+      primeiraRender.current = true
+    } catch (err) {
       /* mantem ultimo valor */
+      console.error('Erro ao recalcular:', err)
     } finally {
       setCalculando(false)
     }
-  }, [buildPayload, sessao.sessao_id])
+  }, [sessao.sessao_id])
 
   return {
     extra,
