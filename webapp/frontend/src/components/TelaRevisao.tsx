@@ -374,24 +374,73 @@ export default function TelaRevisao({
         {/* layout: sidebar + conteúdo */}
         <div className="review-layout">
           <aside className="review-sidebar">
-            <Card padding="md">
-              <h2 className="section-title">Cálculo</h2>
-              <div className="calc-row"><span>Base anual</span><strong>{money(sessao.resumo.base_total)}</strong></div>
-              <div className="calc-row"><span>Base mensal</span><strong>{money(sessao.resumo.base_total / 12)}</strong></div>
-              <div className="calc-row"><span>Itens removidos (anual)</span><strong>- {money(removidoTotal)}</strong></div>
-              <div className="calc-row"><span>Itens removidos (mensal)</span><strong>- {money(removidoTotal / 12)}</strong></div>
-              <div className="calc-row strong"><span>Subtotal anual</span><strong>{money(vivo.subtotal)}</strong></div>
-              <div className="calc-row"><span>Subtotal mensal</span><strong>{money(vivo.subtotal / 12)}</strong></div>
-              <div className="calc-row">
-                <span>Aumento previsto ({(inflacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% sobre o subtotal)</span>
-                <strong>{money(vivo.total - vivo.subtotal)}</strong>
-              </div>
-              <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
-              <div className="calc-row strong"><span>Total previsto (mensal)</span><strong>{money(vivo.total / 12)}</strong></div>
-              <div className="calc-row"><span>Receita anual</span><strong>{money(receitaAtual)}</strong></div>
-              <div className="calc-row"><span>Receita mensal</span><strong>{money(receitaAtual / 12)}</strong></div>
-              <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
-              <div style={{ marginTop: 10 }}>
+            <Card padding="md" className="calculation-card">
+              <header className="calculation-card-header">
+                <div>
+                  <span>Resumo da projeção</span>
+                  <h2>Cálculo da previsão</h2>
+                </div>
+                <small className={calculando ? 'is-calculating' : ''} aria-live="polite">
+                  {calculando ? 'Atualizando…' : 'Atualizado'}
+                </small>
+              </header>
+
+              <section className="calculation-stage" aria-labelledby="calc-base-title">
+                <div className="calculation-stage-title" id="calc-base-title">
+                  <span>01</span>
+                  <strong>Base e deduções</strong>
+                </div>
+                <div className="calculation-periods">
+                  <div><span>Base anual</span><strong>{money(sessao.resumo.base_total)}</strong></div>
+                  <div><span>Média mensal</span><strong>{money(sessao.resumo.base_total / 12)}</strong></div>
+                </div>
+                <div className="calculation-deduction">
+                  <div><span>Extraordinários retirados</span><small>{removidos} lançamento{removidos === 1 ? '' : 's'}</small></div>
+                  <div><strong>− {money(removidoTotal)}</strong><small>− {money(removidoTotal / 12)}/mês</small></div>
+                </div>
+              </section>
+
+              <section className="calculation-stage" aria-labelledby="calc-adjust-title">
+                <div className="calculation-stage-title" id="calc-adjust-title">
+                  <span>02</span>
+                  <strong>Subtotal e ajuste</strong>
+                </div>
+                <div className="calculation-periods subtotal-periods">
+                  <div><span>Subtotal anual</span><strong>{money(vivo.subtotal)}</strong></div>
+                  <div><span>Subtotal mensal</span><strong>{money(vivo.subtotal / 12)}</strong></div>
+                </div>
+                <div className="calculation-increase">
+                  <span>Aumento previsto <b>{(inflacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</b></span>
+                  <strong>+ {money(vivo.total - vivo.subtotal)}</strong>
+                </div>
+              </section>
+
+              <section className="calculation-total" aria-label="Total previsto">
+                <span>03 · Total previsto</span>
+                <div>
+                  <p><small>Anual</small><strong>{calculando ? '…' : money(vivo.total)}</strong></p>
+                  <p><small>Mensal</small><strong>{calculando ? '…' : money(vivo.total / 12)}</strong></p>
+                </div>
+              </section>
+
+              <section className="calculation-revenue" aria-label="Receita estimada">
+                <div className="calculation-stage-title">
+                  <span>04</span>
+                  <strong>Receita estimada</strong>
+                </div>
+                <div className="calculation-periods">
+                  <div><span>Anual</span><strong>{money(receitaAtual)}</strong></div>
+                  <div><span>Mensal</span><strong>{money(receitaAtual / 12)}</strong></div>
+                </div>
+                {vivo.impacto > 0 && (
+                  <div className="calculation-default-impact">
+                    <span>Impacto da inadimplência</span>
+                    <strong>− {money(vivo.impacto)}/mês</strong>
+                  </div>
+                )}
+              </section>
+
+              <div className="calculation-action">
                 <Button
                   size="sm"
                   variant="primary"
