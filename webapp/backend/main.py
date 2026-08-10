@@ -363,6 +363,20 @@ def _recalcular_com_decisoes(sid, estado):
     return R2, impacto
 
 
+def _montar_lancamentos_contas(des):
+    """Cria a trilha auditavel, preservando o indice original de cada lancamento."""
+    return [{
+        'id': idx,
+        'grupo': it.get('grupo') or 'Sem grupo',
+        'classe': it.get('classe') or 'Sem classe',
+        'data': str(it.get('data') or ''),
+        'descricao': it.get('descricao') or '',
+        'valor_pago': round(float(it.get('valor_pago') or 0), 2),
+        'categoria_inicial': it.get('cat') or 'Recorrente',
+        'motivo': it.get('motivo') or '',
+    } for idx, it in enumerate((des or {}).get('itens') or [])]
+
+
 def _montar_estado(sid, nome, ano, R):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R['des']
@@ -426,16 +440,7 @@ def _montar_estado(sid, nome, ano, R):
         'final': round(l['final'], 2), 'regra': l['regra'],
         'n_meses': l['n_meses'],
     } for l in R['linhas']]
-    lancamentos_contas = [{
-        'id': idx,
-        'grupo': it.get('grupo') or 'Sem grupo',
-        'classe': it.get('classe') or 'Sem classe',
-        'data': str(it.get('data') or ''),
-        'descricao': it.get('descricao') or '',
-        'valor_pago': round(float(it.get('valor_pago') or 0), 2),
-        'categoria_inicial': it.get('cat') or 'Recorrente',
-        'motivo': it.get('motivo') or '',
-    } for idx, it in enumerate(des['itens'])]
+    lancamentos_contas = _montar_lancamentos_contas(des)
 
     bal = R['bal']
     return {
@@ -699,7 +704,16 @@ def _salvar_estado_sync(sid, estado):
 # ---------------------------------------------------------------------------
 @app.get('/api/sessao/{sid}')
 def obter_sessao(sid: str):
-    return _carregar_estado(sid)
+    estado = _carregar_estado(sid)
+    if 'lancamentos_contas' not in estado:
+        R = _obter_R(sid)
+        estado['lancamentos_contas'] = _montar_lancamentos_contas(R.get('des'))
+        db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
+        logger.info(
+            'Sessao %s migrada: %d lancamentos adicionados a auditoria de contas',
+            sid, len(estado['lancamentos_contas']),
+        )
+    return estado
 
 
 @app.delete("/api/sessao/{sid}")
