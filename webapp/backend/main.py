@@ -873,6 +873,9 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
+    estado['resumo']['desconsideracoes'] = round(R2['desconsideracoes'], 2)
+    estado['resumo']['prov_laudo'] = round(R2['prov_laudo'], 2)
+    estado['resumo']['prov_incendio'] = round(R2['prov_incendio'], 2)
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
     estado['resumo']['cenarios'] = R2.get('cenarios')
     estado['resumo']['inflacao'] = R2.get('inflacao_pct', estado['resumo'].get('inflacao'))
@@ -889,7 +892,10 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     return Response(
         content=pdf_bytes,
         media_type='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Cache-Control': 'no-store, max-age=0',
+        },
     )
 
 

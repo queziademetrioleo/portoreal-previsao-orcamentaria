@@ -1365,46 +1365,54 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             # Itens de manutenção/reparo no grupo Diversas NÃO são "diversas" —
             # estão mal classificados no grupo. Manter na base (como os manuais fazem).
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
-                regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
-            elif any(k in nc for k in ('outras despesa', 'outros', 'estorno')):
-                # Classes genéricas (ex.: "Outras Despesas"): aplicar MAD + IA
-                # para classificar o que é extraordinário vs recorrente.
-                # A maioria são equipamentos/compras pontuais → extraordinário.
-                # Itens de consumo que caíram na conta errada → recorrente.
-                extra_est = outliers_estatisticos.get((ng, nc), 0.0)
-                ex_ia = extra_por_classe.get((ng, nc), 0.0)
-                ex = max(extra_est, ex_ia)
+                ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+                final = base - ded
+                regra = ('R4: lançamentos extraordinários identificados e removidos'
+                         if ded > 0.005 else
+                         'Recorrente: manutencao em grupo Diversas — mantida integral')
+            elif any(k in nc for k in DIVERSAS_GENERICAS):
+                # Somente lançamentos efetivamente marcados como extraordinários
+                # saem da previsão; uma dedução nunca volta como provisão.
+                ex = extra_por_classe.get((ng, nc), 0.0)
                 if ex > 0:
                     ded = min(ex, base)
-                    prov_laudo += ded
-                    regra = f'R4: {ded/base:.0%} extraordinario (MAD+IA) — provisionado Laudo'
+                    regra = f'R4: {ded/base:.0%} extraordinário — removido da previsão'
                 else:
                     ded = 0.0
                     regra = 'R4: sem itens extraordinarios — mantido integral'
                 final = base - ded
             else:
-                ded = base; final = 0.0
-                prov_laudo += base
-                regra = 'R4: Diversas zeradas -> provisao Laudo Autovistoria'
+                ex = min(extra_por_classe.get((ng, nc), 0.0), base)
+                ded, final = ex, 0.0
+                prov_laudo += base - ex
+                regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
+                         if ex > 0.005 else
+                         'R4: Diversas -> provisao Laudo Autovistoria')
         # R5 cartoriais
         elif 'cartoriais' in ng or 'honorarios' in ng:
-            ded = base; final = 0.0
-            prov_incendio += base
-            regra = 'R5: Cartoriais -> provisao Sist. Incendio/Registro'
+            ex = min(extra_por_classe.get((ng, nc), 0.0), base)
+            ded, final = ex, 0.0
+            prov_incendio += base - ex
+            regra = ('R5: extraordinários removidos; saldo provisionado para Incêndio/Registro'
+                     if ex > 0.005 else
+                     'R5: Cartoriais -> provisao Sist. Incendio/Registro')
         # R2 pessoal pontual — pensao alimenticia CONTINUA (6+ meses) e
         # desconto em folha repassado, nao custo extra: fica na base
         # (aprendido do manual 2023: Quezia manteve pensao de 11 meses)
         elif any(k in nc for k in PESSOAL_PONTUAL):
-            if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
-                regra = 'Recorrente: pensao alimenticia continua (desconto em folha)'
-            else:
-                ded = base; final = 0.0
-                regra = 'R2: evento pontual de pessoal deduzido 100%'
+            ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+            final = base - ded
+            regra = ('R2: lançamentos pontuais identificados'
+                     if ded > 0.005 else
+                     'R2: item de pessoal mantido na previsão')
         # R6 anualizacao
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
-            final = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            previsto = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
+            final = previsto - ex
             ded = base - final
-            regra = 'R6: media ultimos 3 meses x 12'
+            regra = ('R6: média anualizada menos lançamentos extraordinários'
+                     if ex > 0.005 else 'R6: media ultimos 3 meses x 12')
         # R3 lumpy — somente lançamentos marcados individualmente entram na dedução.
         elif any(k in nc for k in LUMPY_KEYS):
             # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF.
@@ -1617,35 +1625,44 @@ def recalcular(R, inflacao_pct=None):
             # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
             # resto vira provisão de Laudo (R4).
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
-                regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
+                ex = min(extra_por_classe.get((ng, nc), 0.0), base)
+                ded, final = ex, base - ex
+                regra = ('R4: lançamentos extraordinários identificados e removidos'
+                         if ex > 0.005 else
+                         'Recorrente: manutencao em grupo Diversas — mantida integral')
             elif any(k in nc for k in DIVERSAS_GENERICAS):
                 ex = extra_por_classe.get((ng, nc), 0.0)
                 if ex > 0:
                     ded = min(ex, base)
-                    prov_laudo += ded
-                    regra = f'R4: {ded/base:.0%} extraordinario — provisionado Laudo'
+                    regra = f'R4: {ded/base:.0%} extraordinário — removido da previsão'
                 else:
                     regra = 'R4: sem extraordinarios — mantido integral'
                 final = base - ded
             else:
-                ded, final = base, 0.0
-                prov_laudo += base
-                regra = 'R4: Diversas -> provisao Laudo'
+                ex = min(extra_por_classe.get((ng, nc), 0.0), base)
+                ded, final = ex, 0.0
+                prov_laudo += base - ex
+                regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
+                         if ex > 0.005 else 'R4: Diversas -> provisao Laudo')
         elif 'cartoriais' in ng or 'honorarios' in ng:
-            ded, final = base, 0.0
-            prov_incendio += base
-            regra = 'R5: Cartoriais -> provisao Incendio/Registro'
+            ex = min(extra_por_classe.get((ng, nc), 0.0), base)
+            ded, final = ex, 0.0
+            prov_incendio += base - ex
+            regra = ('R5: extraordinários removidos; saldo provisionado para Incêndio/Registro'
+                     if ex > 0.005 else
+                     'R5: Cartoriais -> provisao Incendio/Registro')
         elif any(k in nc for k in PESSOAL_PONTUAL):
-            if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
-                regra = 'Pessoal pontual: pensao continua — revisar'
-            else:
-                ded = min(extra_por_classe.get((ng, nc), 0.0), base)
-                final = base - ded
-                regra = ('R2: lançamentos pontuais identificados'
-                         if ded > 0.005 else 'R2: mantido na revisão')
+            ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+            final = base - ded
+            regra = ('R2: lançamentos pontuais identificados'
+                     if ded > 0.005 else 'R2: mantido na revisão')
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
-            final = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            previsto = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
+            final = previsto - ex
             ded, regra = base - final, 'R6: media ultimos 3 meses x 12'
+            if ex > 0.005:
+                regra = 'R6: média anualizada menos lançamentos extraordinários'
         elif any(k in nc for k in LUMPY_KEYS):
             # R3: só os lançamentos extraordinários identificados são deduzidos.
             extra_humano = extra_por_classe.get((ng, nc), 0.0)

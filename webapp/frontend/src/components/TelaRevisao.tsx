@@ -229,6 +229,7 @@ export default function TelaRevisao({
     revisar.filter((i) => i.decisao === 'pendente').length
 
   const removidos = [...decisoesLancamentos.values()].filter((decisao) => decisao === 'deduzir').length
+  const removidoTotal = aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos
   const saldo = receitaAtual - vivo.total
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
@@ -347,15 +348,25 @@ export default function TelaRevisao({
 
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <NumberBlock label="Valor transportado (anual)" value={money(sessao.resumo.base_total)} />
-          <NumberBlock label="Removido na revisão" value={money(aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos)} />
+          <NumberBlock
+            label="Valor transportado (anual)"
+            value={money(sessao.resumo.base_total)}
+            detail={`${money(sessao.resumo.base_total / 12)} por mês`}
+          />
+          <NumberBlock
+            label="Removido na revisão (anual)"
+            value={money(removidoTotal)}
+            detail={`${money(removidoTotal / 12)} por mês`}
+          />
           <NumberBlock
             label="Total previsto (anual)"
             value={calculando ? '...' : money(vivo.total)}
+            detail={calculando ? undefined : `${money(vivo.total / 12)} por mês`}
           />
           <NumberBlock
             label="Saldo estimado (anual)"
             value={money(saldo)}
+            detail={`${money(saldo / 12)} por mês`}
             variant={saldo < 0 ? 'negative' : 'positive'}
           />
         </div>
@@ -365,15 +376,20 @@ export default function TelaRevisao({
           <aside className="review-sidebar">
             <Card padding="md">
               <h2 className="section-title">Cálculo</h2>
-              <div className="calc-row"><span>Base 12 meses</span><strong>{money(sessao.resumo.base_total)}</strong></div>
-              <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos)}</strong></div>
-              <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
+              <div className="calc-row"><span>Base anual</span><strong>{money(sessao.resumo.base_total)}</strong></div>
+              <div className="calc-row"><span>Base mensal</span><strong>{money(sessao.resumo.base_total / 12)}</strong></div>
+              <div className="calc-row"><span>Itens removidos (anual)</span><strong>- {money(removidoTotal)}</strong></div>
+              <div className="calc-row"><span>Itens removidos (mensal)</span><strong>- {money(removidoTotal / 12)}</strong></div>
+              <div className="calc-row strong"><span>Subtotal anual</span><strong>{money(vivo.subtotal)}</strong></div>
+              <div className="calc-row"><span>Subtotal mensal</span><strong>{money(vivo.subtotal / 12)}</strong></div>
               <div className="calc-row">
                 <span>Aumento previsto ({(inflacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% sobre o subtotal)</span>
                 <strong>{money(vivo.total - vivo.subtotal)}</strong>
               </div>
               <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
+              <div className="calc-row strong"><span>Total previsto (mensal)</span><strong>{money(vivo.total / 12)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(receitaAtual)}</strong></div>
+              <div className="calc-row"><span>Receita mensal</span><strong>{money(receitaAtual / 12)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
               <div style={{ marginTop: 10 }}>
                 <Button
@@ -508,14 +524,14 @@ export default function TelaRevisao({
                         <details className="audit-group" key={grupo} open={index === 0}>
                           <summary>
                             <span><strong>{grupo}</strong><small>{classes.length} classe{classes.length === 1 ? '' : 's'}</small></span>
-                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido</span>
+                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido <small>Média mensal deduzida: {money(deduzidoGrupo / 12)}</small></span>
                           </summary>
                           <div className="audit-classes">
                             {classes.map(({ classe, itens, pago, deduzido }) => (
                               <section className="audit-class" key={classe}>
                                 <div className="audit-class-header">
                                   <div><strong>{classe}</strong><small>{itens.length} lançamento{itens.length === 1 ? '' : 's'}</small></div>
-                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span></div>
+                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span><span>Média mensal deduzida: {money(deduzido / 12)}</span></div>
                                 </div>
                                 <div className="audit-table-wrap">
                                   <table className="audit-table">
