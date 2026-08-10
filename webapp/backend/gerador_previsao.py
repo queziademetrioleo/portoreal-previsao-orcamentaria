@@ -839,15 +839,17 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 _set_se_nao_formula(r, 6, round(subtotal_val / 12, 2))
             elif 'infla' in n3 and 'previsao' in n3:
                 pct_txt = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
-                ws_p.cell(r, 3).value = f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt}%'
+                ws_p.cell(r, 3).value = (
+                    f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt}% sobre o SUBTOTAL'
+                )
                 _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
                 _set_se_nao_formula(r, 5, round(inflacao, 4))
-            elif n3 == 'total':
+            elif n3 in ('total', 'total previsto'):
                 if r == total_rec_row:
                     _set_se_nao_formula(r, 4, round(total_rec, 2))
                     _set_se_nao_formula(r, 5, round(total_rec, 2))
                 else:
-                    ws_p.cell(r, 3).value = 'TOTAL'
+                    ws_p.cell(r, 3).value = 'TOTAL PREVISTO'
                     total = subtotal_val * (1 + inflacao)
                     _set_se_nao_formula(r, 4, round(total, 2))
                     _set_se_nao_formula(r, 5, round(total / num_frac, 2))
@@ -1036,13 +1038,14 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     ws_p2.cell(r2, 7).value = 'Inflação'
                 elif 'AUMENTO' in val_text.upper() or ('infla' in _norm(val_text) and 'aumento' in _norm(val_text)):
                     pct_txt2 = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
-                    ws_p2.cell(r2, 3).value = f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt2}%'
+                    ws_p2.cell(r2, 3).value = (
+                        f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt2}% sobre o SUBTOTAL'
+                    )
                     ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
                     # F guarda a fracao usada pelo rotulo '="Aumento previsto..." & F48*100'
                     if isinstance(ws_p2.cell(r2, 6).value, (int, float)):
                         ws_p2.cell(r2, 6).value = round(inflacao, 4)
-                elif val_text.upper().strip() in ('TOTAL', '="TOTAL"') or (_norm(val_text) == 'total' and 'aumento' not in _norm(val_text)):
-                    ws_p2.cell(r2, 3).value = 'TOTAL'
+                elif val_text.upper().strip() in ('TOTAL', 'TOTAL PREVISTO', '="TOTAL"') or (_norm(val_text) in ('total', 'total previsto') and 'aumento' not in _norm(val_text)):
                     if r2 == rec_total_row2:
                         # TOTAL da secao de RECEITAS (nao de despesas!) — bug
                         # preexistente sobrescrevia com o total de despesas
@@ -1051,6 +1054,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                         ws_p2.cell(r2, 4).value = round(rec_mensal_total, 2)
                         ws_p2.cell(r2, 5).value = round(rec_mensal_total, 2)
                     else:
+                        ws_p2.cell(r2, 3).value = 'TOTAL PREVISTO'
                         total = subtotal_val * (1 + inflacao)
                         ws_p2.cell(r2, 4).value = round(total, 2)
                         ws_p2.cell(r2, 5).value = round(total / num_frac, 2)
@@ -1326,11 +1330,14 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     r += 1
     inflacao_val = despesa_total * inflacao
     ws_p.cell(r, 2, 99)
-    ws_p.cell(r, 3, f'PREVISÃO DE INFLAÇÃO - {inflacao*100:.0f}%')
+    ws_p.cell(
+        r, 3,
+        f'Aumento Previsto (Salários, tarifas, serviços) = {inflacao * 100:.2f}% sobre o SUBTOTAL',
+    )
     ws_p.cell(r, 4, round(inflacao_val, 2)).number_format = MONEY
     r += 2
     total = despesa_total + inflacao_val
-    ws_p.cell(r, 3, 'TOTAL').font = Font(bold=True, size=12)
+    ws_p.cell(r, 3, 'TOTAL PREVISTO').font = Font(bold=True, size=12)
     ws_p.cell(r, 4, round(total, 2)).number_format = MONEY
     r += 2
     rec_anual = rec_total * 12

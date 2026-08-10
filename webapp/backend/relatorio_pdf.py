@@ -66,7 +66,7 @@ def _logo_base64(logo_path):
 # ---------------------------------------------------------------------------
 def _linha_e_total(label):
     n = _norm(label).strip()
-    return (n == 'total' or 'subtotal' in n or 'saldo' in n or 'deficit' in n
+    return (n.startswith('total') or 'subtotal' in n or 'saldo' in n or 'deficit' in n
             or 'superavit' in n or 'inflacao' in n or 'aumento' in n)
 
 
@@ -519,8 +519,8 @@ _HTML_TEMPLATE = r"""
       <tbody>
         {% for label, valor in despesas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
         <tr class="subtotal"><td>SUBTOTAL</td><td class="num">{{ subtotal_mensal }}</td></tr>
-        <tr><td>Aumento Previsto (Salários, tarifas, serviços) = {{ inflacao_pct }}%</td><td class="num">{{ aumento_mensal }}</td></tr>
-        <tr class="total"><td>TOTAL</td><td class="num">{{ total_despesas }}</td></tr>
+        <tr><td>Aumento Previsto (Salários, tarifas, serviços) = {{ inflacao_pct }}% sobre o SUBTOTAL</td><td class="num">{{ aumento_mensal }}</td></tr>
+        <tr class="total"><td>TOTAL PREVISTO</td><td class="num">{{ total_despesas }}</td></tr>
       </tbody>
     </table>
   </div>
