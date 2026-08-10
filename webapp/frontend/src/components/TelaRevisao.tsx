@@ -224,13 +224,20 @@ export default function TelaRevisao({
   const [aba, setAba] = useState<Aba>('relatorio')
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState('')
+  const [comFundo, setComFundo] = useState(true)
+
+  // Cenários com/sem fundo de reserva
+  const cenarios = sessao.resumo.cenarios
+  const temFundoReserva = !!cenarios && Math.abs(cenarios.fundo_reserva_anual) > 0.005
+  const cenarioAtivo = cenarios ? (comFundo ? cenarios.com_fundo : cenarios.sem_fundo) : null
+  const receitaAtual = cenarioAtivo ? cenarioAtivo.receita_anual : sessao.resumo.receita_anual
 
   const pendentes =
     extra.filter((i) => i.decisao === 'pendente').length +
     revisar.filter((i) => i.decisao === 'pendente').length
 
   const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
-  const saldo = sessao.resumo.receita_anual - vivo.total
+  const saldo = receitaAtual - vivo.total
   const grupos = useMemo(() => agruparPorGrupo(sessao.linhas_contas), [sessao.linhas_contas])
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
@@ -381,8 +388,27 @@ export default function TelaRevisao({
                 />
               </div>
               <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
-              <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>
+              <div className="calc-row"><span>Receita anual</span><strong>{money(receitaAtual)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
+              {temFundoReserva && (
+                <div style={{ marginTop: 8, marginBottom: 4 }}>
+                  <div className="tab-bar" style={{ margin: 0, border: 'none', background: 'var(--surface)', padding: 2, gap: 2, borderRadius: 8 }}>
+                    <button
+                      className={`tab-btn ${comFundo ? 'active' : ''}`}
+                      onClick={() => setComFundo(true)}
+                      title={`Fundo de reserva: ${money(cenarios!.fundo_reserva_anual / 12)}/mês`}
+                    >
+                      Com fundo
+                    </button>
+                    <button
+                      className={`tab-btn ${!comFundo ? 'active' : ''}`}
+                      onClick={() => setComFundo(false)}
+                    >
+                      Sem fundo
+                    </button>
+                  </div>
+                </div>
+              )}
               <div style={{ marginTop: 10 }}>
                 <Button
                   size="sm"
