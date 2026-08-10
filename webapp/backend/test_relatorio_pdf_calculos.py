@@ -51,10 +51,10 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
             35000 / 32000 - 1,
         )
 
-    def test_reajuste_nao_fica_negativo_quando_receita_ja_cobre_total(self):
-        self.assertEqual(
+    def test_reajuste_usa_valor_absoluto_quando_receita_supera_total(self):
+        self.assertAlmostEqual(
             relatorio_pdf._reajuste_necessario(29034.47, 32594.70),
-            0.0,
+            abs(29034.47 / 32594.70 - 1),
         )
 
     def test_consideracao_sem_fundo_e_curta_e_usa_receita_sem_fundo(self):
@@ -72,7 +72,7 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         )
         self.assertIn('9,4%', texto)
         self.assertIn('prática não recomendada', texto)
-        self.assertIn('Total Previsto ÷ Receita Total − 1', texto)
+        self.assertIn('|Total Previsto ÷ Receita Total − 1|', texto)
 
     def test_tempo_desde_reajuste_usa_meses_antes_de_um_ano(self):
         self.assertEqual(

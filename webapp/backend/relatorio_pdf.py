@@ -68,11 +68,11 @@ def _tempo_desde_reajuste(ano, mes, hoje=None):
 
 
 def _reajuste_necessario(total_previsto, receita_total):
-    """Percentual para a receita alcançar o total: TOTAL / RECEITA - 1."""
+    """Variação absoluta entre total e receita: |TOTAL / RECEITA - 1|."""
     receita_total = float(receita_total or 0)
     if receita_total <= 0:
         return 0.0
-    return max(0.0, float(total_previsto or 0) / receita_total - 1)
+    return abs(float(total_previsto or 0) / receita_total - 1)
 
 
 def _consideracao_fundo_reserva(incluir_fundo, total_previsto,
@@ -88,7 +88,8 @@ def _consideracao_fundo_reserva(incluir_fundo, total_previsto,
         'Sugestão: como foi selecionada a utilização dos valores arrecadados para a constituição '
         'do Fundo de Reserva no custeio das despesas ordinárias — prática não recomendada —, '
         f'o reajuste necessário da taxa condominial é de {_pct(reajuste)}% para os próximos '
-        '12 meses. O percentual foi calculado pela fórmula Total Previsto ÷ Receita Total − 1.'
+        '12 meses. O percentual foi calculado pelo valor absoluto da fórmula '
+        '|Total Previsto ÷ Receita Total − 1|.'
     )
 
 
