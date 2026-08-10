@@ -518,9 +518,9 @@ class Decisoes(BaseModel):
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
-    removidas = db.limpar_sessoes_antigas(7)
+    removidas = db.limpar_sessoes_antigas(90)
     if removidas:
-        logger.info(f'{removidas} sessoes antigas removidas (TTL=7d)')
+        logger.info(f'{removidas} sessoes antigas removidas (TTL=90d)')
 
 
 # ---------------------------------------------------------------------------
