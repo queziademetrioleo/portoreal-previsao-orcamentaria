@@ -355,8 +355,14 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     impacto_inad_mensal = resumo.get('impacto_receita_mensal') or 0
     inflacao = float(resumo.get('inflacao') or 0)
 
+    com_fundo_pref = estado.get('com_fundo', True)
+
     previsao_final = estado.get('previsao_final') or []
     receitas, despesas = _extrair_receitas_despesas(previsao_final)
+    # Filtra Fundo de Reserva das receitas quando o usuario escolheu SEM FUNDO
+    if not com_fundo_pref:
+        receitas = [(l, v) for l, v in receitas
+                     if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
     if not receitas:
         receitas = [('Receita média do período', resumo.get('receita_mensal') or 0)]
     if not despesas:
@@ -468,6 +474,14 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     aumento_mensal = subtotal_mensal * inflacao if inflacao > 0 else 0
     total_despesas_mensal = subtotal_mensal + aumento_mensal
 
+    # Quadro de leitura: mostra so o cenario selecionado pelo usuario.
+    # Se COM FUNDO e tem FR, mostra os dois lados (informativo).
+    cenario_quadro = sem_fundo if not com_fundo_pref else com_fundo
+    status_quadro = cenario_quadro.get('status_resultado') or (
+        core._status_resultado(cenario_quadro.get('resultado') or 0))
+    resultado_quadro = cenario_quadro.get('resultado') or (
+        (receita_anual_sem if not com_fundo_pref else receita_anual_com) - total_previsto)
+
     ctx = {
         'logo_b64': _logo_base64(logo_path),
         'nome_condominio': estado.get('nome_condominio') or '',
@@ -480,6 +494,7 @@ def gerar_relatorio_pdf(estado, logo_path=None):
         'inflacao_pct': f'{inflacao * 100:.1f}'.replace('.', ','),
         'aumento_mensal': _money(aumento_mensal),
         'total_despesas': _money(total_despesas_mensal),
+        'com_fundo_pref': com_fundo_pref,
         'com_fundo': {
             'receita_mensal': _money(receita_anual_com / 12),
             'despesa_mensal': _money(total_previsto / 12),
@@ -492,27 +507,34 @@ def gerar_relatorio_pdf(estado, logo_path=None):
             'resultado_mensal': _money(resultado_sem / 12),
             'status': core._status_resultado(resultado_sem),
         },
+        'quadro': {
+            'receita_mensal': _money((receita_anual_sem if not com_fundo_pref else receita_anual_com) / 12),
+            'despesa_mensal': _money(total_previsto / 12),
+            'resultado_mensal': _money(resultado_quadro / 12),
+            'status': status_quadro,
+            'label': 'Sem fundo de reserva' if not com_fundo_pref else 'Com fundo de reserva',
+        },
         'fundo_reserva_anual': _money(fundo_reserva_anual),
         'tem_fundo_reserva': abs(fundo_reserva_anual) > 0.005,
         'insights': insights,
         'pizza': pizza,
         'grafico_mensal': grafico_mensal,
-        'status_geral': status,
+        'status_geral': status_quadro,
         'status_label': {
             'superavit': 'Cenário com superávit',
             'superavit_insuficiente': 'Superávit insuficiente — atenção',
             'deficit': 'Atenção: orçamento em déficit',
-        }[status],
+        }[status_quadro],
         'conclusao_texto': (
             f'A previsão usa a média dos últimos {n_meses_balanco} meses, separa eventos pontuais da '
             'rotina e trata a inadimplência como redução de receita disponível. '
             + (
-                f'O resultado mensal, com fundo de reserva, é de {_money(resultado_com / 12)} — '
+                f'O resultado mensal é de {_money(resultado_quadro / 12)} — '
                 'positivo, mas abaixo dos R$ 2.000 por mês (R$ 24.000 no ano) considerados margem de '
                 'segurança suficiente.'
-                if status == 'superavit_insuficiente' else
-                f'O resultado mensal, com fundo de reserva, é de {_money(resultado_com / 12)} '
-                f'({"DÉFICIT" if status == "deficit" else "SUPERÁVIT"}).'
+                if status_quadro == 'superavit_insuficiente' else
+                f'O resultado mensal é de {_money(resultado_quadro / 12)} '
+                f'({"DÉFICIT" if status_quadro == "deficit" else "SUPERÁVIT"}).'
             )
         ),
         'consideracoes': consideracoes,
@@ -611,6 +633,7 @@ _HTML_TEMPLATE = r"""
   <div class="secao">
     <h2>Quadro de leitura</h2>
     <div class="quadros">
+      {% if com_fundo_pref and tem_fundo_reserva %}
       <div class="quadro">
         <h3>Com fundo de reserva</h3>
         <div class="linha"><span>Receita mensal</span><span>{{ com_fundo.receita_mensal }}</span></div>
@@ -629,14 +652,18 @@ _HTML_TEMPLATE = r"""
           {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[sem_fundo.status] }}
         </span>
       </div>
+      {% else %}
+      <div class="quadro">
+        <h3>{{ quadro.label }}</h3>
+        <div class="linha"><span>Receita mensal</span><span>{{ quadro.receita_mensal }}</span></div>
+        <div class="linha"><span>Despesa mensal</span><span>{{ quadro.despesa_mensal }}</span></div>
+        <div class="linha"><span>Resultado mensal</span><span>{{ quadro.resultado_mensal }}</span></div>
+        <span class="badge {{ quadro.status }}">
+          {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[quadro.status] }}
+        </span>
+      </div>
+      {% endif %}
     </div>
-  </div>
-
-  <div class="secao">
-    <h2>Insights</h2>
-    <ul class="insights">
-      {% for item in insights %}<li>{{ item }}</li>{% endfor %}
-    </ul>
   </div>
 
   {% if pizza %}

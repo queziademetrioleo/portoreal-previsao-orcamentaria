@@ -604,7 +604,13 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
             <Card>
               <SectionTitle title="Receitas" />
               <ResultTable rows={receitas} valueFor={(r) => valorPorVisao(r, visao)} empty="Nenhuma receita detalhada." />
-              <TotalLine label="Total receitas" value={receitaAtual} />
+              {impactoInadAtual > 0.005 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)', color: 'var(--negative)' }}>
+                  <span>(-) Inadimplência considerada</span>
+                  <strong>{money(impactoInadAtual)}</strong>
+                </div>
+              )}
+              <TotalLine label={impactoInadAtual > 0.005 ? '= Receita líquida estimada' : 'Total receitas'} value={receitaLiquidaAtual} />
             </Card>
             <Card>
               <SectionTitle title="Despesas" />

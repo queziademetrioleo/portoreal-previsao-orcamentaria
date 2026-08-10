@@ -511,6 +511,7 @@ class Decisoes(BaseModel):
     # 'AAAA-MM' (ex.: '2022-03') — mes/ano do ultimo reajuste da taxa
     # condominial, usado no item 6 do relatorio PDF. None = nao informado.
     ultimo_reajuste: str | None = Field(default=None, max_length=7)
+    com_fundo: bool = Field(default=True)  # True = incluir Fundo de Reserva nas receitas
 
 
 # ---------------------------------------------------------------------------
@@ -812,6 +813,7 @@ def gerar(sid: str, dec: Decisoes):
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
     estado['resumo']['cenarios'] = R2.get('cenarios')
     estado['previsao_final'] = previsao_final
+    estado['com_fundo'] = dec.com_fundo
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
 
     return {'ok': True, 'sessao_id': sid,

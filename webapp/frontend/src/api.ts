@@ -14,6 +14,7 @@ export interface PayloadDecisoes {
   inadimplencia: Record<string, DecisaoEditavel>
   inflacao_pct?: number | null
   ultimo_reajuste?: string | null
+  com_fundo?: boolean
 }
 
 export async function criarSessao(form: {
