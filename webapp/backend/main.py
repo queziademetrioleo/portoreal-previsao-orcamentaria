@@ -834,15 +834,20 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
 
 
 @app.get('/api/sessao/{sid}/relatorio-pdf')
-def relatorio_pdf(sid: str):
+def relatorio_pdf(sid: str, com_fundo: str = ''):
     """Relatorio final em PDF, para entrega ao condominio (logo + receitas/
     despesas/quadro/insights/graficos/conclusao + Considerações Importantes).
-    Requer que o documento xlsx ja tenha sido gerado (mesma fonte de dados)."""
+    Requer que o documento xlsx ja tenha sido gerado (mesma fonte de dados).
+    Query param com_fundo: '0' = sem fundo, '1' = com fundo (default: usar valor salvo)."""
     estado = _carregar_estado(sid)
     if estado.get('status') != 'gerado':
         raise HTTPException(400, 'Gere o documento (xlsx) antes do relatório em PDF.')
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
-    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None)
+    cf_override = None
+    if com_fundo in ('0', '1'):
+        cf_override = com_fundo == '1'
+    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None,
+                                     com_fundo_override=cf_override)
     filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.pdf"
     return Response(
         content=pdf_bytes,

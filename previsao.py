@@ -1534,7 +1534,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 unidades_criticas[u] = {
                     'meses_consecutivos': max_consec,
                     'tx_mensal_media': tx_media,
-                    'impacto': tx_media * max_consec,  # impacto total na receita
+                    'impacto': tx_media,  # abate apenas a ultima parcela (1 mes) da receita
                 }
 
         # Totais

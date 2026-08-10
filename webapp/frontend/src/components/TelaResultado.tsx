@@ -450,7 +450,7 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
           <a href={urlDownload(sessao.sessao_id)} className="btn btn-primary btn-sm" style={{ background: '#fff', color: 'var(--accent)', borderColor: '#fff' }}>
             Baixar XLSX
           </a>
-          <a href={urlRelatorioPdf(sessao.sessao_id)} className="btn btn-primary btn-sm" style={{ background: '#fff', color: 'var(--accent)', borderColor: '#fff' }}>
+          <a href={urlRelatorioPdf(sessao.sessao_id, comFundo)} className="btn btn-primary btn-sm" style={{ background: '#fff', color: 'var(--accent)', borderColor: '#fff' }}>
             Gerar Relatório para Condomínio
           </a>
           <Button variant="ghost" onClick={onVoltar} style={{ color: 'rgba(255,255,255,0.8)', borderColor: 'rgba(255,255,255,0.3)' }}>

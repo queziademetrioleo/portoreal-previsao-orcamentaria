@@ -69,8 +69,9 @@ export function urlDownload(sid: string): string {
   return `${BASE}/api/sessao/${sid}/download`
 }
 
-export function urlRelatorioPdf(sid: string): string {
-  return `${BASE}/api/sessao/${sid}/relatorio-pdf`
+export function urlRelatorioPdf(sid: string, comFundo?: boolean): string {
+  const cf = comFundo === undefined ? '' : `?com_fundo=${comFundo ? '1' : '0'}`
+  return `${BASE}/api/sessao/${sid}/relatorio-pdf${cf}`
 }
 
 export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {

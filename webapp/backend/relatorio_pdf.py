@@ -343,7 +343,7 @@ def _itens_presentes(linhas, grupo_norm_alvo, catalogo):
 # ---------------------------------------------------------------------------
 # Entrada principal
 # ---------------------------------------------------------------------------
-def gerar_relatorio_pdf(estado, logo_path=None):
+def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     resumo = estado.get('resumo') or {}
     linhas = estado.get('linhas_contas') or []
     fluxo_mensal = estado.get('fluxo_mensal') or []
@@ -355,7 +355,7 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     impacto_inad_mensal = resumo.get('impacto_receita_mensal') or 0
     inflacao = float(resumo.get('inflacao') or 0)
 
-    com_fundo_pref = estado.get('com_fundo', True)
+    com_fundo_pref = com_fundo_override if com_fundo_override is not None else estado.get('com_fundo', True)
 
     previsao_final = estado.get('previsao_final') or []
     receitas, despesas = _extrair_receitas_despesas(previsao_final)
