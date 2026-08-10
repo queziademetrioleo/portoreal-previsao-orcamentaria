@@ -53,7 +53,7 @@ function fallbackRows(sessao: Sessao): LinhaPrevisaoFinal[] {
   const frMensal = cen ? cen.fundo_reserva_anual / 12 : 0
   const rows: LinhaPrevisaoFinal[] = [
     { row: 9, label: 'RECEITAS', anual: 'VALOR MENSAL', rateio: null, mensal: null },
-    { row: 10, label: 'Receita média do período', anual: r.receita_mensal, rateio: null, mensal: null },
+    { row: 10, label: 'Receita média do período', anual: r.receita_mensal - frMensal, rateio: null, mensal: null },
   ]
   // Fundo de reserva como linha separada (quando disponivel via REC)
   if (Math.abs(frMensal) > 0.005) {
@@ -310,9 +310,14 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   const despesas = rows.filter(
     (r) => r.row >= 22 && r.row <= 80 && r.label && !isTotal(r.label) && !isNotaFinal(r.label),
   )
-  const totalReceitasMensal =
-    receitas.reduce((s, r) => s + valorMensal(r), 0)
-    || (cenarioAtivo ? cenarioAtivo.receita_mensal : sessao.resumo.receita_mensal)
+  // Usa cenarioAtivo como valor oficial da receita — ele é calculado pelo
+  // motor (calcular_cenarios) e reflete corretamente com/sem fundo de reserva.
+  // A soma das linhas (previsao_final) é só para display; o rótulo "Fundo de
+  // Reserva" pode não existir como linha separada no template antigo, e aí o
+  // filtro isFundoReserva não surtiria efeito.
+  const totalReceitasMensal = cenarioAtivo
+    ? cenarioAtivo.receita_mensal
+    : (receitasTodas.reduce((s, r) => s + valorMensal(r), 0) || sessao.resumo.receita_mensal)
   const totalDespesasMensal = sessao.resumo.total_previsto / 12
 
   const receitaAtual = visao === 'anual' ? totalReceitasMensal * 12 : totalReceitasMensal

@@ -1035,6 +1035,8 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                     ws_p2.cell(r2, 4).value = round(subtotal_val, 2)
                     ws_p2.cell(r2, 7).value = 'Inflação'
                 elif 'AUMENTO' in val_text.upper() or ('infla' in _norm(val_text) and 'aumento' in _norm(val_text)):
+                    pct_txt2 = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
+                    ws_p2.cell(r2, 3).value = f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt2}%'
                     ws_p2.cell(r2, 4).value = round(subtotal_val * inflacao, 2)
                     # F guarda a fracao usada pelo rotulo '="Aumento previsto..." & F48*100'
                     if isinstance(ws_p2.cell(r2, 6).value, (int, float)):
