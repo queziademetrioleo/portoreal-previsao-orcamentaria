@@ -1,7 +1,7 @@
 # 🏢 Previsão Orçamentária — Porto Real Imóveis
 
 **Sistema inteligente de previsão orçamentária para condomínios.**  
-Lê os relatórios do Condomínio21 (Group Software), aplica regras de negócio aprendidas de anos de cálculos manuais, usa **IA (Claude Opus)** para classificar cada nota fiscal, e gera o documento final com revisão humana antes da conclusão.
+Lê os relatórios do Condomínio21 (Group Software), aplica regras de negócio aprendidas de anos de cálculos manuais, usa **IA (Claude Opus)** para classificar cada nota fiscal, e gera o relatório PDF após a revisão humana.
 
 <p align="center">
   <img src="webapp/frontend/public/assets/logo.png" alt="Porto Real" height="80">
@@ -12,16 +12,15 @@ Lê os relatórios do Condomínio21 (Group Software), aplica regras de negócio 
 ## 🎯 O que o sistema faz
 
 ```
-Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano revisa  →  Previsão.xlsx
-(Condomínio21)     (Claude Opus 4.8)     (cálculo determinístico)   (interface web)   (documento final)
+Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano revisa  →  PDF
+(Condomínio21)     (Claude Opus 4.8)     (cálculo determinístico)   (interface web)   (relatório final)
 ```
 
 1. **Upload** de 5 arquivos exportados do Condomínio21: `balanual.xls`, `desbai06.xls`, `rec02.xls` (obrigatórios), `dessin02.xls`, `inad01.xls` (opcionais)
 2. **IA analisa** cada nota fiscal do desbai06, classificando como *Recorrente* ou *Extraordinária*
 3. **Regras determinísticas** (R1 a R8) são aplicadas — deduções, provisões, anualizações
 4. **Revisão humana** na interface web: o síndico aprova ou reprova cada item classificado
-5. **Documento final** gerado com a mesma estrutura do manual da Porto Real
-6. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
+5. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
 
 ---
 
@@ -122,8 +121,8 @@ docker compose up -d --build
 ├── webapp/
 │   ├── Dockerfile           # Build multi-stage (frontend + backend)
 │   ├── backend/
-│   │   ├── main.py          # API FastAPI (upload → análise → revisão → download)
-│   │   ├── gerador_previsao.py  # Gera Previsão.xlsx (layout adaptativo)
+│   │   ├── main.py          # API FastAPI (upload → análise → revisão → PDF)
+│   │   ├── relatorio_pdf.py # Gera o relatório PDF
 │   │   └── requirements.txt
 │   └── frontend/
 │       ├── src/
@@ -152,8 +151,8 @@ Três seções para decisão humana:
 - 🟡 **Em revisão**: itens ambíguos — marque *é extraordinária* ou *é recorrente*
 - 💸 **Inadimplência**: unidades com ≥ 3 meses consecutivos — *abater* ou *ignorar*
 
-### 3. Download
-Clique em **Salvar** — o sistema recalcula com suas decisões e gera o `Previsão <ano>.xlsx` final.
+### 3. Gerar relatório
+Clique em **Gerar documento**, confirme o percentual de aumento, o último reajuste e a opção de Fundo de Reserva. O sistema recalcula com essas decisões e baixa o PDF automaticamente.
 
 ---
 

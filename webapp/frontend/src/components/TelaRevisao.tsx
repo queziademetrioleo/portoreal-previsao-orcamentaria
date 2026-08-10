@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
-import type { ItemInad, ItemRevisao, LinhaConta, Sessao } from '../types'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { ItemInad, ItemRevisao, Sessao } from '../types'
 import { useDecisoes } from '../hooks/useDecisoes'
-import { gerarDocumento } from '../api'
+import { gerarRelatorioPdf } from '../api'
 import { money } from '../utils/format'
 import Header from './ui/Header'
 import Card from './ui/Card'
@@ -23,19 +24,6 @@ function parseValor(value: string) {
 
 function valorAtual(item: { valor: number; valor_editado?: number }) {
   return Number.isFinite(item.valor_editado) ? Number(item.valor_editado) : item.valor
-}
-
-function agruparPorGrupo(linhas: LinhaConta[]) {
-  const grupos = new Map<string, { base: number; deducao: number; final: number; contas: number }>()
-  linhas.forEach((l) => {
-    const g = grupos.get(l.grupo) ?? { base: 0, deducao: 0, final: 0, contas: 0 }
-    g.base += l.base
-    g.deducao += l.deducao
-    g.final += l.final
-    g.contas += 1
-    grupos.set(l.grupo, g)
-  })
-  return [...grupos.entries()].sort((a, b) => b[1].final - a[1].final)
 }
 
 /* ─── sub-componentes ─────────────────── */
@@ -197,11 +185,9 @@ function EditorInad({
 export default function TelaRevisao({
   sessao,
   onVoltar,
-  onGerado,
 }: {
   sessao: Sessao
   onVoltar: () => void
-  onGerado: (s: Sessao) => void
 }) {
   const {
     extra,
@@ -225,10 +211,10 @@ export default function TelaRevisao({
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState('')
   const [comFundo, setComFundo] = useState(true)
+  const [modalGerarAberto, setModalGerarAberto] = useState(false)
 
   // Cenários com/sem fundo de reserva
   const cenarios = sessao.resumo.cenarios
-  const temFundoReserva = !!cenarios && Math.abs(cenarios.fundo_reserva_anual) > 0.005
   const cenarioAtivo = cenarios ? (comFundo ? cenarios.com_fundo : cenarios.sem_fundo) : null
   const receitaAtual = cenarioAtivo ? cenarioAtivo.receita_anual : sessao.resumo.receita_anual
 
@@ -238,7 +224,6 @@ export default function TelaRevisao({
 
   const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
   const saldo = receitaAtual - vivo.total
-  const grupos = useMemo(() => agruparPorGrupo(sessao.linhas_contas), [sessao.linhas_contas])
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
     setExtra((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
@@ -253,10 +238,16 @@ export default function TelaRevisao({
     try {
       const payload = buildPayload()
       payload.com_fundo = comFundo
-      await gerarDocumento(sessao.sessao_id, payload)
-      const r = await fetch(`/api/sessao/${sessao.sessao_id}`)
-      if (!r.ok) throw new Error(`Erro ${r.status} ao carregar sessao gerada`)
-      onGerado(await r.json())
+      const pdf = await gerarRelatorioPdf(sessao.sessao_id, payload)
+      const url = URL.createObjectURL(pdf)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Relatorio ${sessao.ano_previsao} - ${sessao.nome_condominio}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setModalGerarAberto(false)
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : 'Erro ao gerar documento.')
     } finally {
@@ -327,7 +318,7 @@ export default function TelaRevisao({
             />
             <Button
               variant="primary"
-              onClick={handleGerar}
+              onClick={() => setModalGerarAberto(true)}
               disabled={gerando || pendentes > 0}
             >
               {gerando ? 'Gerando...' : 'Gerar documento'}
@@ -360,57 +351,13 @@ export default function TelaRevisao({
               <div className="calc-row"><span>Base 12 meses</span><strong>{money(sessao.resumo.base_total)}</strong></div>
               <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev)}</strong></div>
               <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
-              <div className="calc-row inflacao-row">
-                <span>
-                  Aumento Previsto (Salários, tarifas, serviços) ={' '}
-                  <input
-                    type="number"
-                    className="inflacao-input"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    value={Number((inflacao * 100).toFixed(2))}
-                    onChange={e => {
-                      const pct = parseFloat(e.target.value)
-                      if (Number.isFinite(pct) && pct >= 0 && pct <= 100) setInflacao(pct / 100)
-                    }}
-                    aria-label="Percentual de aumento previsto"
-                  />%
-                </span>
+              <div className="calc-row">
+                <span>Aumento previsto ({(inflacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% sobre o subtotal)</span>
                 <strong>{money(vivo.total - vivo.subtotal)}</strong>
-              </div>
-              <div className="calc-row inflacao-row">
-                <span>Último reajuste da taxa</span>
-                <input
-                  type="month"
-                  className="reajuste-input"
-                  value={ultimoReajuste}
-                  onChange={e => setUltimoReajuste(e.target.value)}
-                  aria-label="Mês e ano do último reajuste da taxa condominial"
-                />
               </div>
               <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(receitaAtual)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
-              {temFundoReserva && (
-                <div style={{ marginTop: 8, marginBottom: 4 }}>
-                  <div className="tab-bar" style={{ margin: 0, border: 'none', background: 'var(--surface)', padding: 2, gap: 2, borderRadius: 8 }}>
-                    <button
-                      className={`tab-btn ${comFundo ? 'active' : ''}`}
-                      onClick={() => setComFundo(true)}
-                      title={`Fundo de reserva: ${money(cenarios!.fundo_reserva_anual / 12)}/mês`}
-                    >
-                      Com fundo
-                    </button>
-                    <button
-                      className={`tab-btn ${!comFundo ? 'active' : ''}`}
-                      onClick={() => setComFundo(false)}
-                    >
-                      Sem fundo
-                    </button>
-                  </div>
-                </div>
-              )}
               <div style={{ marginTop: 10 }}>
                 <Button
                   size="sm"
@@ -440,22 +387,6 @@ export default function TelaRevisao({
                   </div>
                 </Card>
 
-                <Card>
-                  <h2 className="section-title">Despesas por Grupo Resumidas</h2>
-                  <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                    {grupos.map(([grupo, total]) => (
-                      <div key={grupo} style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 'var(--s-md)' }}>
-                        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', marginBottom: 4 }}>
-                          {grupo}
-                        </span>
-                        <strong style={{ fontSize: 20, color: 'var(--text)' }}>{money(total.final)}</strong>
-                        <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 2 }}>
-                          {total.contas} contas · dedução {money(total.deducao)}
-                        </small>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
               </div>
             )}
 
@@ -516,7 +447,7 @@ export default function TelaRevisao({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
                     <h2 className="section-title">Inadimplência</h2>
-                    <p className="section-desc">Unidades com pagamento em atraso. Descontar da receita reduz o valor que o condomínio espera receber no próximo ano.</p>
+                    <p className="section-desc">Apenas unidades com três ou mais meses consecutivos em atraso. Para cada unidade, entra somente a última taxa condominial vencida.</p>
                   </div>
                   <div className="choice-row">
                     <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'abater' })))}>
@@ -557,6 +488,35 @@ export default function TelaRevisao({
           </section>
         </div>
       </div>
+      {modalGerarAberto && createPortal(
+        <div className="info-modal-overlay" onClick={() => !gerando && setModalGerarAberto(false)}>
+          <div className="info-modal-box gerar-modal" role="dialog" aria-modal="true" aria-labelledby="gerar-relatorio-titulo" onClick={(e) => e.stopPropagation()}>
+            <div className="info-modal-header">
+              <strong id="gerar-relatorio-titulo">Gerar relatório em PDF</strong>
+              <button type="button" className="info-modal-close" onClick={() => setModalGerarAberto(false)} disabled={gerando} aria-label="Fechar">×</button>
+            </div>
+            <p className="gerar-modal-intro">Confirme as informações que serão usadas no relatório antes de baixar o PDF.</p>
+            <label className="gerar-modal-field">
+              <span>Aumento Previsto (Salários, Tarifas, Serviços)</span>
+              <div><input type="number" className="inflacao-input" min={0} max={100} step={0.1} value={Number((inflacao * 100).toFixed(2))} onChange={e => { const pct = parseFloat(e.target.value); if (Number.isFinite(pct) && pct >= 0 && pct <= 100) setInflacao(pct / 100) }} aria-label="Percentual de aumento previsto" />%</div>
+            </label>
+            <label className="gerar-modal-field">
+              <span>Último reajuste da taxa condominial</span>
+              <input type="month" className="reajuste-input" value={ultimoReajuste} onChange={e => setUltimoReajuste(e.target.value)} aria-label="Mês e ano do último reajuste da taxa condominial" />
+            </label>
+            <fieldset className="gerar-modal-field gerar-modal-choice">
+              <legend>Colocar fundo de reserva no relatório?</legend>
+              <label><input type="radio" name="fundo-reserva" checked={comFundo} onChange={() => setComFundo(true)} /> Sim</label>
+              <label><input type="radio" name="fundo-reserva" checked={!comFundo} onChange={() => setComFundo(false)} /> Não</label>
+            </fieldset>
+            <div className="gerar-modal-actions">
+              <Button variant="secondary" onClick={() => setModalGerarAberto(false)} disabled={gerando}>Cancelar</Button>
+              <Button variant="primary" onClick={handleGerar} disabled={gerando}>{gerando ? 'Gerando PDF...' : 'Confirmar e baixar PDF'}</Button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   )
 }

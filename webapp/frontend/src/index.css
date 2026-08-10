@@ -808,6 +808,56 @@ body {
   color: var(--text);
 }
 
+/* ── MODAL DE GERAÇÃO DO RELATÓRIO ────── */
+.gerar-modal {
+  max-width: 520px;
+}
+
+.gerar-modal-intro {
+  margin-bottom: var(--s-lg) !important;
+}
+
+.gerar-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 var(--s-md);
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gerar-modal-field input[type='month'] {
+  width: fit-content;
+}
+
+.gerar-modal-choice {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-lg);
+}
+
+.gerar-modal-choice legend {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.gerar-modal-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.gerar-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-sm);
+  margin-top: var(--s-lg);
+}
+
 /* ── REVIEW EDITOR CARDS ──────────────── */
 .editor-card {
   display: grid;

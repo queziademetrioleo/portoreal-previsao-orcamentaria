@@ -39,17 +39,20 @@ export async function criarSessao(form: {
   return r.json()
 }
 
-export async function gerarDocumento(
+export async function gerarRelatorioPdf(
   sid: string,
   decisoes: PayloadDecisoes,
-): Promise<{ ok: boolean; subtotal: number; total_previsto: number; impacto_receita_mensal: number; download: string }> {
-  const r = await fetch(`${BASE}/api/sessao/${sid}/gerar`, {
+): Promise<Blob> {
+  const r = await fetch(`${BASE}/api/sessao/${sid}/relatorio-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),
   })
-  if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
-  return r.json()
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}))
+    throw new Error(body.detail ?? `Erro ${r.status}`)
+  }
+  return r.blob()
 }
 
 export async function previewDocumento(
@@ -63,15 +66,6 @@ export async function previewDocumento(
   })
   if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
   return r.json()
-}
-
-export function urlDownload(sid: string): string {
-  return `${BASE}/api/sessao/${sid}/download`
-}
-
-export function urlRelatorioPdf(sid: string, comFundo?: boolean): string {
-  const cf = comFundo === undefined ? '' : `?com_fundo=${comFundo ? '1' : '0'}`
-  return `${BASE}/api/sessao/${sid}/relatorio-pdf${cf}`
 }
 
 export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {

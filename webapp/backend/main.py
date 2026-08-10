@@ -6,7 +6,7 @@ PREVISAO ORCAMENTARIA — Backend Web (FastAPI)
 Fluxo human-in-the-loop:
   1. POST /api/sessao            — upload dos 4 relatorios -> analise (regras + IA)
   2. GET  /api/sessao/{id}       — estado da sessao (itens p/ revisao)
-  3. POST /api/sessao/{id}/gerar — decisoes humanas -> xlsx final (estrutura identica ao manual)
+  3. POST /api/sessao/{id}/relatorio-pdf — decisoes humanas -> PDF final
 
 Dev:  uvicorn main:app --reload --port 8000
 Prod: ver Dockerfile na raiz do projeto.
@@ -22,7 +22,6 @@ import threading
 import tempfile
 import datetime
 import logging
-import openpyxl
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, Response
@@ -32,7 +31,6 @@ from pydantic import BaseModel, Field
 
 import db
 import previsao as core
-from gerador_previsao import gerar_previsao_adaptativa
 from relatorio_pdf import gerar_relatorio_pdf
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -365,42 +363,6 @@ def _recalcular_com_decisoes(sid, estado):
     return R2, impacto
 
 
-def _extrair_previsao_final(path):
-    """Extrai a área visível da aba PREVISÃO (2), fonte oficial do resultado."""
-    wb = openpyxl.load_workbook(path, data_only=True)
-    ws = None
-    for name in wb.sheetnames:
-        nn = core._norm(name).replace(' ', '')
-        if 'previs' in nn and '(2)' in name:
-            ws = wb[name]
-            break
-    if ws is None:
-        for name in wb.sheetnames:
-            nn = core._norm(name).replace(' ', '')
-            if 'previs' in nn:
-                ws = wb[name]
-                break
-    if ws is None:
-        return []
-
-    rows = []
-    for r in range(9, 56):
-        label = ws.cell(r, 3).value
-        anual = ws.cell(r, 4).value
-        rateio = ws.cell(r, 5).value
-        mensal = ws.cell(r, 6).value
-        if label is None and anual is None and rateio is None and mensal is None:
-            continue
-        rows.append({
-            'row': r,
-            'label': str(label).strip() if label is not None else '',
-            'anual': round(float(anual), 2) if isinstance(anual, (int, float)) else anual,
-            'rateio': round(float(rateio), 2) if isinstance(rateio, (int, float)) else rateio,
-            'mensal': round(float(mensal), 2) if isinstance(mensal, (int, float)) else mensal,
-        })
-    return rows
-
-
 def _montar_estado(sid, nome, ano, R):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R['des']
@@ -429,28 +391,33 @@ def _montar_estado(sid, nome, ano, R):
 
     inad_itens = []
     if R['inad']:
-        # Calcular a ultima parcela (mes_ref mais recente) por unidade
-        ultima_parcela_por_unidade = {}
-        for it in R['inad']['itens']:
-            u = it['unidade']
-            mes = it.get('mes_ref', '')
-            atual = ultima_parcela_por_unidade.get(u, '')
-            if mes > atual:
-                ultima_parcela_por_unidade[u] = mes
+        # Apenas inadimplência crítica: 3+ meses consecutivos sem pagar.
+        # Para cada unidade, a previsão abate somente a taxa condominial da
+        # última parcela em atraso, jamais a soma de parcelas vencidas.
+        ultima_critica = {}
+        for original_id, it in enumerate(R['inad']['itens']):
+            critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
+            classe = core._norm(it.get('classe'))
+            eh_taxa_condominio = 'condom' in classe and ('taxa' in classe or 'tx' in classe)
+            if not critica or not eh_taxa_condominio:
+                continue
+            unidade = it.get('unidade') or ''
+            atual = ultima_critica.get(unidade)
+            if atual is None or str(it.get('mes_ref') or '') > str(atual[1].get('mes_ref') or ''):
+                ultima_critica[unidade] = (original_id, it)
 
-        for i, it in enumerate(R['inad']['itens']):
-            critica = it.get('critica', (it['meses_atraso'] or 0) >= 3)
+        for original_id, it in ultima_critica.values():
             inad_itens.append({
-                'id': i,
+                'id': original_id,
                 'unidade': it['unidade'],
                 'classe': it['classe'],
                 'mes_ref': it['mes_ref'],
                 'vencimento': str(it['vencimento'] or ''),
                 'valor': round(it['valor'], 2),
                 'meses_atraso': it['meses_atraso'],
-                'critica': critica,
-                'decisao': 'abater' if critica else 'ignorar',
-                'ultima_parcela': ultima_parcela_por_unidade.get(it['unidade'], it.get('mes_ref', '')),
+                'critica': True,
+                'decisao': 'abater',
+                'ultima_parcela': it.get('mes_ref', ''),
             })
 
     linhas = [{
@@ -747,7 +714,7 @@ def listar_sessoes():
 
 
 # ---------------------------------------------------------------------------
-# 3) DECISOES + GERACAO DO DOCUMENTO FINAL
+# 3) DECISOES + GERACAO DIRETA DO PDF
 # ---------------------------------------------------------------------------
 @app.post('/api/sessao/{sid}/preview')
 def preview(sid: str, dec: Decisoes):
@@ -764,8 +731,9 @@ def preview(sid: str, dec: Decisoes):
             'cenarios': R2.get('cenarios')}
 
 
-@app.post('/api/sessao/{sid}/gerar')
-def gerar(sid: str, dec: Decisoes):
+@app.post('/api/sessao/{sid}/relatorio-pdf')
+def relatorio_pdf(sid: str, dec: Decisoes):
+    """Aplica as decisões e devolve o PDF, sem criar documento XLSX intermediário."""
     estado = _carregar_estado(sid)
 
     _aplicar_decisoes(estado, dec)
@@ -777,50 +745,30 @@ def gerar(sid: str, dec: Decisoes):
         raise HTTPException(
             400,
             f'Existem {len(pendentes)} itens pendentes de revisão. '
-            'Decida se cada item deve ser removido ou mantido antes de gerar.'
+            'Decida se cada item deve ser removido ou mantido antes de gerar o relatório.'
         )
     _enriquecer_explicacoes_ia(estado)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
-
-    # Gerar xlsx em arquivo temporario e salvar bytes no MySQL
-    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-        out_path = tmp.name
-    try:
-        modelo = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              'templates', 'modelo_previsao.xlsx')
-        gerar_previsao_adaptativa(
-            destino=out_path,
-            R=R2,
-            nome_condominio=estado['nome_condominio'],
-            ano=estado['ano_previsao'],
-            inflacao=float(estado['resumo'].get('inflacao') or core.INFLACAO),
-            impacto_receita_mensal=impacto_receita,
-            inad_detalhe=estado['inadimplencia'],
-            inad_meta=estado['inad_meta'],
-            referencia=modelo if os.path.exists(modelo) else None,
-        )
-        previsao_final = _extrair_previsao_final(out_path)
-        with open(out_path, 'rb') as f:
-            xlsx_bytes = f.read()
-    finally:
-        os.unlink(out_path)
-
-    db.salvar_arquivo(sid, 'xlsx', xlsx_bytes)
-
-    estado['status'] = 'gerado'
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
     estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
     estado['resumo']['cenarios'] = R2.get('cenarios')
-    estado['previsao_final'] = previsao_final
+    estado['resumo']['inflacao'] = R2.get('inflacao_pct', estado['resumo'].get('inflacao'))
+    estado['linhas_contas'] = [{
+        'grupo': l['grupo'], 'classe': l['classe'],
+        'base': round(l['base'], 2), 'deducao': round(l['deducao'], 2),
+        'final': round(l['final'], 2), 'regra': l['regra'], 'n_meses': l['n_meses'],
+    } for l in R2['linhas']]
     estado['com_fundo'] = dec.com_fundo
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
-
-    return {'ok': True, 'sessao_id': sid,
-            'subtotal': round(R2['subtotal'], 2),
-            'total_previsto': round(R2['total_previsto'], 2),
-            'impacto_receita_mensal': round(impacto_receita, 2),
-            'download': f'/api/sessao/{sid}/download'}
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
+    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None)
+    filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post('/api/sessao/{sid}/salvar-decisoes')
@@ -831,43 +779,6 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
     _aplicar_decisoes(estado, decisoes)
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     return {'ok': True, 'sessao_id': sid}
-
-
-@app.get('/api/sessao/{sid}/relatorio-pdf')
-def relatorio_pdf(sid: str, com_fundo: str = ''):
-    """Relatorio final em PDF, para entrega ao condominio (logo + receitas/
-    despesas/quadro/graficos/conclusao + Considerações Importantes).
-    Requer que o documento xlsx ja tenha sido gerado (mesma fonte de dados).
-    Query param com_fundo: '0' = sem fundo, '1' = com fundo (default: usar valor salvo)."""
-    estado = _carregar_estado(sid)
-    if estado.get('status') != 'gerado':
-        raise HTTPException(400, 'Gere o documento (xlsx) antes do relatório em PDF.')
-    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
-    cf_override = None
-    if com_fundo in ('0', '1'):
-        cf_override = com_fundo == '1'
-    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None,
-                                     com_fundo_override=cf_override)
-    filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get('/api/sessao/{sid}/download')
-def download(sid: str):
-    estado = _carregar_estado(sid)
-    xlsx_bytes = db.obter_arquivo(sid, 'xlsx')
-    if not xlsx_bytes:
-        raise HTTPException(404, 'Documento ainda nao gerado')
-    filename = f"Previsão {estado['ano_previsao']} - {estado['nome_condominio']}.xlsx"
-    return Response(
-        content=xlsx_bytes,
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
-    )
 
 
 # ---------------------------------------------------------------------------

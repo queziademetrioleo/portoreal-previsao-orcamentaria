@@ -26,7 +26,7 @@ MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
             'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
 # Mesma paleta categorica validada (6 hues, ordem fixa) usada no grafico de
-# pizza da tela de resultado (TelaResultado.tsx) — nao ciclar, nao gerar cores.
+# pizza do relatório — não ciclar, não gerar cores.
 PIE_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#e34948', '#eb6834']
 PIE_LIMITE_FATIAS = 5
 
@@ -270,7 +270,13 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     if not receitas:
         receitas = [('Receita média do período', resumo.get('receita_mensal') or 0)]
     if not despesas:
-        despesas = [(l['classe'], l['final']) for l in linhas if abs(l.get('final') or 0) > 0.005]
+        # Sem XLSX intermediário, o PDF usa diretamente as linhas recalculadas.
+        # Os valores da tela são anuais; o relatório apresenta a média mensal.
+        despesas = [(l['classe'], (l.get('final') or 0) / 12)
+                    for l in linhas if abs(l.get('final') or 0) > 0.005]
+        provisoes = (resumo.get('prov_laudo') or 0) + (resumo.get('prov_incendio') or 0)
+        if abs(provisoes) > 0.005:
+            despesas.append(('Provisões previstas', provisoes / 12))
 
     grupos = _agrupar_por_grupo(linhas)
     total_grupo = sum(g['value'] for g in grupos)
