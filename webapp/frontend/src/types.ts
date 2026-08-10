@@ -7,7 +7,7 @@ export interface ItemRevisao {
   valor: number
   motivo: string
   n_meses: number | null
-  origem: 'IA' | 'Regra'
+  origem: 'IA' | 'Regra' | 'Aprendizado'
   decisao: 'aprovada' | 'reprovada' | 'pendente'
   valor_editado?: number
   nota?: string

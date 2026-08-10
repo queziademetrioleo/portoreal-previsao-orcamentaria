@@ -53,6 +53,24 @@ CREATE TABLE IF NOT EXISTS sessoes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+_APRENDIZADO_SQL = """
+CREATE TABLE IF NOT EXISTS aprendizado_despesas (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    sessao_id VARCHAR(12) NOT NULL,
+    lancamento_id INT NOT NULL,
+    assinatura CHAR(64) NOT NULL,
+    grupo_norm VARCHAR(255) NOT NULL,
+    classe_norm VARCHAR(255) NOT NULL,
+    descricao_norm VARCHAR(500) NOT NULL,
+    decisao ENUM('deduzir','manter') NOT NULL,
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_aprendizado_evento (sessao_id, lancamento_id),
+    INDEX idx_aprendizado_assinatura (assinatura),
+    INDEX idx_aprendizado_classe (grupo_norm(100), classe_norm(100))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 def _adicionar_coluna_se_ausente(cursor, tabela, coluna, definicao):
     """MySQL nao suporta 'ALTER TABLE ... ADD COLUMN IF NOT EXISTS' (isso e
     extensao do MariaDB) — checa o information_schema antes de alterar, o
@@ -73,6 +91,7 @@ def _init_schema():
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute(_BOOTSTRAP_SQL)
+        cursor.execute(_APRENDIZADO_SQL)
         # Migracao para bancos ja existentes (a tabela ja existia antes do
         # REC virar upload obrigatorio, 07/2026) — CREATE TABLE IF NOT
         # EXISTS acima nao adiciona coluna em tabela ja criada.
@@ -80,7 +99,7 @@ def _init_schema():
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info('Schema bootstrap: sessoes table ready')
+        logger.info('Schema bootstrap: sessoes e aprendizado_despesas prontos')
     except mysql.connector.Error as exc:
         logger.warning('Schema init failed: %s', exc)
 
@@ -222,6 +241,57 @@ def atualizar_nome_condominio(sid, nome):
         cur = conn.cursor()
         cur.execute("UPDATE sessoes SET nome_condominio = %s WHERE id = %s", (nome, sid))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def salvar_aprendizados(registros):
+    """Persiste eventos humanos de forma idempotente por sessão/lançamento."""
+    if not registros:
+        return 0
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.executemany(
+            "INSERT INTO aprendizado_despesas "
+            "(sessao_id, lancamento_id, assinatura, grupo_norm, classe_norm, "
+            "descricao_norm, decisao) VALUES (%s, %s, %s, %s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE assinatura = VALUES(assinatura), "
+            "grupo_norm = VALUES(grupo_norm), classe_norm = VALUES(classe_norm), "
+            "descricao_norm = VALUES(descricao_norm), decisao = VALUES(decisao)",
+            [(
+                r['sessao_id'], r['lancamento_id'], r['assinatura'],
+                r['grupo_norm'], r['classe_norm'], r['descricao_norm'], r['decisao'],
+            ) for r in registros],
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def listar_aprendizados():
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT assinatura, grupo_norm, classe_norm, descricao_norm, decisao, "
+            "atualizado_em FROM aprendizado_despesas ORDER BY atualizado_em DESC, id DESC"
+        )
+        return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def listar_estados_para_aprendizado():
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT id, estado_json FROM sessoes "
+            "WHERE estado_json IS NOT NULL AND estado_json <> ''"
+        )
+        return cur.fetchall()
     finally:
         conn.close()
 

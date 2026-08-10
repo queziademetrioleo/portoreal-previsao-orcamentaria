@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import db
+import aprendizado
 import previsao as core
 from relatorio_pdf import gerar_relatorio_pdf
 
@@ -118,6 +119,7 @@ def _obter_R(sid):
                 with open(os.path.join(tmpdir, fname), 'wb') as f:
                     f.write(content)
         R = core.analisar(tmpdir)
+        R = _aplicar_aprendizado_resultado(R)
         db.salvar_cache_analise(sid, _json_dumps(R))
         return R
 
@@ -127,6 +129,69 @@ def _decisao_payload(decisoes, item_id):
     if isinstance(raw, dict):
         return raw.get('decisao'), raw.get('valor'), raw.get('nota')
     return raw, None, None
+
+
+def _registros_aprendizado_decisoes(sid, estado, decisoes):
+    """Extrai somente escolhas humanas, sem reforçar decisões automáticas."""
+    registros = []
+    for item in estado.get('lancamentos_contas') or []:
+        decisao, _, _ = _decisao_payload(decisoes.lancamentos, item['id'])
+        if decisao not in ('deduzir', 'manter'):
+            continue
+        padrao = aprendizado.decisao_padrao(item)
+        atual = item.get('decisao') or padrao
+        # Mudança em relação ao estado salvo = clique atual. Divergência do
+        # padrão inicial = escolha humana já salva antes desta funcionalidade.
+        if decisao != atual or decisao != padrao:
+            registros.append(aprendizado.criar_registro(
+                sid, item['id'], item, decisao,
+            ))
+    return registros
+
+
+def _registrar_aprendizado_decisoes(sid, estado, decisoes):
+    registros = _registros_aprendizado_decisoes(sid, estado, decisoes)
+    if registros:
+        db.salvar_aprendizados(registros)
+        logger.info('Aprendizado humano atualizado: sessão %s, %d lançamento(s)',
+                    sid, len(registros))
+
+
+def _aplicar_aprendizado_resultado(R):
+    """Aplica a memória humana ao resultado novo e refaz os totais."""
+    try:
+        memorias = db.listar_aprendizados()
+    except Exception as exc:
+        logger.warning('Não foi possível carregar aprendizado humano: %s', exc)
+        return R
+    aplicados = aprendizado.aplicar_memorias(R.get('des', {}).get('itens'), memorias)
+    if not aplicados:
+        return R
+    R = core.recalcular(R)
+    R['aprendizados_aplicados'] = aplicados
+    logger.info('Aprendizado humano aplicado em %d lançamento(s)', aplicados)
+    return R
+
+
+def _importar_aprendizado_historico():
+    """Importa X/✓ manuais já salvos nas sessões anteriores ao recurso."""
+    registros = []
+    for row in db.listar_estados_para_aprendizado():
+        try:
+            estado = json.loads(row['estado_json'])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        for item in estado.get('lancamentos_contas') or []:
+            decisao = item.get('decisao')
+            if decisao not in ('deduzir', 'manter'):
+                continue
+            if decisao != aprendizado.decisao_padrao(item):
+                registros.append(aprendizado.criar_registro(
+                    row['id'], item['id'], item, decisao,
+                ))
+    if registros:
+        db.salvar_aprendizados(registros)
+    return len(registros)
 
 
 def _aplicar_decisao_editavel(item, decisao, valor, nota, permitidas):
@@ -406,7 +471,8 @@ def _montar_estado(sid, nome, ano, R):
         }
         if it['cat'] == 'Extraordinaria':
             ia = R.get('sugestoes_ia', {}).get(idx) or R.get('sugestoes_ia', {}).get(str(idx))
-            item['origem'] = 'IA' if (it['motivo'] or '').startswith('IA:') else 'Regra'
+            item['origem'] = ('Aprendizado' if (it['motivo'] or '').startswith('Aprendizado humano:')
+                              else 'IA' if (it['motivo'] or '').startswith('IA:') else 'Regra')
             item['decisao'] = 'aprovada'        # default: remover da base
             extraordinarias.append(item)
         elif it['cat'] == 'Revisar':
@@ -514,6 +580,11 @@ class Decisoes(BaseModel):
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
+    try:
+        importados = _importar_aprendizado_historico()
+        logger.info('Aprendizado histórico sincronizado: %d decisão(ões)', importados)
+    except Exception as exc:
+        logger.warning('Falha ao sincronizar aprendizado histórico: %s', exc)
     logger.info('Backend iniciado — sessões preservadas permanentemente')
 
 
@@ -636,7 +707,7 @@ async def analisar_sse(sid: str):
                         yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
                 # Resultado final
-                R = future.result()
+                R = _aplicar_aprendizado_resultado(future.result())
                 db.salvar_cache_analise(sid, _json_dumps(R))
 
                 nome = row['nome_condominio']
@@ -687,6 +758,7 @@ async def reanalisar_sincrono(sid: str):
 
             # Executa analise completa em thread separada
             R = await loop.run_in_executor(None, core.analisar, tmpdir)
+            R = _aplicar_aprendizado_resultado(R)
             db.salvar_cache_analise(sid, _json_dumps(R))
 
             nome = row['nome_condominio']
@@ -785,6 +857,7 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     """Aplica as decisões e devolve o PDF, sem criar documento XLSX intermediário."""
     estado = _carregar_estado(sid)
 
+    _registrar_aprendizado_decisoes(sid, estado, dec)
     _aplicar_decisoes(estado, dec)
     pendentes = [
         item for item in (estado['extraordinarias'] + estado['revisar'])
@@ -825,6 +898,7 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
     """Salva decisoes parciais do usuario sem gerar o documento final.
     Permite que o usuario retome a revisao depois."""
     estado = _carregar_estado(sid)
+    _registrar_aprendizado_decisoes(sid, estado, decisoes)
     _aplicar_decisoes(estado, decisoes)
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     return {'ok': True, 'sessao_id': sid}

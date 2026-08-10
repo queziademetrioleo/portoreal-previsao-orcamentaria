@@ -94,6 +94,139 @@ def _extrair_receitas_despesas(previsao_final):
     return receitas, despesas
 
 
+def _consolidar_despesas_relatorio(linhas, resumo):
+    """Replica o agrupamento da seção Despesas do XLSX antigo no PDF."""
+    ativas = [
+        (idx, linha) for idx, linha in enumerate(linhas or [])
+        if abs(float(linha.get('final') or 0)) > 0.005
+    ]
+    consumidos = set()
+    despesas = []
+
+    def ng(linha):
+        return _norm(linha.get('grupo'))
+
+    def nc(linha):
+        return _norm(linha.get('classe'))
+
+    def somar(label, predicado):
+        valor = 0.0
+        for idx, linha in ativas:
+            if idx not in consumidos and predicado(linha):
+                valor += float(linha.get('final') or 0)
+                consumidos.add(idx)
+        if abs(valor) > 0.005:
+            despesas.append((label, valor))
+
+    categorias = [
+        ('Despesas com Pessoal', lambda l: 'pessoal' in ng(l)),
+        ('Luz do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'luz' in nc(l)),
+        ('Água do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'agua' in nc(l)),
+        ('Telefone do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'telefone' in nc(l)),
+        ('Gás do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'gas' in nc(l)),
+        ('Material de Limpeza', lambda l: 'limpeza' in nc(l)
+         and any(t in nc(l) for t in ('material', 'produto', 'mat.'))),
+        ('Gastos com conservação', lambda l: 'conservacao' in ng(l)
+         or ('diversas' in ng(l) and 'seguro' not in nc(l))),
+        ('Tarifas Bancárias', lambda l: 'tarifas bancarias' in ng(l)
+         or 'tarifas bancarias' in nc(l)),
+        ('Seguro de Incêndio Obrigatório', lambda l: 'seguro' in nc(l) and 'vida' not in nc(l)),
+    ]
+    for label, predicado in categorias:
+        somar(label, predicado)
+
+    # Mesma seleção e ordem de contratos/pro-labore de _linhas_contratuais,
+    # usada pelo XLSX antes da retirada da etapa de documento intermediário.
+    def ordem_contrato(item):
+        idx, linha = item
+        classe = nc(linha)
+        tokens = set(re.findall(r'[a-z0-9]+', classe))
+        if 'elevador' in classe:
+            prioridade = 0
+        elif 'jardim' in classe:
+            prioridade = 1
+        elif 'tv' in tokens or 'cabo' in tokens:
+            prioridade = 2
+        elif 'eta' in tokens or 'piscina' in tokens:
+            prioridade = 3
+        elif 'hidraul' in classe or 'eletric' in classe:
+            prioridade = 4
+        elif any(k in classe for k in ('interf', 'camera', 'portao', 'antena')):
+            prioridade = 5
+        elif 'vigia' in classe:
+            prioridade = 6
+        elif 'contab' in classe:
+            prioridade = 7
+        elif 'internet' in classe or tokens & {'net', 'oi', 'vivo', 'claro', 'fibra'}:
+            prioridade = 8
+        elif 'administr' in classe:
+            prioridade = 9
+        elif any(k in classe for k in ('sindico', 'pro-labore', 'prolabore', 'ajuda de custo')):
+            prioridade = 10
+        else:
+            prioridade = 11
+        return prioridade, idx
+
+    contratuais = [
+        item for item in ativas
+        if ('contrato' in ng(item[1]) or 'pro-labore' in ng(item[1])
+            or 'prolabore' in ng(item[1])
+            or ('sindico' in ng(item[1]) and 'reembolso' in ng(item[1])))
+    ]
+    labels_contratos = set()
+    for idx, linha in sorted(contratuais, key=ordem_contrato):
+        if idx in consumidos:
+            continue
+        label = str(linha.get('classe') or '').strip()
+        if _norm(label) in labels_contratos:
+            continue
+        despesas.append((label, float(linha.get('final') or 0)))
+        labels_contratos.add(_norm(label))
+        consumidos.add(idx)
+
+    categorias_finais = [
+        ('Despesas Administrativas', lambda l: 'administrativa' in ng(l)),
+        ('Despesas Cartoriais e Honorários', lambda l: any(
+            t in ng(l) or t in nc(l) for t in ('cartori', 'honorari'))),
+        ('Despesas com Obras/Benfeitorias', lambda l: any(
+            t in ng(l) for t in ('obras', 'benfeitoria'))),
+    ]
+    for label, predicado in categorias_finais:
+        somar(label, predicado)
+
+    # As provisões fazem parte de conservação e não aparecem como linha solta.
+    provisoes = (float(resumo.get('prov_laudo') or 0)
+                 + float(resumo.get('prov_incendio') or 0))
+    if abs(provisoes) > 0.005:
+        for pos, (label, valor) in enumerate(despesas):
+            if _norm(label) == _norm('Gastos com conservação'):
+                despesas[pos] = (label, valor + provisoes)
+                break
+        else:
+            despesas.append(('Gastos com conservação', provisoes))
+
+    # O XLSX preservava somente as classes que não pertenciam a nenhuma das
+    # categorias conhecidas, inclusive desambiguando rótulos repetidos.
+    labels_existentes = {_norm(label) for label, _ in despesas}
+    for idx, linha in ativas:
+        if idx in consumidos:
+            continue
+        label = str(linha.get('classe') or linha.get('grupo')
+                    or 'Despesa sem classificação').strip()
+        if _norm(label) in labels_existentes:
+            label = f"{linha.get('grupo') or 'Outros'} - {label}"
+        despesas.append((label, float(linha.get('final') or 0)))
+        labels_existentes.add(_norm(label))
+
+    # Mantém também a salvaguarda de fechamento usada no documento antigo.
+    subtotal_alvo = float(resumo.get('subtotal') or 0)
+    diferenca = round(subtotal_alvo - sum(valor for _, valor in despesas), 2)
+    if subtotal_alvo and abs(diferenca) > 0.05:
+        despesas.append(('Ajustes de previsão', diferenca))
+
+    return [(label, valor / 12) for label, valor in despesas]
+
+
 def _agrupar_por_grupo(linhas):
     mapa = {}
     for l in linhas:
@@ -262,21 +395,19 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     com_fundo_pref = com_fundo_override if com_fundo_override is not None else estado.get('com_fundo', True)
 
     previsao_final = estado.get('previsao_final') or []
-    receitas, despesas = _extrair_receitas_despesas(previsao_final)
+    receitas, _ = _extrair_receitas_despesas(previsao_final)
+    receitas = [
+        ('Taxas de Condomínio', valor)
+        if _norm(label) == 'receita media do periodo' else (label, valor)
+        for label, valor in receitas
+    ]
     # Filtra Fundo de Reserva das receitas quando o usuario escolheu SEM FUNDO
     if not com_fundo_pref:
         receitas = [(l, v) for l, v in receitas
                      if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
     if not receitas:
-        receitas = [('Receita média do período', resumo.get('receita_mensal') or 0)]
-    if not despesas:
-        # Sem XLSX intermediário, o PDF usa diretamente as linhas recalculadas.
-        # Os valores da tela são anuais; o relatório apresenta a média mensal.
-        despesas = [(l['classe'], (l.get('final') or 0) / 12)
-                    for l in linhas if abs(l.get('final') or 0) > 0.005]
-        provisoes = (resumo.get('prov_laudo') or 0) + (resumo.get('prov_incendio') or 0)
-        if abs(provisoes) > 0.005:
-            despesas.append(('Provisões previstas', provisoes / 12))
+        receitas = [('Taxas de Condomínio', resumo.get('receita_mensal') or 0)]
+    despesas = _consolidar_despesas_relatorio(linhas, resumo)
 
     grupos = _agrupar_por_grupo(linhas)
     total_grupo = sum(g['value'] for g in grupos)

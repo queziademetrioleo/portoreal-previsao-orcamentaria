@@ -60,7 +60,7 @@ function EditorDespesa({
         <p className="meta">
           <span>{item.grupo}</span>
           <span>{item.data || 'Sem data'}</span>
-          <span>{item.origem === 'IA' ? 'IA' : 'Regra'}</span>
+          <span>{item.origem}</span>
           {item.n_meses !== null && <span>{item.n_meses} meses</span>}
         </p>
         {item.descricao && <p className="desc">{item.descricao}</p>}
