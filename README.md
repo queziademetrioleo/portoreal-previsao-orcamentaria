@@ -21,7 +21,7 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 3. **Regras determinísticas** (R1 a R8) são aplicadas — deduções, provisões, anualizações
 4. **Revisão humana** na interface web: o síndico aprova ou reprova cada item classificado
 5. **Documento final** gerado com a mesma estrutura do manual da Porto Real
-6. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, insights, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
+6. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
 
 ---
 

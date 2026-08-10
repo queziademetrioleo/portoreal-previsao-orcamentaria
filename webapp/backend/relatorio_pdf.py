@@ -7,8 +7,8 @@ Gera um PDF limpo, para entrega ao cliente, a partir do estado ja revisado
 de uma sessao (mesmos dados exibidos na tela de resultado do webapp).
 
 Layout: logo Porto Real -> nome do condominio/ano -> Receitas -> Despesas ->
-Quadro de leitura (com/sem fundo lado a lado) -> Insights -> Composicao das
-despesas (pizza) -> Evolucao mensal -> Conclusao -> Considerações Importantes.
+Quadro de leitura (com/sem fundo lado a lado) -> Composicao das despesas
+(pizza) -> Evolucao mensal -> Conclusao -> Considerações Importantes.
 """
 import base64
 import math
@@ -92,102 +92,6 @@ def _extrair_receitas_despesas(previsao_final):
         elif 22 <= r <= 80:
             despesas.append((label, float(valor)))
     return receitas, despesas
-
-
-# ---------------------------------------------------------------------------
-# Insights ESTRATEGICOS — para o condominio decidir o que fazer, nao um
-# resumo de como o relatorio foi calculado (feedback confirmado 10/07/2026).
-# ---------------------------------------------------------------------------
-def _gerar_insights_estrategicos(resultado_mensal, receita_mensal, despesa_mensal,
-                                  impacto_inad_mensal, fundo_reserva_anual, despesa_anual,
-                                  grupos, total_grupo, fluxo_mensal, reajuste_sugerido_pct):
-    out = []
-
-    # 1) Saude financeira geral — a mensagem central, sempre primeiro.
-    if resultado_mensal < 0:
-        out.append(
-            f'O condomínio projeta déficit mensal de {_money(abs(resultado_mensal))} — recomenda-se ação '
-            'imediata (reajuste da taxa condominial e/ou revisão de despesas) para evitar o comprometimento '
-            'do caixa.'
-        )
-    elif resultado_mensal < 2000:
-        out.append(
-            f'O resultado mensal é positivo ({_money(resultado_mensal)}), mas insuficiente como margem de '
-            'segurança — qualquer imprevisto (conserto, reajuste de contrato, atraso de pagamento) pode '
-            'levar o condomínio ao déficit.'
-        )
-    else:
-        out.append(
-            f'O condomínio fecha o mês com margem saudável de {_money(resultado_mensal)}, o que dá folga '
-            'para lidar com imprevistos sem comprometer o caixa.'
-        )
-
-    # 2) Reajuste recomendado — conecta com o item 7 das Considerações, em
-    # vez de ficar solto/desconectado da conclusao.
-    if reajuste_sugerido_pct > 0.001:
-        out.append(
-            f'Recomenda-se reajuste de {_pct(reajuste_sugerido_pct)}% na taxa condominial para recompor o '
-            'equilíbrio nos próximos 12 meses, preservando o Fundo de Reserva para sua finalidade original.'
-        )
-
-    # 3) Concentracao de despesa — risco de depender demais de uma unica conta.
-    if grupos and total_grupo > 0:
-        maior_grupo = grupos[0]
-        concentracao = maior_grupo['value'] / total_grupo
-        if concentracao >= 0.35:
-            out.append(
-                f'{_pct(concentracao, 0)}% das despesas estão concentradas em "{maior_grupo["label"]}" '
-                f'({_money(maior_grupo["value"] / 12)}/mês) — vale avaliar renegociação de contratos ou '
-                'busca de novos orçamentos nessa área.'
-            )
-        else:
-            out.append(
-                f'Maior despesa do condomínio: "{maior_grupo["label"]}", com {_money(maior_grupo["value"] / 12)}/mês.'
-            )
-
-    # 4) Cobertura do Fundo de Reserva em meses de despesa — mede o colchao
-    # de emergencia, nao so o saldo bruto.
-    despesa_mensal_media = (despesa_anual / 12) if despesa_anual > 0 else 0
-    if despesa_mensal_media > 0:
-        meses_cobertura = fundo_reserva_anual / despesa_mensal_media
-        if fundo_reserva_anual <= 0.005:
-            pass  # condominio sem fundo de reserva constituido — sem dado para comentar
-        elif meses_cobertura < 1:
-            out.append(
-                'O Fundo de Reserva arrecadado no ano equivale a menos de 1 mês de despesas — é um colchão '
-                'de emergência pequeno; reforçá-lo reduz o risco em caso de gasto inesperado.'
-            )
-        elif meses_cobertura >= 3:
-            out.append(
-                f'O Fundo de Reserva arrecadado no ano cobre cerca de {meses_cobertura:.1f} meses de '
-                'despesas — uma reserva de emergência confortável.'
-            )
-
-    # 5) Inadimplencia como risco continuo, nao so um desconto pontual.
-    if impacto_inad_mensal > 0:
-        out.append(
-            f'A inadimplência atual reduz a receita disponível em {_money(impacto_inad_mensal)}/mês — se '
-            'persistir ou crescer, agrava o cenário financeiro projetado.'
-        )
-
-    # 6) Tendencia de despesa ao longo do periodo analisado (1a metade vs 2a
-    # metade do fluxo mensal) — sinaliza alta continua, nao so uma foto do mes.
-    if len(fluxo_mensal) >= 6:
-        meio = len(fluxo_mensal) // 2
-        primeira = fluxo_mensal[:meio]
-        segunda = fluxo_mensal[meio:]
-        media_1 = sum(m.get('despesa') or 0 for m in primeira) / len(primeira)
-        media_2 = sum(m.get('despesa') or 0 for m in segunda) / len(segunda)
-        if media_1 > 0:
-            variacao = (media_2 - media_1) / media_1
-            if variacao >= 0.15:
-                out.append(
-                    f'As despesas do condomínio vêm subindo ao longo do período analisado (cerca de '
-                    f'{_pct(variacao, 0)}% entre a primeira e a segunda metade dos últimos meses) — o '
-                    'reajuste sugerido ajuda a acompanhar essa alta.'
-                )
-
-    return out[:6]
 
 
 def _agrupar_por_grupo(linhas):
@@ -386,12 +290,6 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     reajuste_com = max(0.0, (meta_receita / receita_anual_com - 1)) if receita_anual_com > 0 else 0.0
     reajuste_sem = max(0.0, (meta_receita / receita_anual_sem - 1)) if receita_anual_sem > 0 else 0.0
 
-    insights = _gerar_insights_estrategicos(
-        resultado_com / 12, receita_anual_com / 12, total_previsto / 12,
-        impacto_inad_mensal, fundo_reserva_anual, total_previsto,
-        grupos, total_grupo, fluxo_mensal, reajuste_sem,
-    )
-
     pizza = _grafico_pizza_svg(grupos, total_grupo)
     grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
 
@@ -516,7 +414,6 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         },
         'fundo_reserva_anual': _money(fundo_reserva_anual),
         'tem_fundo_reserva': abs(fundo_reserva_anual) > 0.005,
-        'insights': insights,
         'pizza': pizza,
         'grafico_mensal': grafico_mensal,
         'status_geral': status_quadro,
@@ -578,8 +475,6 @@ _HTML_TEMPLATE = r"""
   .badge.deficit { background: #fbe3e3; color: #a12626; }
   .badge.superavit_insuficiente { background: #fff3cd; color: #8a6300; }
   .badge.superavit { background: #dff3e3; color: #0f6b2b; }
-  ul.insights { margin: 0; padding-left: 16px; }
-  ul.insights li { margin-bottom: 4px; }
   .pizza-wrap { display: flex; align-items: center; gap: 18px; }
   .legenda { list-style: none; margin: 0; padding: 0; font-size: 10.5px; }
   .legenda li { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }

@@ -3,7 +3,6 @@ import type { FluxoMensal, LinhaPrevisaoFinal, Sessao } from '../types'
 import { urlDownload, urlRelatorioPdf } from '../api'
 import { money, signedMoney } from '../utils/format'
 import { scoreSaude } from '../utils/scoring'
-import { gerarInsights } from '../utils/insights'
 import { explicarDespesa, explicarInad } from '../utils/explicacoes'
 import Header from './ui/Header'
 import Card from './ui/Card'
@@ -356,13 +355,6 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
     impactoInadMensal * 12,
   )
 
-  const removido =
-    sessao.extraordinarias.filter((i) => i.decisao === 'aprovada').length +
-    sessao.revisar.filter((i) => i.decisao === 'aprovada').length
-  const mantido =
-    sessao.extraordinarias.filter((i) => i.decisao === 'reprovada').length +
-    sessao.revisar.filter((i) => i.decisao === 'reprovada').length
-
   const decisoesDespesa = [...sessao.extraordinarias, ...sessao.revisar]
     .filter((i) => i.decisao !== 'pendente')
     .map((i) => ({
@@ -386,18 +378,6 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
   }))
 
   const trilha = [...decisoesDespesa, ...decisoesInad]
-
-  const insights = gerarInsights({
-    saldoAjustado,
-    receitaAtual,
-    despesaAtual,
-    impactoInadMensal,
-    removido,
-    mantido,
-    grupos,
-    linhas: sessao.linhas_contas,
-    fluxoMensal,
-  })
 
   const tabs: { id: AbaResultado; label: string; count?: number }[] = [
     { id: 'executivo', label: 'Resumo' },
@@ -543,15 +523,6 @@ export default function TelaResultado({ sessao, onVoltar }: { sessao: Sessao; on
                   )}
                 </p>
               </div>
-            </Card>
-
-            <Card>
-              <SectionTitle title="Insights" subtitle="Pontos que merecem atenção." />
-              <ul className="insight-list">
-                {insights.map((item, idx) => (
-                  <li key={idx}>{item}</li>
-                ))}
-              </ul>
             </Card>
 
             <Card className="full">

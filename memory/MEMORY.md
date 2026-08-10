@@ -1,3 +1,4 @@
+- [Projeto — Previsão Orçamentária](project_previsao_orcamentaria.md) — Stack, deploy, arquivos-chave, convenções e o estado da última sessão; **Rebuild sem cache no EasyPanel pendente**
 - [R1 - Obras e Benfeitorias](r1-obras-benfeitorias.md) — Como a R1 decide que obras e benfeitorias são gastos extraordinários
 - [R2 - Pessoal Pontual](r2-pessoal-pontual.md) — Como a R2 identifica eventos pontuais de pessoal (rescisão, indenização) e os separa da folha recorrente
 - [R3 - Como Funciona](r3-como-funciona.md) — Explicação prática e visual de como a R3 funciona (Camada 1 estatística + Camada 2 IA)

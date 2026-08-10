@@ -836,7 +836,7 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
 @app.get('/api/sessao/{sid}/relatorio-pdf')
 def relatorio_pdf(sid: str, com_fundo: str = ''):
     """Relatorio final em PDF, para entrega ao condominio (logo + receitas/
-    despesas/quadro/insights/graficos/conclusao + Considerações Importantes).
+    despesas/quadro/graficos/conclusao + Considerações Importantes).
     Requer que o documento xlsx ja tenha sido gerado (mesma fonte de dados).
     Query param com_fundo: '0' = sem fundo, '1' = com fundo (default: usar valor salvo)."""
     estado = _carregar_estado(sid)

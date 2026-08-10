@@ -1252,32 +1252,6 @@ body {
   color: var(--text);
 }
 
-/* ── INSIGHTS ──────────────────────────── */
-.insight-list {
-  list-style: none;
-  padding: 0;
-}
-
-.insight-list li {
-  position: relative;
-  padding-left: 18px;
-  font-size: 15px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 8px;
-}
-
-.insight-list li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 /* ── CONCLUSION BOX ────────────────────── */
 .conclusion {
   border-left: 3px solid var(--accent);
