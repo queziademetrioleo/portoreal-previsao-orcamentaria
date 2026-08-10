@@ -67,7 +67,7 @@ def _logo_base64(logo_path):
 def _linha_e_total(label):
     n = _norm(label).strip()
     return (n == 'total' or 'subtotal' in n or 'saldo' in n or 'deficit' in n
-            or 'superavit' in n or 'inflacao' in n)
+            or 'superavit' in n or 'inflacao' in n or 'aumento' in n)
 
 
 def _linha_e_nota_final(label):
@@ -353,6 +353,7 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     fundo_reserva_anual = cenarios.get('fundo_reserva_anual') or 0
     total_previsto = resumo.get('total_previsto') or 0
     impacto_inad_mensal = resumo.get('impacto_receita_mensal') or 0
+    inflacao = float(resumo.get('inflacao') or 0)
 
     previsao_final = estado.get('previsao_final') or []
     receitas, despesas = _extrair_receitas_despesas(previsao_final)
@@ -463,6 +464,10 @@ def gerar_relatorio_pdf(estado, logo_path=None):
     )
     consideracoes = [f'{i + 1}) {texto}' for i, texto in enumerate(consideracoes)]
 
+    subtotal_mensal = sum(v for _, v in despesas)
+    aumento_mensal = subtotal_mensal * inflacao if inflacao > 0 else 0
+    total_despesas_mensal = subtotal_mensal + aumento_mensal
+
     ctx = {
         'logo_b64': _logo_base64(logo_path),
         'nome_condominio': estado.get('nome_condominio') or '',
@@ -471,7 +476,10 @@ def gerar_relatorio_pdf(estado, logo_path=None):
         'receitas': [(l, _money(v)) for l, v in receitas],
         'total_receitas': _money(sum(v for _, v in receitas)),
         'despesas': [(l, _money(v)) for l, v in despesas],
-        'total_despesas': _money(sum(v for _, v in despesas)),
+        'subtotal_mensal': _money(subtotal_mensal),
+        'inflacao_pct': f'{inflacao * 100:.1f}'.replace('.', ','),
+        'aumento_mensal': _money(aumento_mensal),
+        'total_despesas': _money(total_despesas_mensal),
         'com_fundo': {
             'receita_mensal': _money(receita_anual_com / 12),
             'despesa_mensal': _money(total_previsto / 12),
@@ -538,6 +546,7 @@ _HTML_TEMPLATE = r"""
   th { color: #52514e; font-weight: 700; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.total td { font-weight: 700; border-top: 2px solid #14110c; border-bottom: none; }
+  tr.subtotal td { font-weight: 700; border-top: 1px solid #898781; border-bottom: none; color: #52514e; }
   .quadros { display: flex; gap: 14px; }
   .quadro { flex: 1; border: 1px solid #e1e0d9; border-radius: 6px; padding: 10px 12px; }
   .quadro h3 { font-size: 12px; margin-bottom: 6px; color: #1c355e; }
@@ -592,7 +601,9 @@ _HTML_TEMPLATE = r"""
       <thead><tr><th>Conta</th><th class="num">Valor médio mensal</th></tr></thead>
       <tbody>
         {% for label, valor in despesas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
-        <tr class="total"><td>Total previsto mensal</td><td class="num">{{ total_despesas }}</td></tr>
+        <tr class="subtotal"><td>SUBTOTAL</td><td class="num">{{ subtotal_mensal }}</td></tr>
+        <tr><td>Aumento Previsto (Salários, tarifas, serviços) = {{ inflacao_pct }}%</td><td class="num">{{ aumento_mensal }}</td></tr>
+        <tr class="total"><td>TOTAL</td><td class="num">{{ total_despesas }}</td></tr>
       </tbody>
     </table>
   </div>
