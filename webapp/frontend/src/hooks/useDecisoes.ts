@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BASE, previewDocumento, reanalisarSessao, salvarDecisoes, type PayloadDecisoes } from '../api'
-import type { ItemInad, ItemRevisao, Sessao } from '../types'
+import type { ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
 
 export interface UseDecisoesReturn {
   extra: ItemRevisao[]
@@ -9,9 +9,12 @@ export interface UseDecisoesReturn {
   setRevisar: React.Dispatch<React.SetStateAction<ItemRevisao[]>>
   inad: ItemInad[]
   setInad: React.Dispatch<React.SetStateAction<ItemInad[]>>
+  lancamentos: LancamentoConta[]
+  decisoesLancamentos: Map<number, 'deduzir' | 'manter' | 'pendente'>
+  decidirLancamento: (id: number, decisao: 'deduzir' | 'manter') => void
   vivo: { subtotal: number; total: number; impacto: number }
   calculando: boolean
-  aoVivo: { dedExtra: number; dedRev: number; impacto: number }
+  aoVivo: { dedExtra: number; dedRev: number; dedLancamentos: number; impacto: number }
   buildPayload: () => PayloadDecisoes
   inflacao: number
   setInflacao: (v: number) => void
@@ -48,6 +51,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
+  const [lancamentos, setLancamentos] = useState<LancamentoConta[]>(sessao.lancamentos_contas ?? [])
   const [inflacao, setInflacao] = useState<number>(sessao.resumo.inflacao ?? 0.10)
   const [ultimoReajuste, setUltimoReajuste] = useState<string>(sessao.resumo.ultimo_reajuste ?? '')
 
@@ -57,6 +61,32 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     impacto: sessao.resumo.impacto_receita_mensal ?? 0,
   })
   const [calculando, setCalculando] = useState(false)
+
+  const decisoesLancamentos = useMemo(() => {
+    const decisoes = new Map<number, 'deduzir' | 'manter' | 'pendente'>()
+    lancamentos.forEach(item => {
+      decisoes.set(item.id, item.decisao ?? (
+        item.categoria_inicial === 'Extraordinaria' ? 'deduzir' :
+        item.categoria_inicial === 'Revisar' ? 'pendente' : 'manter'
+      ))
+    })
+    extra.forEach(item => decisoes.set(
+      item.id,
+      item.decisao === 'aprovada' ? 'deduzir' : item.decisao === 'pendente' ? 'pendente' : 'manter',
+    ))
+    revisar.forEach(item => decisoes.set(
+      item.id,
+      item.decisao === 'aprovada' ? 'deduzir' : item.decisao === 'pendente' ? 'pendente' : 'manter',
+    ))
+    return decisoes
+  }, [lancamentos, extra, revisar])
+
+  const decidirLancamento = useCallback((id: number, decisao: 'deduzir' | 'manter') => {
+    const decisaoRevisao = decisao === 'deduzir' ? 'aprovada' : 'reprovada'
+    setExtra(prev => prev.map(item => item.id === id ? { ...item, decisao: decisaoRevisao } : item))
+    setRevisar(prev => prev.map(item => item.id === id ? { ...item, decisao: decisaoRevisao } : item))
+    setLancamentos(prev => prev.map(item => item.id === id ? { ...item, decisao } : item))
+  }, [])
 
   // Resumo ao vivo sem backend (apenas deducoes locais)
   const aoVivo = useMemo(() => {
@@ -76,18 +106,25 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     unidades.forEach(vs => {
       impacto += vs.reduce((a, b) => a + b, 0) / vs.length
     })
-    return { dedExtra, dedRev, impacto }
-  }, [extra, revisar, inad])
+    const idsRevisao = new Set([...extra, ...revisar].map(item => item.id))
+    const dedLancamentos = lancamentos
+      .filter(item => !idsRevisao.has(item.id) && decisoesLancamentos.get(item.id) === 'deduzir')
+      .reduce((total, item) => total + item.valor_pago, 0)
+    return { dedExtra, dedRev, dedLancamentos, impacto }
+  }, [extra, revisar, inad, lancamentos, decisoesLancamentos])
 
   const buildPayload = useCallback((): PayloadDecisoes => {
     return {
       extraordinarias: payloadRevisao(extra),
       revisar: payloadRevisao(revisar),
       inadimplencia: payloadInad(inad),
+      lancamentos: Object.fromEntries(
+        [...decisoesLancamentos.entries()].map(([id, decisao]) => [String(id), { decisao }]),
+      ),
       inflacao_pct: inflacao,
       ultimo_reajuste: ultimoReajuste || null,
     }
-  }, [extra, revisar, inad, inflacao, ultimoReajuste])
+  }, [extra, revisar, inad, decisoesLancamentos, inflacao, ultimoReajuste])
 
   // Preview debounced (backend recalcula subtotal/total)
   const primeiraRender = useRef(true)
@@ -121,7 +158,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       }
     }, 350)
     return () => clearTimeout(t)
-  }, [extra, revisar, inad, inflacao, ultimoReajuste, sessao.sessao_id, buildPayload])
+  }, [extra, revisar, inad, lancamentos, inflacao, ultimoReajuste, sessao.sessao_id, buildPayload])
 
   // Salvar decisoes ao fechar/recarregar (beforeunload)
   useEffect(() => {
@@ -147,6 +184,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       setExtra(nova.extraordinarias)
       setRevisar(nova.revisar)
       setInad(nova.inadimplencia)
+      setLancamentos(nova.lancamentos_contas ?? [])
       setVivo({
         subtotal: nova.resumo.subtotal,
         total: nova.resumo.total_previsto,
@@ -171,6 +209,9 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     setRevisar,
     inad,
     setInad,
+    lancamentos,
+    decisoesLancamentos,
+    decidirLancamento,
     vivo,
     calculando,
     aoVivo,

@@ -1619,9 +1619,7 @@ def recalcular(R, inflacao_pct=None):
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
                 regra = 'Recorrente: manutencao em grupo Diversas — mantida integral'
             elif any(k in nc for k in DIVERSAS_GENERICAS):
-                extra_est = outliers_est.get((ng, nc), 0.0)
-                ex_ia = extra_por_classe.get((ng, nc), 0.0)
-                ex = max(extra_est, ex_ia)
+                ex = extra_por_classe.get((ng, nc), 0.0)
                 if ex > 0:
                     ded = min(ex, base)
                     prov_laudo += ded
@@ -1641,7 +1639,10 @@ def recalcular(R, inflacao_pct=None):
             if 'pensao' in nc and (l['n_meses'] or 0) >= 6:
                 regra = 'Pessoal pontual: pensao continua — revisar'
             else:
-                ded, final, regra = base, 0.0, 'R2: pessoal pontual deduzido — revisar'
+                ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+                final = base - ded
+                regra = ('R2: lançamentos pontuais identificados'
+                         if ded > 0.005 else 'R2: mantido na revisão')
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ded, regra = base - final, 'R6: media ultimos 3 meses x 12'

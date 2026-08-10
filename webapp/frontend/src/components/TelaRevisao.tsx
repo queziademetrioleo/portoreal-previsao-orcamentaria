@@ -199,6 +199,9 @@ export default function TelaRevisao({
     setRevisar,
     inad,
     setInad,
+    lancamentos,
+    decisoesLancamentos,
+    decidirLancamento,
     vivo,
     calculando,
     aoVivo,
@@ -225,7 +228,7 @@ export default function TelaRevisao({
     extra.filter((i) => i.decisao === 'pendente').length +
     revisar.filter((i) => i.decisao === 'pendente').length
 
-  const removidos = [...extra, ...revisar].filter((i) => i.decisao === 'aprovada')
+  const removidos = [...decisoesLancamentos.values()].filter((decisao) => decisao === 'deduzir').length
   const saldo = receitaAtual - vivo.total
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
@@ -263,28 +266,24 @@ export default function TelaRevisao({
     { id: 'extraordinarios', label: 'Gastos pontuais', count: extra.length },
     { id: 'ordinarias', label: 'Gastos a revisar', count: revisar.length },
     { id: 'inadimplentes', label: 'Inadimplência', count: inad.length },
-    { id: 'contas', label: 'Contas calculadas', count: (sessao.lancamentos_contas ?? []).length },
+    { id: 'contas', label: 'Contas calculadas', count: lancamentos.length },
   ]
 
   const lancamentosAuditaveis = useMemo<LancamentoAuditavel[]>(() => {
-    const decisoes = new Map<number, string>([
-      ...extra.map((item) => [item.id, item.decisao] as const),
-      ...revisar.map((item) => [item.id, item.decisao] as const),
-    ])
-    return (sessao.lancamentos_contas ?? []).map((item) => {
-      const decisao = decisoes.get(item.id)
-      const deduzido = decisao === 'aprovada'
+    return lancamentos.map((item) => {
+      const decisao = decisoesLancamentos.get(item.id) ?? 'manter'
+      const deduzido = decisao === 'deduzir'
       return {
         ...item,
         deduzido,
         status: deduzido
-          ? 'Deduzido da previsão'
+          ? 'Gasto extraordinário — deduzido'
           : decisao === 'pendente'
             ? 'Aguardando decisão'
-            : 'Mantido na previsão',
+            : 'Gasto recorrente — mantido',
       }
     })
-  }, [sessao.lancamentos_contas, extra, revisar])
+  }, [lancamentos, decisoesLancamentos])
 
   const contasPorGrupo = useMemo(() => {
     const grupos = new Map<string, Map<string, LancamentoAuditavel[]>>()
@@ -349,7 +348,7 @@ export default function TelaRevisao({
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <NumberBlock label="Valor transportado (anual)" value={money(sessao.resumo.base_total)} />
-          <NumberBlock label="Removido na revisão" value={money(aoVivo.dedExtra + aoVivo.dedRev)} />
+          <NumberBlock label="Removido na revisão" value={money(aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos)} />
           <NumberBlock
             label="Total previsto (anual)"
             value={calculando ? '...' : money(vivo.total)}
@@ -367,7 +366,7 @@ export default function TelaRevisao({
             <Card padding="md">
               <h2 className="section-title">Cálculo</h2>
               <div className="calc-row"><span>Base 12 meses</span><strong>{money(sessao.resumo.base_total)}</strong></div>
-              <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev)}</strong></div>
+              <div className="calc-row"><span>Itens removidos</span><strong>- {money(aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos)}</strong></div>
               <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
               <div className="calc-row">
                 <span>Aumento previsto ({(inflacao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% sobre o subtotal)</span>
@@ -401,7 +400,7 @@ export default function TelaRevisao({
                     Quantidade de gastos extraordinários retirados da previsão.
                   </p>
                   <div className="number-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                    <NumberBlock label="Itens extraordinários removidos" value={String(removidos.length)} />
+                    <NumberBlock label="Itens extraordinários removidos" value={String(removidos)} />
                   </div>
                 </Card>
 
@@ -497,7 +496,7 @@ export default function TelaRevisao({
                 <p className="section-desc">
                   Veja cada lançamento que forma as contas. Apenas os itens marcados como gasto pontual são deduzidos da previsão.
                 </p>
-                <p className="audit-legend"><span className="audit-dot deducted" /> Deduzido da previsão <span className="audit-dot kept" /> Mantido na previsão</p>
+                <p className="audit-legend"><span className="audit-dot deducted" /> Gasto extraordinário — deduzido <span className="audit-dot kept" /> Gasto recorrente — mantido</p>
                 {contasPorGrupo.length === 0 ? (
                   <p className="table-empty">Nenhum lançamento disponível para esta sessão.</p>
                 ) : (
@@ -520,13 +519,19 @@ export default function TelaRevisao({
                                 </div>
                                 <div className="audit-table-wrap">
                                   <table className="audit-table">
-                                    <thead><tr><th>Data</th><th>Descrição</th><th className="num">Valor pago</th><th>Status</th></tr></thead>
+                                    <thead><tr><th>Data</th><th>Descrição</th><th className="num">Valor pago</th><th>Status</th><th>Decisão</th></tr></thead>
                                     <tbody>{itens.map((item) => (
                                       <tr key={item.id} className={item.deduzido ? 'is-deducted' : ''}>
                                         <td>{item.data || '—'}</td>
                                         <td><strong>{item.descricao || 'Sem descrição'}</strong>{item.motivo && <small>{item.motivo}</small>}</td>
                                         <td className="num">{money(item.valor_pago)}</td>
                                         <td><span className={`audit-status ${item.deduzido ? 'deducted' : item.status === 'Aguardando decisão' ? 'pending' : 'kept'}`}>{item.status}</span></td>
+                                        <td>
+                                          <div className="audit-actions" role="group" aria-label={`Decisão para ${item.descricao || item.classe}`}>
+                                            <button type="button" className={`audit-decision keep ${!item.deduzido && item.status !== 'Aguardando decisão' ? 'active' : ''}`} onClick={() => decidirLancamento(item.id, 'manter')} title="Manter como gasto recorrente" aria-label="Manter como gasto recorrente">✓</button>
+                                            <button type="button" className={`audit-decision deduct ${item.deduzido ? 'active' : ''}`} onClick={() => decidirLancamento(item.id, 'deduzir')} title="Marcar como gasto extraordinário e deduzir" aria-label="Marcar como gasto extraordinário e deduzir">×</button>
+                                          </div>
+                                        </td>
                                       </tr>
                                     ))}</tbody>
                                   </table>

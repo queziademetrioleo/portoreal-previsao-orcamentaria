@@ -55,6 +55,7 @@ export interface LancamentoConta {
   valor_pago: number
   categoria_inicial: string
   motivo: string
+  decisao?: 'deduzir' | 'manter' | 'pendente'
 }
 
 export interface LinhaPrevisaoFinal {

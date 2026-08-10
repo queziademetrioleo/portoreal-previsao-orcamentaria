@@ -887,6 +887,14 @@ body {
 .audit-status.deducted { color: var(--negative); background: var(--negative-bg); }
 .audit-status.kept { color: var(--positive); background: var(--positive-bg); }
 .audit-status.pending { color: var(--warning); background: var(--warning-bg); }
+.audit-actions { display: flex; align-items: center; gap: 6px; }
+.audit-decision { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); font-size: 19px; font-weight: 800; line-height: 1; cursor: pointer; transition: transform .12s, background .12s, color .12s, border-color .12s; }
+.audit-decision:hover { transform: translateY(-1px); }
+.audit-decision.keep { color: var(--positive); }
+.audit-decision.keep:hover, .audit-decision.keep.active { color: #fff; background: var(--positive); border-color: var(--positive); }
+.audit-decision.deduct { color: var(--negative); }
+.audit-decision.deduct:hover, .audit-decision.deduct.active { color: #fff; background: var(--negative); border-color: var(--negative); }
+.audit-decision:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 700px) { .audit-group summary, .audit-class-header { align-items: flex-start; flex-direction: column; } .audit-group summary > span:last-child, .audit-class-header > div:last-child { text-align: left; } }
 
 /* ── REVIEW EDITOR CARDS ──────────────── */

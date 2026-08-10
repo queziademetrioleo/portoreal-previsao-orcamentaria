@@ -332,6 +332,10 @@ def _aplicar_decisoes(estado, dec):
     for item in estado['inadimplencia']:
         d, valor, nota = _decisao_payload(dec.inadimplencia, item['id'])
         _aplicar_decisao_editavel(item, d, valor, nota, ('abater', 'ignorar'))
+    for item in estado.get('lancamentos_contas') or []:
+        d, _, _ = _decisao_payload(dec.lancamentos, item['id'])
+        if d in ('deduzir', 'manter', 'pendente'):
+            item['decisao'] = d
 
 
 def _recalcular_com_decisoes(sid, estado):
@@ -339,6 +343,10 @@ def _recalcular_com_decisoes(sid, estado):
     Retorna (R2, impacto_receita). Nao gera xlsx."""
     ids_remover = {i['id'] for i in estado['extraordinarias'] if i['decisao'] == 'aprovada'}
     ids_remover |= {i['id'] for i in estado['revisar'] if i['decisao'] == 'aprovada'}
+    ids_remover |= {
+        i['id'] for i in (estado.get('lancamentos_contas') or [])
+        if i.get('decisao') == 'deduzir'
+    }
 
     R = copy.deepcopy(_obter_R(sid))
     R['inflacao_pct'] = float(estado['resumo'].get('inflacao') or core.INFLACAO)
@@ -374,6 +382,9 @@ def _montar_lancamentos_contas(des):
         'valor_pago': round(float(it.get('valor_pago') or 0), 2),
         'categoria_inicial': it.get('cat') or 'Recorrente',
         'motivo': it.get('motivo') or '',
+        'decisao': ('deduzir' if it.get('cat') == 'Extraordinaria'
+                    else 'pendente' if it.get('cat') == 'Revisar'
+                    else 'manter'),
     } for idx, it in enumerate((des or {}).get('itens') or [])]
 
 
@@ -489,6 +500,7 @@ class Decisoes(BaseModel):
     extraordinarias: dict = Field(default_factory=dict)
     revisar: dict = Field(default_factory=dict)
     inadimplencia: dict = Field(default_factory=dict)
+    lancamentos: dict = Field(default_factory=dict)
     # Fracao (ex.: 0.10). None = manter o valor atual da sessao.
     inflacao_pct: float | None = Field(default=None, ge=0.0, le=1.0)
     # 'AAAA-MM' (ex.: '2022-03') — mes/ano do ultimo reajuste da taxa
@@ -705,9 +717,21 @@ def _salvar_estado_sync(sid, estado):
 @app.get('/api/sessao/{sid}')
 def obter_sessao(sid: str):
     estado = _carregar_estado(sid)
-    if 'lancamentos_contas' not in estado:
+    lancamentos = estado.get('lancamentos_contas') or []
+    precisa_migrar = 'lancamentos_contas' not in estado or any(
+        'decisao' not in item for item in lancamentos
+    )
+    if precisa_migrar:
         R = _obter_R(sid)
         estado['lancamentos_contas'] = _montar_lancamentos_contas(R.get('des'))
+        decisoes_existentes = {
+            item['id']: ('deduzir' if item.get('decisao') == 'aprovada' else
+                         'pendente' if item.get('decisao') == 'pendente' else 'manter')
+            for item in (estado.get('extraordinarias') or []) + (estado.get('revisar') or [])
+        }
+        for item in estado['lancamentos_contas']:
+            if item['id'] in decisoes_existentes:
+                item['decisao'] = decisoes_existentes[item['id']]
         db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
         logger.info(
             'Sessao %s migrada: %d lancamentos adicionados a auditoria de contas',

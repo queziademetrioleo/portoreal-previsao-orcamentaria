@@ -12,6 +12,7 @@ export interface PayloadDecisoes {
   extraordinarias: Record<string, DecisaoEditavel>
   revisar: Record<string, DecisaoEditavel>
   inadimplencia: Record<string, DecisaoEditavel>
+  lancamentos: Record<string, DecisaoEditavel>
   inflacao_pct?: number | null
   ultimo_reajuste?: string | null
   com_fundo?: boolean
