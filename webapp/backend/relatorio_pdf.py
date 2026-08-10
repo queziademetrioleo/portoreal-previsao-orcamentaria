@@ -53,6 +53,45 @@ def _data_extenso(d=None):
     return f'{d.day} de {MESES_PT[d.month - 1]} de {d.year}'
 
 
+def _tempo_desde_reajuste(ano, mes, hoje=None):
+    """Formata o intervalo completo desde o reajuste em anos e/ou meses."""
+    hoje = hoje or date.today()
+    total_meses = max(0, (hoje.year - int(ano)) * 12 + hoje.month - int(mes))
+    anos, meses = divmod(total_meses, 12)
+
+    partes = []
+    if anos:
+        partes.append(f'{anos} {"ano" if anos == 1 else "anos"}')
+    if meses or not partes:
+        partes.append(f'{meses} {"mês" if meses == 1 else "meses"}')
+    return ' e '.join(partes)
+
+
+def _reajuste_necessario(total_previsto, receita_total):
+    """Percentual para a receita alcançar o total: TOTAL / RECEITA - 1."""
+    receita_total = float(receita_total or 0)
+    if receita_total <= 0:
+        return 0.0
+    return max(0.0, float(total_previsto or 0) / receita_total - 1)
+
+
+def _consideracao_fundo_reserva(incluir_fundo, total_previsto,
+                                receita_com_fundo, receita_sem_fundo):
+    receita_escolhida = receita_com_fundo if incluir_fundo else receita_sem_fundo
+    reajuste = _reajuste_necessario(total_previsto, receita_escolhida)
+    if not incluir_fundo:
+        return (
+            f'Recomendamos um reajuste de {_pct(reajuste)}% na taxa condominial para os próximos '
+            '12 meses.'
+        )
+    return (
+        'Sugestão: como foi selecionada a utilização dos valores arrecadados para a constituição '
+        'do Fundo de Reserva no custeio das despesas ordinárias — prática não recomendada —, '
+        f'o reajuste necessário da taxa condominial é de {_pct(reajuste)}% para os próximos '
+        '12 meses. O percentual foi calculado pela fórmula Total Previsto ÷ Receita Total − 1.'
+    )
+
+
 def _logo_base64(logo_path):
     if not logo_path or not os.path.exists(logo_path):
         return None
@@ -339,42 +378,64 @@ def _grafico_mensal_svg(fluxo_mensal):
 
 
 # ---------------------------------------------------------------------------
-# Considerações Importantes — itens 3 e 4 (composicao dinamica)
+# Considerações Importantes — composição completa das categorias resumidas
 # ---------------------------------------------------------------------------
-_CONSERVACAO_ITENS = [
-    (re.compile(r'el[ée]tric', re.I), 'elétrica'),
-    (re.compile(r'hidr[áa]ulic', re.I), 'hidráulica'),
-    (re.compile(r'port[ãa]o', re.I), 'portão'),
-    (re.compile(r'c[âa]mera', re.I), 'câmeras'),
-    (re.compile(r'dedetiza', re.I), 'dedetização'),
-    (re.compile(r'extintor', re.I), 'recarga de extintores'),
-    (re.compile(r'fossa|caixa.{0,3}gordura', re.I), 'limpeza de fossa e caixas de gordura'),
-    (re.compile(r'caixa.{0,3}[da].{0,3}gua', re.I), "limpeza de caixas d'água"),
-    (re.compile(r'elevador', re.I), 'reparo no elevador'),
-    (re.compile(r'\bbomba\b', re.I), 'conserto de bomba'),
-    (re.compile(r'cartori|custas judicia', re.I), 'despesas cartoriais e custas judiciais'),
-    (re.compile(r'reform|reparo', re.I), 'pequenas reformas e reparos'),
-]
-_ADMINISTRATIVAS_ITENS = [
-    (re.compile(r'expediente|material de escrit', re.I), 'material de expediente'),
-    (re.compile(r'xerox|c[óo]pia', re.I), 'xerox'),
-    (re.compile(r'correio|sedex|correspond', re.I), 'correio'),
-]
+def _adicionar_sem_repetir(destino, valor):
+    valor = ' '.join(str(valor or '').split()).strip()
+    if valor and _norm(valor) not in {_norm(item) for item in destino}:
+        destino.append(valor)
 
 
-def _itens_presentes(linhas, grupo_norm_alvo, catalogo):
-    presentes = []
-    for l in linhas:
-        if _norm(l.get('grupo')) != grupo_norm_alvo:
+def _eh_material_limpeza(linha):
+    classe = _norm(linha.get('classe'))
+    return 'limpeza' in classe and any(
+        termo in classe for termo in ('material', 'produto', 'mat.')
+    )
+
+
+def _componentes_conservacao(linhas, resumo):
+    """Classes que formam exatamente a categoria Gastos com conservação."""
+    componentes = []
+    for linha in linhas or []:
+        if abs(float(linha.get('final') or 0)) <= 0.005 or _eh_material_limpeza(linha):
             continue
-        if abs(l.get('final') or 0) <= 0.005:
+        grupo = _norm(linha.get('grupo'))
+        classe = _norm(linha.get('classe'))
+        pertence = ('conservacao' in grupo
+                     or ('diversas' in grupo and 'seguro' not in classe))
+        if pertence:
+            _adicionar_sem_repetir(componentes, linha.get('classe'))
+
+    if abs(float(resumo.get('prov_laudo') or 0)) > 0.005:
+        _adicionar_sem_repetir(componentes, 'Provisão para Laudo de Autovistoria')
+    if abs(float(resumo.get('prov_incendio') or 0)) > 0.005:
+        _adicionar_sem_repetir(componentes, 'Provisão para Sistema de Incêndio/Registro')
+    return componentes
+
+
+def _componentes_administrativas(linhas):
+    """Classes que formam exatamente a categoria Despesas Administrativas."""
+    componentes = []
+    for linha in linhas or []:
+        if abs(float(linha.get('final') or 0)) <= 0.005:
             continue
-        classe = l.get('classe') or ''
-        for padrao, rotulo in catalogo:
-            if padrao.search(classe) and rotulo not in presentes:
-                presentes.append(rotulo)
-                break
-    return presentes
+        grupo = _norm(linha.get('grupo'))
+        classe = _norm(linha.get('classe'))
+        consumida_em_outra_categoria = (
+            _eh_material_limpeza(linha)
+            or 'tarifas bancarias' in grupo or 'tarifas bancarias' in classe
+            or ('seguro' in classe and 'vida' not in classe)
+            or 'contrato' in grupo or 'pro-labore' in grupo or 'prolabore' in grupo
+        )
+        if 'administrativa' in grupo and not consumida_em_outra_categoria:
+            _adicionar_sem_repetir(componentes, linha.get('classe'))
+    return componentes
+
+
+def _lista_portugues(itens):
+    if len(itens) <= 1:
+        return ''.join(itens)
+    return ', '.join(itens[:-1]) + ' e ' + itens[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -419,14 +480,6 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     saldo_ajustado_anual = resultado_com - impacto_inad_mensal * 12
     status = com_fundo.get('status_resultado') or core._status_resultado(saldo_ajustado_anual)
 
-    # Meta do reajuste NAO e zerar o resultado (ponto de equilibrio) — e atingir a
-    # mesma margem de seguranca (SUPERAVIT_MINIMO, R$2.000/mes) usada no restante
-    # do relatorio. Sem isso, o reajuste ficava 0,0% mesmo quando o Quadro de
-    # leitura classificava o resultado como "Superavit insuficiente" logo acima.
-    meta_receita = total_previsto + core.SUPERAVIT_MINIMO
-    reajuste_com = max(0.0, (meta_receita / receita_anual_com - 1)) if receita_anual_com > 0 else 0.0
-    reajuste_sem = max(0.0, (meta_receita / receita_anual_sem - 1)) if receita_anual_sem > 0 else 0.0
-
     pizza = _grafico_pizza_svg(grupos, total_grupo)
     grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
 
@@ -455,17 +508,17 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
             f'subtraímos {plural} receita mensal os valores das taxas condominiais dessa(s) unidade(s).'
         )
 
-    conservacao_itens = _itens_presentes(linhas, 'conservacao', _CONSERVACAO_ITENS)
+    conservacao_itens = _componentes_conservacao(linhas, resumo)
     if conservacao_itens:
         consideracoes.append(
-            'O item "Gastos com conservação" é composto de despesas de manutenção, tais como: '
-            + ', '.join(conservacao_itens) + '.'
+            'O item "Gastos com conservação" é composto pelas seguintes despesas de manutenção: '
+            + _lista_portugues(conservacao_itens) + '.'
         )
-    administrativas_itens = _itens_presentes(linhas, 'despesas administrativas', _ADMINISTRATIVAS_ITENS)
+    administrativas_itens = _componentes_administrativas(linhas)
     if administrativas_itens:
         consideracoes.append(
-            'O item "Despesas Administrativas" é composto por gastos com: '
-            + ', '.join(administrativas_itens) + '.'
+            'O item "Despesas Administrativas" é composto pelas seguintes despesas: '
+            + _lista_portugues(administrativas_itens) + '.'
         )
 
     consideracoes.append(
@@ -476,23 +529,16 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     if ultimo_reajuste_raw:
         ano_r, mes_r = ultimo_reajuste_raw.split('-')
         mes_nome = MESES_PT[int(mes_r) - 1].upper()
-        anos_passados = date.today().year - int(ano_r)
-        if date.today().month < int(mes_r):
-            anos_passados -= 1
-        anos_passados = max(anos_passados, 0)
-        sufixo = 'ano' if anos_passados == 1 else 'anos'
+        tempo_passado = _tempo_desde_reajuste(ano_r, mes_r)
         consideracoes.append(
             f'O último reajuste do valor da Taxa de Condomínio ocorreu em {mes_nome}/{ano_r}, '
-            f'ou seja, há {anos_passados} {sufixo} sem aumento.'
+            f'ou seja, há {tempo_passado} sem aumento.'
         )
 
-    consideracoes.append(
-        'Sugestão: caso os valores arrecadados para a constituição do Fundo de Reserva sejam '
-        'utilizados para o custeio de despesas ordinárias — prática não recomendada —, sugerimos um '
-        f'reajuste de {_pct(reajuste_com)}% na taxa condominial. No entanto, caso os recursos do Fundo '
-        'de Reserva sejam preservados para sua finalidade original, recomendamos um reajuste de '
-        f'{_pct(reajuste_sem)}% na taxa condominial para os próximos 12 meses.'
+    consideracao_fundo = _consideracao_fundo_reserva(
+        com_fundo_pref, total_previsto, receita_anual_com, receita_anual_sem,
     )
+    consideracoes.append(consideracao_fundo)
     consideracoes.append(
         'Lembramos que o reajuste aplicado incidirá também sobre o valor arrecadado para o Fundo de Reserva.'
     )
