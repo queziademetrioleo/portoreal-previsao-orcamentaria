@@ -39,10 +39,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nome.trim()) {
-      setErro('Informe o nome do condomínio.')
-      return
-    }
     if (!ano || ano < 2020 || ano > 2035) {
       setErro('Informe um ano válido (2020–2035).')
       return
@@ -157,13 +153,13 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
 
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="form-label">Condomínio</label>
+                <label className="form-label">Condomínio (opcional — detectado automaticamente)</label>
                 <input
                   className="form-input"
                   type="text"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  placeholder="Nome do condomínio"
+                  placeholder="Será detectado do arquivo REC"
                 />
               </div>
 

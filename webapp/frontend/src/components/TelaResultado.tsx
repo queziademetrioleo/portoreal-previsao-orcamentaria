@@ -49,16 +49,25 @@ function fallbackRows(sessao: Sessao): LinhaPrevisaoFinal[] {
   const r = sessao.resumo
   const inflacao = r.inflacao || 0
   const saldo = r.receita_anual - r.total_previsto
-  return [
+  const cen = r.cenarios
+  const frMensal = cen ? cen.fundo_reserva_anual / 12 : 0
+  const rows: LinhaPrevisaoFinal[] = [
     { row: 9, label: 'RECEITAS', anual: 'VALOR MENSAL', rateio: null, mensal: null },
     { row: 10, label: 'Receita média do período', anual: r.receita_mensal, rateio: null, mensal: null },
+  ]
+  // Fundo de reserva como linha separada (quando disponivel via REC)
+  if (Math.abs(frMensal) > 0.005) {
+    rows.push({ row: 11, label: 'Fundo de Reserva', anual: frMensal, rateio: null, mensal: null })
+  }
+  rows.push(
     { row: 19, label: 'TOTAL', anual: r.receita_mensal, rateio: null, mensal: null },
     { row: 21, label: 'DESPESAS', anual: 'VALOR MENSAL', rateio: null, mensal: null },
     { row: 47, label: 'SUBTOTAL', anual: r.subtotal / 12, rateio: null, mensal: null },
     { row: 48, label: `PREVISÃO DE INFLAÇÃO - ${(inflacao * 100).toFixed(1)}%`, anual: (r.subtotal * inflacao) / 12, rateio: null, mensal: null },
     { row: 50, label: 'TOTAL', anual: r.total_previsto / 12, rateio: null, mensal: null },
     { row: 52, label: saldo < 0 ? 'SALDO (DÉFICIT)' : 'SALDO (SUPERÁVIT)', anual: saldo / 12, rateio: null, mensal: null },
-  ]
+  )
+  return rows
 }
 
 function valorMensal(row: LinhaPrevisaoFinal) {

@@ -29,6 +29,7 @@ export interface ItemInad {
   decisao: 'abater' | 'ignorar'
   valor_editado?: number
   nota?: string
+  ultima_parcela?: string
   explicacao?: {
     resumo: string
     evidencias: string[]

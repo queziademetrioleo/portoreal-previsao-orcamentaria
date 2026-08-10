@@ -215,6 +215,17 @@ def deletar_sessao(sid):
         conn.close()
 
 
+def atualizar_nome_condominio(sid, nome):
+    """Atualiza o nome do condominio apos deteccao automatica pelo REC."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE sessoes SET nome_condominio = %s WHERE id = %s", (nome, sid))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def verificar_conexao():
     try:
         conn = get_conn()

@@ -429,6 +429,15 @@ def _montar_estado(sid, nome, ano, R):
 
     inad_itens = []
     if R['inad']:
+        # Calcular a ultima parcela (mes_ref mais recente) por unidade
+        ultima_parcela_por_unidade = {}
+        for it in R['inad']['itens']:
+            u = it['unidade']
+            mes = it.get('mes_ref', '')
+            atual = ultima_parcela_por_unidade.get(u, '')
+            if mes > atual:
+                ultima_parcela_por_unidade[u] = mes
+
         for i, it in enumerate(R['inad']['itens']):
             critica = it.get('critica', (it['meses_atraso'] or 0) >= 3)
             inad_itens.append({
@@ -441,6 +450,7 @@ def _montar_estado(sid, nome, ano, R):
                 'meses_atraso': it['meses_atraso'],
                 'critica': critica,
                 'decisao': 'abater' if critica else 'ignorar',
+                'ultima_parcela': ultima_parcela_por_unidade.get(it['unidade'], it.get('mes_ref', '')),
             })
 
     linhas = [{
@@ -537,9 +547,10 @@ async def criar_sessao(
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
 ):
-    # Validar nome
-    if not nome_condominio.strip():
-        raise HTTPException(400, 'Nome do condominio e obrigatorio')
+    # Nome agora é opcional — o sistema detecta automaticamente do arquivo REC
+    # (feedback CEO 07/2026). Se vazio, usamos placeholder que será substituído
+    # na análise SSE assim que o REC for processado.
+    nome_condominio = (nome_condominio or '').strip() or '(Detectando...)'
 
     sid = uuid.uuid4().hex[:12]
 
@@ -636,6 +647,14 @@ async def analisar_sse(sid: str):
 
                 nome = row['nome_condominio']
                 ano = row['ano_previsao']
+
+                # Nome automatico (feedback CEO 07/2026): extrai do REC se
+                # disponivel e atualiza a sessao no banco.
+                rec_nome = (R.get('rec') or {}).get('nome_condominio')
+                if rec_nome and rec_nome.strip():
+                    nome = rec_nome.strip()
+                    db.atualizar_nome_condominio(sid, nome)
+
                 estado = _montar_estado(sid, nome, ano, R)
                 _salvar_estado_sync(sid, estado)
 

@@ -17,6 +17,7 @@ export interface UseDecisoesReturn {
   setInflacao: (v: number) => void
   ultimoReajuste: string
   setUltimoReajuste: (v: string) => void
+  recalcularAgora: () => Promise<void>
 }
 
 function valorAtual(i: { valor: number; valor_editado?: number }) {
@@ -136,6 +137,25 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [buildPayload, sessao.sessao_id])
 
+  // Recalculo manual imediato (botao "Recalcular" na interface)
+  const recalcularAgora = useCallback(async () => {
+    setCalculando(true)
+    try {
+      const payload = buildPayload()
+      const r = await previewDocumento(sessao.sessao_id, payload)
+      setVivo({
+        subtotal: r.subtotal,
+        total: r.total_previsto,
+        impacto: r.impacto_receita_mensal,
+      })
+      await salvarDecisoes(sessao.sessao_id, payload)
+    } catch {
+      /* mantem ultimo valor */
+    } finally {
+      setCalculando(false)
+    }
+  }, [buildPayload, sessao.sessao_id])
+
   return {
     extra,
     setExtra,
@@ -151,5 +171,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     setInflacao,
     ultimoReajuste,
     setUltimoReajuste,
+    recalcularAgora,
   }
 }

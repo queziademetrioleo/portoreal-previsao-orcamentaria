@@ -143,6 +143,7 @@ function EditorInad({
           <span>Ref. {item.mes_ref}</span>
           <span>Venc. {item.vencimento || '—'}</span>
           <span>{item.meses_atraso} meses atraso</span>
+          {item.ultima_parcela && <span>Última parcela: {item.ultima_parcela}</span>}
           {item.critica && <span>Crítica</span>}
         </p>
       </div>
@@ -217,6 +218,7 @@ export default function TelaRevisao({
     setInflacao,
     ultimoReajuste,
     setUltimoReajuste,
+    recalcularAgora,
   } = useDecisoes(sessao)
 
   const [aba, setAba] = useState<Aba>('relatorio')
@@ -381,6 +383,17 @@ export default function TelaRevisao({
               <div className="calc-row strong"><span>Total previsto (anual)</span><strong>{money(vivo.total)}</strong></div>
               <div className="calc-row"><span>Receita anual</span><strong>{money(sessao.resumo.receita_anual)}</strong></div>
               <div className="calc-row"><span>Impacto inad.</span><strong>{money(vivo.impacto)}/mês</strong></div>
+              <div style={{ marginTop: 10 }}>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={recalcularAgora}
+                  disabled={calculando}
+                  full
+                >
+                  {calculando ? 'Recalculando...' : '🔄 Recalcular'}
+                </Button>
+              </div>
             </Card>
           </aside>
 
