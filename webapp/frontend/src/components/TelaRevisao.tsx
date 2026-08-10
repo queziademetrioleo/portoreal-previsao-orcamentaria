@@ -360,7 +360,7 @@ export default function TelaRevisao({
               <div className="calc-row strong"><span>Subtotal</span><strong>{money(vivo.subtotal)}</strong></div>
               <div className="calc-row inflacao-row">
                 <span>
-                  Inflação{' '}
+                  Aumento Previsto (Salários, tarifas, serviços) ={' '}
                   <input
                     type="number"
                     className="inflacao-input"
@@ -372,7 +372,7 @@ export default function TelaRevisao({
                       const pct = parseFloat(e.target.value)
                       if (Number.isFinite(pct) && pct >= 0 && pct <= 100) setInflacao(pct / 100)
                     }}
-                    aria-label="Percentual de inflação"
+                    aria-label="Percentual de aumento previsto"
                   />%
                 </span>
                 <strong>{money(vivo.total - vivo.subtotal)}</strong>

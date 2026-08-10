@@ -839,7 +839,7 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 _set_se_nao_formula(r, 6, round(subtotal_val / 12, 2))
             elif 'infla' in n3 and 'previsao' in n3:
                 pct_txt = f'{inflacao * 100:.2f}'.replace('.', ',').rstrip('0').rstrip(',')
-                ws_p.cell(r, 3).value = f'PREVISÃO DE INFLAÇÃO - {pct_txt}%'
+                ws_p.cell(r, 3).value = f'Aumento Previsto (Salários, tarifas, serviços) = {pct_txt}%'
                 _set_se_nao_formula(r, 4, round(subtotal_val * inflacao, 2))
                 _set_se_nao_formula(r, 5, round(inflacao, 4))
             elif n3 == 'total':

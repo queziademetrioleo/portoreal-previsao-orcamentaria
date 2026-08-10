@@ -63,7 +63,7 @@ function fallbackRows(sessao: Sessao): LinhaPrevisaoFinal[] {
     { row: 19, label: 'TOTAL', anual: r.receita_mensal, rateio: null, mensal: null },
     { row: 21, label: 'DESPESAS', anual: 'VALOR MENSAL', rateio: null, mensal: null },
     { row: 47, label: 'SUBTOTAL', anual: r.subtotal / 12, rateio: null, mensal: null },
-    { row: 48, label: `PREVISÃO DE INFLAÇÃO - ${(inflacao * 100).toFixed(1)}%`, anual: (r.subtotal * inflacao) / 12, rateio: null, mensal: null },
+    { row: 48, label: `Aumento Previsto (Salários, tarifas, serviços) = ${(inflacao * 100).toFixed(1)}%`, anual: (r.subtotal * inflacao) / 12, rateio: null, mensal: null },
     { row: 50, label: 'TOTAL', anual: r.total_previsto / 12, rateio: null, mensal: null },
     { row: 52, label: saldo < 0 ? 'SALDO (DÉFICIT)' : 'SALDO (SUPERÁVIT)', anual: saldo / 12, rateio: null, mensal: null },
   )
