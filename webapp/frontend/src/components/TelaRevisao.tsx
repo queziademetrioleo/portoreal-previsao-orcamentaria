@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ItemInad, ItemRevisao, Sessao } from '../types'
+import type { ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
 import { useDecisoes } from '../hooks/useDecisoes'
 import { gerarRelatorioPdf } from '../api'
 import { money } from '../utils/format'
@@ -10,12 +10,15 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import NumberBlock from './ui/NumberBlock'
 import TabBar from './ui/TabBar'
-import DataTable from './ui/DataTable'
-import InfoModal from './ui/InfoModal'
 
 /* ─── helpers ─────────────────────────── */
 
 type Aba = 'relatorio' | 'extraordinarios' | 'ordinarias' | 'inadimplentes' | 'contas'
+
+type LancamentoAuditavel = LancamentoConta & {
+  deduzido: boolean
+  status: string
+}
 
 function parseValor(value: string) {
   const n = Number(value.replace(',', '.'))
@@ -260,35 +263,50 @@ export default function TelaRevisao({
     { id: 'extraordinarios', label: 'Gastos pontuais', count: extra.length },
     { id: 'ordinarias', label: 'Gastos a revisar', count: revisar.length },
     { id: 'inadimplentes', label: 'Inadimplência', count: inad.length },
-    { id: 'contas', label: 'Contas calculadas', count: sessao.linhas_contas.length },
+    { id: 'contas', label: 'Contas calculadas', count: (sessao.lancamentos_contas ?? []).length },
   ]
 
-  const contasColumns = [
-    { key: 'grupo', header: 'Grupo', render: (r: Record<string, unknown>) => r.grupo as string },
-    { key: 'classe', header: 'Conta', render: (r: Record<string, unknown>) => r.classe as string },
-    { key: 'base', header: 'Base', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.base as number) },
-    {
-      key: 'deducao',
-      align: 'right' as const,
-      header: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          Dedução
-          <InfoModal
-            titulo="O que são Dedução e Final"
-            texto={
-              <>
-                <p><strong>Base</strong>: o total gasto nessa conta ao longo do ano, sem nenhum ajuste — o valor bruto que aparece no balanço.</p>
-                <p><strong>Dedução</strong>: a parte desse total que foi um gasto pontual e não deve se repetir no próximo ano (ex: uma reforma, a rescisão de um funcionário) — por isso é subtraída.</p>
-                <p><strong>Final = Base − Dedução</strong>: o valor que realmente entra na previsão do próximo ano, por representar o gasto que tende a se repetir mês a mês.</p>
-              </>
-            }
-          />
-        </span>
-      ),
-      render: (r: Record<string, unknown>) => money(r.deducao as number),
-    },
-    { key: 'final', header: 'Final', align: 'right' as const, render: (r: Record<string, unknown>) => money(r.final as number) },
-  ]
+  const lancamentosAuditaveis = useMemo<LancamentoAuditavel[]>(() => {
+    const decisoes = new Map<number, string>([
+      ...extra.map((item) => [item.id, item.decisao] as const),
+      ...revisar.map((item) => [item.id, item.decisao] as const),
+    ])
+    return (sessao.lancamentos_contas ?? []).map((item) => {
+      const decisao = decisoes.get(item.id)
+      const deduzido = decisao === 'aprovada'
+      return {
+        ...item,
+        deduzido,
+        status: deduzido
+          ? 'Deduzido da previsão'
+          : decisao === 'pendente'
+            ? 'Aguardando decisão'
+            : 'Mantido na previsão',
+      }
+    })
+  }, [sessao.lancamentos_contas, extra, revisar])
+
+  const contasPorGrupo = useMemo(() => {
+    const grupos = new Map<string, Map<string, LancamentoAuditavel[]>>()
+    for (const item of lancamentosAuditaveis) {
+      const classes = grupos.get(item.grupo) ?? new Map<string, LancamentoAuditavel[]>()
+      classes.set(item.classe, [...(classes.get(item.classe) ?? []), item])
+      grupos.set(item.grupo, classes)
+    }
+    return [...grupos.entries()]
+      .map(([grupo, classes]) => ({
+        grupo,
+        classes: [...classes.entries()]
+          .map(([classe, itens]) => ({
+            classe,
+            itens: itens.sort((a, b) => a.data.localeCompare(b.data)),
+            pago: itens.reduce((total, item) => total + item.valor_pago, 0),
+            deduzido: itens.filter((item) => item.deduzido).reduce((total, item) => total + item.valor_pago, 0),
+          }))
+          .sort((a, b) => a.classe.localeCompare(b.classe)),
+      }))
+      .sort((a, b) => a.grupo.localeCompare(b.grupo))
+  }, [lancamentosAuditaveis])
 
   return (
     <>
@@ -475,14 +493,52 @@ export default function TelaRevisao({
 
             {aba === 'contas' && (
               <Card>
-                <h2 className="section-title">Contas calculadas</h2>
+                <h2 className="section-title">Despesas por Grupo e Classe</h2>
                 <p className="section-desc">
-                  Base anual por classe. Deduções e provisões vêm dos relatórios DESBAI/DESSIN.
+                  Veja cada lançamento que forma as contas. Apenas os itens marcados como gasto pontual são deduzidos da previsão.
                 </p>
-                <DataTable
-                  columns={contasColumns}
-                  rows={sessao.linhas_contas as unknown as Record<string, unknown>[]}
-                />
+                <p className="audit-legend"><span className="audit-dot deducted" /> Deduzido da previsão <span className="audit-dot kept" /> Mantido na previsão</p>
+                {contasPorGrupo.length === 0 ? (
+                  <p className="table-empty">Nenhum lançamento disponível para esta sessão.</p>
+                ) : (
+                  <div className="audit-groups">
+                    {contasPorGrupo.map(({ grupo, classes }, index) => {
+                      const pagoGrupo = classes.reduce((total, classe) => total + classe.pago, 0)
+                      const deduzidoGrupo = classes.reduce((total, classe) => total + classe.deduzido, 0)
+                      return (
+                        <details className="audit-group" key={grupo} open={index === 0}>
+                          <summary>
+                            <span><strong>{grupo}</strong><small>{classes.length} classe{classes.length === 1 ? '' : 's'}</small></span>
+                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido</span>
+                          </summary>
+                          <div className="audit-classes">
+                            {classes.map(({ classe, itens, pago, deduzido }) => (
+                              <section className="audit-class" key={classe}>
+                                <div className="audit-class-header">
+                                  <div><strong>{classe}</strong><small>{itens.length} lançamento{itens.length === 1 ? '' : 's'}</small></div>
+                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span></div>
+                                </div>
+                                <div className="audit-table-wrap">
+                                  <table className="audit-table">
+                                    <thead><tr><th>Data</th><th>Descrição</th><th className="num">Valor pago</th><th>Status</th></tr></thead>
+                                    <tbody>{itens.map((item) => (
+                                      <tr key={item.id} className={item.deduzido ? 'is-deducted' : ''}>
+                                        <td>{item.data || '—'}</td>
+                                        <td><strong>{item.descricao || 'Sem descrição'}</strong>{item.motivo && <small>{item.motivo}</small>}</td>
+                                        <td className="num">{money(item.valor_pago)}</td>
+                                        <td><span className={`audit-status ${item.deduzido ? 'deducted' : item.status === 'Aguardando decisão' ? 'pending' : 'kept'}`}>{item.status}</span></td>
+                                      </tr>
+                                    ))}</tbody>
+                                  </table>
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                        </details>
+                      )
+                    })}
+                  </div>
+                )}
               </Card>
             )}
           </section>

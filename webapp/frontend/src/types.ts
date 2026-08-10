@@ -46,6 +46,17 @@ export interface LinhaConta {
   n_meses: number
 }
 
+export interface LancamentoConta {
+  id: number
+  grupo: string
+  classe: string
+  data: string
+  descricao: string
+  valor_pago: number
+  categoria_inicial: string
+  motivo: string
+}
+
 export interface LinhaPrevisaoFinal {
   row: number
   label: string
@@ -107,6 +118,7 @@ export interface Sessao {
   inadimplencia: ItemInad[]
   inad_meta: { total: number; critica: number; data_base: string } | null
   linhas_contas: LinhaConta[]
+  lancamentos_contas?: LancamentoConta[]
   previsao_final?: LinhaPrevisaoFinal[]
   fluxo_mensal?: FluxoMensal[]
   status: 'em_revisao' | 'gerado'

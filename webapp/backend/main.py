@@ -426,6 +426,16 @@ def _montar_estado(sid, nome, ano, R):
         'final': round(l['final'], 2), 'regra': l['regra'],
         'n_meses': l['n_meses'],
     } for l in R['linhas']]
+    lancamentos_contas = [{
+        'id': idx,
+        'grupo': it.get('grupo') or 'Sem grupo',
+        'classe': it.get('classe') or 'Sem classe',
+        'data': str(it.get('data') or ''),
+        'descricao': it.get('descricao') or '',
+        'valor_pago': round(float(it.get('valor_pago') or 0), 2),
+        'categoria_inicial': it.get('cat') or 'Recorrente',
+        'motivo': it.get('motivo') or '',
+    } for idx, it in enumerate(des['itens'])]
 
     bal = R['bal']
     return {
@@ -460,6 +470,7 @@ def _montar_estado(sid, nome, ano, R):
             'data_base': str(R['inad']['data_base']),
         } if R['inad'] else None),
         'linhas_contas': linhas,
+        'lancamentos_contas': lancamentos_contas,
         'previsao_final': [],
         'fluxo_mensal': _fluxo_mensal_balanco(bal),
         'status': 'em_revisao',

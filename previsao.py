@@ -1405,32 +1405,17 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ded = base - final
             regra = 'R6: media ultimos 3 meses x 12'
-        # R3 lumpy — 2 camadas: outliers estatisticos + decisoes humanas
+        # R3 lumpy — somente lançamentos marcados individualmente entram na dedução.
         elif any(k in nc for k in LUMPY_KEYS):
-            # Camada 1: outliers estatisticos (NFs > media + 2σ na propria classe)
-            extra_est = outliers_estatisticos.get((ng, nc), 0.0)
-
-            # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF
+            # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF.
+            # Uma sugestão percentual para toda a classe não pode deduzir itens
+            # que não estejam identificados na trilha de auditoria.
             extra_humano = extra_por_classe.get((ng, nc), 0.0)
-
-            # Camada 2: IA recomenda % de deducao para a classe inteira
-            pct_ia = pct_ia_por_classe.get((ng, nc), 0.0)
-            extra_ia = round(base * pct_ia, 2) if pct_ia > 0 else 0.0
-
-            # Combina: NF-por-NF tem prioridade; fallback para max(estatistica, IA)
-            ex = extra_humano if extra_humano > 0 else max(extra_est, extra_ia)
+            ex = extra_humano
 
             if ex > 0:
                 ded = min(ex, base)
-                if extra_humano > 0:
-                    regra = f'R3: decisoes humanas R${extra_humano:,.2f}'
-                else:
-                    partes = []
-                    if extra_est > 0:
-                        partes.append(f'outliers R${extra_est:,.2f}')
-                    if extra_ia > 0:
-                        partes.append(f'IA {pct_ia:.0%}')
-                    regra = 'R3: ' + ' + '.join(partes) if partes else 'R3: mantido integral'
+                regra = f'R3: lançamentos extraordinários identificados R${extra_humano:,.2f}'
             else:
                 ded = 0.0
                 regra = 'R3: sem itens extraordinarios — mantido integral'
@@ -1661,24 +1646,12 @@ def recalcular(R, inflacao_pct=None):
             final = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ded, regra = base - final, 'R6: media ultimos 3 meses x 12'
         elif any(k in nc for k in LUMPY_KEYS):
-            # R3 lumpy — 2 camadas: outliers estatisticos + decisoes humanas
-            extra_est = outliers_est.get((ng, nc), 0.0)
+            # R3: só os lançamentos extraordinários identificados são deduzidos.
             extra_humano = extra_por_classe.get((ng, nc), 0.0)
-            pct_ia = pct_ia_classe.get((ng, nc), 0.0)
-            extra_ia = round(base * pct_ia, 2) if pct_ia > 0 else 0.0
-            # Camada humana tem prioridade; fallback para estatistica e IA
-            ex = extra_humano if extra_humano > 0 else max(extra_est, extra_ia)
+            ex = extra_humano
             if ex > 0:
                 ded = min(ex, base)
-                if extra_humano > 0:
-                    regra = f'R3: decisoes humanas R${extra_humano:,.2f}'
-                else:
-                    partes = []
-                    if extra_est > 0:
-                        partes.append(f'outliers R${extra_est:,.2f}')
-                    if extra_ia > 0:
-                        partes.append(f'IA {pct_ia:.0%}')
-                    regra = 'R3: ' + ' + '.join(partes) if partes else 'R3: mantido integral'
+                regra = f'R3: lançamentos extraordinários identificados R${extra_humano:,.2f}'
             else:
                 ded = 0.0
                 regra = 'R3: sem itens extraordinarios — mantido integral'
