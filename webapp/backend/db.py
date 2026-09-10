@@ -96,6 +96,10 @@ def _init_schema():
         # REC virar upload obrigatorio, 07/2026) — CREATE TABLE IF NOT
         # EXISTS acima nao adiciona coluna em tabela ja criada.
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'arquivo_rec', 'LONGBLOB')
+        # Os documentos (balanual/REC) nem sempre identificam com confianca
+        # se o condominio tem Fundo de Reserva — o sindico marca isso na
+        # tela de upload. NULL = sessao criada antes desse campo existir.
+        _adicionar_coluna_se_ausente(cursor, 'sessoes', 'tem_fundo_reserva', 'TINYINT(1) DEFAULT NULL')
         conn.commit()
         cursor.close()
         conn.close()
@@ -106,13 +110,15 @@ def _init_schema():
 
 # ---------- operacoes CRUD ----------
 
-def criar_sessao(sid, nome_condominio, ano_previsao):
+def criar_sessao(sid, nome_condominio, ano_previsao, tem_fundo_reserva=None):
     conn = get_conn()
     try:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO sessoes (id, nome_condominio, ano_previsao) VALUES (%s, %s, %s)",
-            (sid, nome_condominio, ano_previsao)
+            "INSERT INTO sessoes (id, nome_condominio, ano_previsao, tem_fundo_reserva) "
+            "VALUES (%s, %s, %s, %s)",
+            (sid, nome_condominio, ano_previsao,
+             None if tem_fundo_reserva is None else int(bool(tem_fundo_reserva)))
         )
         conn.commit()
     finally:

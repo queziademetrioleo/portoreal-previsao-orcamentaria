@@ -453,7 +453,7 @@ def _montar_lancamentos_contas(des):
     } for idx, it in enumerate((des or {}).get('itens') or [])]
 
 
-def _montar_estado(sid, nome, ano, R):
+def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R['des']
 
@@ -524,6 +524,7 @@ def _montar_estado(sid, nome, ano, R):
         'sessao_id': sid,
         'nome_condominio': nome,
         'ano_previsao': ano,
+        'tem_fundo_reserva': tem_fundo_reserva,
         'criado_em': datetime.datetime.now().isoformat(timespec='seconds'),
         'modelo_ia': core._ia_modelo(),
         'ia_ativa': core._ia_disponivel(),
@@ -606,6 +607,7 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB por arquivo
 async def criar_sessao(
     nome_condominio: str = Form(..., max_length=200),
     ano_previsao: int = Form(..., ge=2000, le=2100),
+    tem_fundo_reserva: bool = Form(...),
     balanual: UploadFile = File(...),
     desbai: UploadFile = File(...),
     rec: UploadFile = File(...),
@@ -620,7 +622,7 @@ async def criar_sessao(
     sid = uuid.uuid4().hex[:12]
 
     # Criar registro PRIMEIRO (INSERT), depois salvar arquivos (UPDATE)
-    db.criar_sessao(sid, nome_condominio.strip(), ano_previsao)
+    db.criar_sessao(sid, nome_condominio.strip(), ano_previsao, tem_fundo_reserva)
 
     uploads = {
         'balanual': balanual,
@@ -712,7 +714,6 @@ async def analisar_sse(sid: str):
 
                 nome = row['nome_condominio']
                 ano = row['ano_previsao']
-
                 # Nome automatico (feedback CEO 07/2026): extrai do REC se
                 # disponivel e atualiza a sessao no banco.
                 rec_nome = (R.get('rec') or {}).get('nome_condominio')
@@ -720,7 +721,9 @@ async def analisar_sse(sid: str):
                     nome = rec_nome.strip()
                     db.atualizar_nome_condominio(sid, nome)
 
-                estado = _montar_estado(sid, nome, ano, R)
+                tem_fr = row.get('tem_fundo_reserva')
+                tem_fr = None if tem_fr is None else bool(tem_fr)
+                estado = _montar_estado(sid, nome, ano, R, tem_fr)
                 _salvar_estado_sync(sid, estado)
 
                 yield f"data: {json.dumps({'done': True, 'sessao_id': sid}, ensure_ascii=False)}\n\n"
