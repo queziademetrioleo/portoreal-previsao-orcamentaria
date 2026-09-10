@@ -13,6 +13,7 @@ interface Props {
 }
 
 export default function TelaUpload({ onCriada, onVoltar }: Props) {
+  const [origemRelatorios, setOrigemRelatorios] = useState<'condo21' | 'alma'>('condo21')
   const [nome, setNome] = useState('')
   const [ano, setAno] = useState(new Date().getFullYear())
   const [balanual, setBalanual] = useState<File | null>(null)
@@ -146,12 +147,44 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
             <p className="section-label">Nova Análise</p>
             <h1 className="page-title">Enviar relatórios</h1>
             <p className="page-subtitle">
-              Anexe os arquivos exportados do Condomínio21.
+              Selecione a origem e anexe os relatórios do condomínio.
             </p>
 
             {erro && <div className="alert-error">{erro}</div>}
 
             <form onSubmit={handleSubmit}>
+              <fieldset className="form-group report-source">
+                <legend className="form-label">Origem dos relatórios</legend>
+                <div className="report-source-options">
+                  <label className={`report-source-option${origemRelatorios === 'condo21' ? ' is-selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="origem-relatorios"
+                      value="condo21"
+                      checked={origemRelatorios === 'condo21'}
+                      onChange={() => setOrigemRelatorios('condo21')}
+                    />
+                    <span>
+                      <strong>Condo21</strong>
+                      <small>Padrão atual</small>
+                    </span>
+                  </label>
+                  <label className={`report-source-option${origemRelatorios === 'alma' ? ' is-selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="origem-relatorios"
+                      value="alma"
+                      checked={origemRelatorios === 'alma'}
+                      onChange={() => setOrigemRelatorios('alma')}
+                    />
+                    <span>
+                      <strong>Alma</strong>
+                      <small>Novo padrão</small>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
               <div className="form-group">
                 <label className="form-label">Condomínio (opcional — detectado automaticamente)</label>
                 <input

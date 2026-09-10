@@ -6,3 +6,4 @@
 - [R6 - Anualização](r6-anualizacao.md) — Como a R6 projeta contratos usando a tarifa mensal atual em vez da média histórica
 - [R7 - Inflação](r7-inflacao.md) — Por que a R7 aplica 10% de inflação sobre o subtotal do orçamento
 - [R8 - Inadimplência](r8-inadimplencia.md) — Como a R8 detecta inadimplência crítica (3+ meses consecutivos) e alerta sobre risco de receita
+- [Integração Alma](alma-integracao.md) — Mapeamento dos relatórios Alma, contrato compatível, reconciliações e pendências antes de produção

@@ -486,6 +486,70 @@ body {
   margin-top: 4px;
 }
 
+/* ── ORIGEM DOS RELATÓRIOS ────────────── */
+.report-source {
+  border: 0;
+  min-width: 0;
+}
+
+.report-source-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-sm);
+}
+
+.report-source-option {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  min-height: 66px;
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.report-source-option:hover {
+  border-color: var(--accent);
+}
+
+.report-source-option.is-selected {
+  border-color: var(--accent);
+  background: #eef2f7;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.report-source-option input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.report-source-option span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.report-source-option strong {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.report-source-option small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.report-source-option:has(input:focus-visible) {
+  outline: 3px solid rgba(30, 58, 95, 0.22);
+  outline-offset: 2px;
+}
+
 /* ── FILE UPLOAD ───────────────────────── */
 .file-grid {
   display: grid;
@@ -1751,6 +1815,10 @@ body {
   }
 
   .file-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-source-options {
     grid-template-columns: 1fr;
   }
 }
