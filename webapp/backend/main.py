@@ -23,7 +23,8 @@ import tempfile
 import datetime
 import logging
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +39,43 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title='Previsao Orcamentaria', version='2.0')
+
+
+@app.exception_handler(RequestValidationError)
+async def tratar_erro_validacao(request: Request, exc: RequestValidationError):
+    """Expõe validações de formulário de forma legível e auditável.
+
+    Sem este handler, o FastAPI devolve ``detail`` como lista de objetos. O
+    frontend antigo acabava renderizando essa lista como ``[object Object]``,
+    escondendo o campo que impediu o upload.
+    """
+    nomes_campos = {
+        'nome_condominio': 'nome do condomínio',
+        'ano_previsao': 'ano da previsão',
+        'tem_fundo_reserva': 'opção de fundo de reserva',
+        'balanual': 'arquivo balanual.xls',
+        'desbai': 'arquivo desbai06.xls',
+        'dessin': 'arquivo dessin02.xls',
+        'inad': 'arquivo inad01.xls',
+    }
+    mensagens = []
+    for erro in exc.errors():
+        loc = erro.get('loc', ())
+        campo = next((str(parte) for parte in reversed(loc) if parte != 'body'), '')
+        nome = nomes_campos.get(campo, campo or 'formulário')
+        tipo = erro.get('type', '')
+        if tipo == 'missing':
+            mensagens.append(f'Campo obrigatório ausente: {nome}.')
+        elif tipo in {'int_parsing', 'int_type'}:
+            mensagens.append(f'Informe um número válido para {nome}.')
+        elif tipo in {'greater_than_equal', 'less_than_equal'}:
+            mensagens.append(f'O valor informado para {nome} está fora do intervalo permitido.')
+        else:
+            mensagens.append(f'{nome}: {erro.get("msg", "valor inválido")}.')
+
+    detalhe = ' '.join(dict.fromkeys(mensagens)) or 'Dados do formulário inválidos.'
+    logger.warning('Validação recusada em %s: %s | detalhes=%s', request.url.path, detalhe, exc.errors())
+    return JSONResponse(status_code=422, content={'detail': detalhe})
 
 _cors_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
 app.add_middleware(
@@ -607,7 +645,10 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB por arquivo
 async def criar_sessao(
     nome_condominio: str = Form(..., max_length=200),
     ano_previsao: int = Form(..., ge=2000, le=2100),
-    tem_fundo_reserva: bool = Form(...),
+    # Compatibilidade com o fluxo Condo21 já em produção: solicitações das
+    # versões anteriores da tela não enviam esse campo e sempre trabalharam
+    # com fundo de reserva incluído.
+    tem_fundo_reserva: bool = Form(True),
     balanual: UploadFile = File(...),
     desbai: UploadFile = File(...),
     rec: UploadFile = File(...),

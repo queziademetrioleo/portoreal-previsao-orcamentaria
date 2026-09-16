@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { criarSessao } from '../api'
+import { criarSessao, mensagemErroApi } from '../api'
 import type { Sessao } from '../types'
 import Header from './ui/Header'
 import Card from './ui/Card'
@@ -72,16 +72,19 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         const data = JSON.parse(event.data)
         if (data.error) {
           source.close()
-          setErro(data.error)
+          setErro(mensagemErroApi(data.error, 'Erro ao analisar os relatórios.'))
           setLoading(false)
           return
         }
         if (data.done) {
           source.close()
           fetch(`${base}/api/sessao/${sessao_id}`)
-            .then((r) => {
-              if (!r.ok) throw new Error(`Erro ${r.status}`)
-              return r.json()
+            .then(async (r) => {
+              if (!r.ok) {
+                const body = await r.json().catch(() => null)
+                throw new Error(mensagemErroApi(body, `Erro ${r.status}`))
+              }
+              return r.json() as Promise<Sessao>
             })
             .then((s) => onCriada(s))
             .catch((err) => {

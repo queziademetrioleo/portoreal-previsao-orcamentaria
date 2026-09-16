@@ -2,6 +2,55 @@ import { type Sessao } from './types'
 
 export const BASE = import.meta.env.DEV ? 'http://localhost:8000' : ''
 
+type ApiErrorBody = {
+  detail?: unknown
+  message?: unknown
+}
+
+/**
+ * Transforma respostas de erro da API em uma mensagem que uma pessoa consegue
+ * entender. O FastAPI devolve erros de validação (422) como uma lista de
+ * objetos; passá-los diretamente para Error fazia o navegador mostrar
+ * "[object Object],[object Object]".
+ */
+export function mensagemErroApi(body: unknown, fallback: string): string {
+  if (typeof body === 'string' && body.trim()) return body
+  if (!body || typeof body !== 'object') return fallback
+
+  const { detail, message } = body as ApiErrorBody
+  const conteudo = detail ?? message
+  if (typeof conteudo === 'string' && conteudo.trim()) return conteudo
+
+  if (Array.isArray(conteudo)) {
+    const mensagens = conteudo
+      .map((erro) => {
+        if (typeof erro === 'string') return erro
+        if (!erro || typeof erro !== 'object') return null
+        const item = erro as { loc?: unknown; msg?: unknown }
+        const campo = Array.isArray(item.loc)
+          ? item.loc.filter((parte) => parte !== 'body').join(' › ')
+          : ''
+        const texto = typeof item.msg === 'string' ? item.msg : null
+        if (!texto) return null
+        return campo ? `${campo}: ${texto}` : texto
+      })
+      .filter((mensagem): mensagem is string => Boolean(mensagem))
+    if (mensagens.length) return mensagens.join('. ')
+  }
+
+  if (conteudo && typeof conteudo === 'object') {
+    const item = conteudo as { msg?: unknown }
+    if (typeof item.msg === 'string' && item.msg.trim()) return item.msg
+  }
+
+  return fallback
+}
+
+async function lancarErroResposta(r: Response): Promise<never> {
+  const body = await r.json().catch(() => null)
+  throw new Error(mensagemErroApi(body, `Erro ${r.status}`))
+}
+
 export interface DecisaoEditavel {
   decisao: string
   valor?: number
@@ -36,7 +85,7 @@ export async function criarSessao(form: {
   if (form.dessin) fd.append('dessin', form.dessin)
   if (form.inad) fd.append('inad', form.inad)
   const r = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })
-  if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
+  if (!r.ok) await lancarErroResposta(r)
   return r.json()
 }
 
@@ -49,10 +98,7 @@ export async function gerarRelatorioPdf(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),
   })
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}))
-    throw new Error(body.detail ?? `Erro ${r.status}`)
-  }
+  if (!r.ok) await lancarErroResposta(r)
   return r.blob()
 }
 
@@ -65,7 +111,7 @@ export async function previewDocumento(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),
   })
-  if (!r.ok) throw new Error((await r.json()).detail ?? `Erro ${r.status}`)
+  if (!r.ok) await lancarErroResposta(r)
   return r.json()
 }
 
@@ -75,7 +121,7 @@ export async function salvarDecisoes(sid: string, decisoes: PayloadDecisoes) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),
   });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? `Erro ${r.status}`);
+  if (!r.ok) await lancarErroResposta(r)
   return r.json();
 }
 
