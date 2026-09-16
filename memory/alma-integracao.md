@@ -22,11 +22,11 @@ normalizam os documentos Alma para os objetos `bal`, `des`, `rec`, `inad` e
 
 ## Estado do frontend
 
-O upload já exibe a escolha visual **Condo21** (padrão) ou **Alma** em
-`webapp/frontend/src/components/TelaUpload.tsx`. Nesta etapa inicial a escolha
-não é persistida, não altera o endpoint e não seleciona parser. A próxima
-implementação deve persistir `origem_sistema` na sessão e usar esse campo para
-selecionar o adaptador correto.
+O upload exibe **Condo21** como origem disponível. A opção **Alma** permanece
+visível, mas está desativada com “Em breve”: ela não é persistida, não altera
+o endpoint e não seleciona parser. Só deve ser ativada depois que os
+adaptadores, a consolidação de períodos e as reconciliações abaixo estiverem
+validados com um caso real de transição.
 
 ## Mapeamento confirmado dos documentos Alma
 

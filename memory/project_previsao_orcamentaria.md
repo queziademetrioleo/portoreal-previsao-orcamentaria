@@ -1,6 +1,6 @@
 # Projeto — Previsão Orçamentária de Condomínios
 
-> Status atualizado em 10/08/2026. Repositório: `~/PrevisaoOrcamentaria`,
+> Status atualizado em 16/09/2026. Repositório: `~/PrevisaoOrcamentaria`,
 > branch `main`, remoto `queziademetrioleo/portoreal-previsao-orcamentaria`.
 
 ## Propósito
@@ -66,6 +66,24 @@ as variáveis `MYSQL_*`. Em desenvolvimento, backend em `:8000` e Vite em
 - Sessões são permanentes. Não restaurar limpeza automática por TTL no startup;
   `Recalcular` deve reanalisar os arquivos originais do zero, não só refazer
   preview de um estado antigo.
+- O **nome do condomínio é obrigatório** e é a identificação fornecida pela
+  operação; nunca substituí-lo automaticamente por dado extraído do REC.
+
+## Estado atual — 16/09/2026
+
+O fluxo operacional liberado é exclusivamente **Condo21**. O upload exige
+`balanual.xls`, `desbai06.xls` e `rec02.xls`; `dessin02.xls` e `inad01.xls`
+continuam opcionais.
+
+- A opção Alma aparece somente como referência e está **desativada** na tela
+  até que a integração e suas reconciliações sejam concluídas.
+- O upload devolve mensagens de validação compreensíveis. Não pode voltar a
+  exibir `[object Object]` quando a API responder 422.
+- `tem_fundo_reserva` é opcional na API, com padrão histórico de **com fundo**,
+  para que versões compatíveis da tela Condo21 não tenham upload bloqueado.
+- Se houver itens pendentes em **Gastos a revisar**, a aba fica vermelha e
+  mostra a quantidade pendente; a geração do documento permanece bloqueada
+  até que todos sejam decididos.
 
 ## Correções em três fases
 
@@ -83,8 +101,9 @@ Foram corrigidos o PDF e as telas para que leitura e cálculo coincidam:
 
 ### Fase 2 — persistência e cenários de cálculo (10/08, início)
 
-- Nome do condomínio é extraído do REC; a interface mostra a última parcela de
-  inadimplência e oferece `Recalcular` imediato.
+- A interface mostra a última parcela de inadimplência e oferece `Recalcular`
+  imediato. O nome do condomínio passou a ser informado obrigatoriamente pela
+  operação (não usar extração automática do REC).
 - O Fundo de Reserva entra no fallback do resultado e ganhou seleção com/sem
   fundo na revisão.
 - A retenção de sessões subiu de 7 para 90 dias e, em seguida, a limpeza no
@@ -109,12 +128,9 @@ Foram corrigidos o PDF e as telas para que leitura e cálculo coincidam:
 Commits principais desta fase: `9f76f4f`, `6c2d81c`, `15aff0a`, `6e88d96`,
 `4a04a49` e `620a34b`.
 
-## Última sessão e próximo passo
+## Próximo passo
 
-A última sessão consolidou as correções de 10/08 e deixou o código em `main`;
-há apenas o registro local não rastreado `previsao orçamentária.md`, que não
-faz parte da aplicação. O próximo passo operacional é **Rebuild pendente no
-EasyPanel, preferencialmente sem cache**, e a confirmação visual do PDF nos
-dois cenários (com e sem Fundo de Reserva). Isso é necessário porque houve
-precedente de o painel manter imagem antiga após deploy, apesar de o código
-estar correto no repositório.
+Concluir a integração complementar Condo21 + Alma somente após receber e
+validar documentos reais do período de transição. O primeiro caso-alvo é um
+histórico único de 12 meses — por exemplo, 10 meses de Condo21 e os 2 últimos
+meses de Alma — sem duplicar lançamentos e preservando a origem de cada dado.
