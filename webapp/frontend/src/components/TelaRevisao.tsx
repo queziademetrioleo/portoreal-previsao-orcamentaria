@@ -227,6 +227,7 @@ export default function TelaRevisao({
   const pendentes =
     extra.filter((i) => i.decisao === 'pendente').length +
     revisar.filter((i) => i.decisao === 'pendente').length
+  const pendentesRevisar = revisar.filter((i) => i.decisao === 'pendente').length
 
   const removidos = [...decisoesLancamentos.values()].filter((decisao) => decisao === 'deduzir').length
   const removidoTotal = aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos
@@ -262,10 +263,15 @@ export default function TelaRevisao({
     }
   }
 
-  const tabs: { id: Aba; label: string; count?: number }[] = [
+  const tabs: { id: Aba; label: string; count?: number; attention?: boolean }[] = [
     { id: 'relatorio', label: 'Visão geral' },
     { id: 'extraordinarios', label: 'Gastos pontuais', count: extra.length },
-    { id: 'ordinarias', label: 'Gastos a revisar', count: revisar.length },
+    {
+      id: 'ordinarias',
+      label: 'Gastos a revisar',
+      count: pendentesRevisar,
+      attention: pendentesRevisar > 0,
+    },
     { id: 'inadimplentes', label: 'Inadimplência', count: inad.length },
     { id: 'contas', label: 'Contas calculadas', count: lancamentos.length },
   ]

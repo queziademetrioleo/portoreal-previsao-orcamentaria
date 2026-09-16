@@ -40,6 +40,10 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!nome.trim()) {
+      setErro('Informe o nome do condomínio.')
+      return
+    }
     if (!ano || ano < 2020 || ano > 2035) {
       setErro('Informe um ano válido (2020–2035).')
       return
@@ -172,30 +176,29 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       <small>Padrão atual</small>
                     </span>
                   </label>
-                  <label className={`report-source-option${origemRelatorios === 'alma' ? ' is-selected' : ''}`}>
+                  <label className="report-source-option is-disabled" aria-disabled="true">
                     <input
                       type="radio"
                       name="origem-relatorios"
                       value="alma"
-                      checked={origemRelatorios === 'alma'}
-                      onChange={() => setOrigemRelatorios('alma')}
+                      disabled
                     />
                     <span>
                       <strong>Alma</strong>
-                      <small>Novo padrão</small>
+                      <small>Em breve</small>
                     </span>
                   </label>
                 </div>
               </fieldset>
 
               <div className="form-group">
-                <label className="form-label">Condomínio (opcional — detectado automaticamente)</label>
+                <label className="form-label">Condomínio</label>
                 <input
                   className="form-input"
                   type="text"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  placeholder="Será detectado do arquivo REC"
+                  placeholder="Nome do condomínio"
                 />
               </div>
 

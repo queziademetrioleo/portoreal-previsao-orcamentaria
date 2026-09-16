@@ -388,6 +388,23 @@ body {
   color: #fff;
 }
 
+/* Itens que bloqueiam a geração precisam ficar visíveis na navegação. */
+.tab-btn.attention {
+  color: var(--negative);
+  background: var(--negative-bg);
+}
+
+.tab-btn.attention:hover,
+.tab-btn.attention.active {
+  color: #fff;
+  background: var(--negative);
+}
+
+.tab-btn.attention .tab-count {
+  color: #fff;
+  background: var(--negative);
+}
+
 /* ── TABLES ────────────────────────────── */
 .table-wrap {
   overflow-x: auto;
@@ -548,6 +565,16 @@ body {
 .report-source-option:has(input:focus-visible) {
   outline: 3px solid rgba(30, 58, 95, 0.22);
   outline-offset: 2px;
+}
+
+.report-source-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: var(--bg);
+}
+
+.report-source-option.is-disabled:hover {
+  border-color: var(--border);
 }
 
 /* ── FILE UPLOAD ───────────────────────── */
