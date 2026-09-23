@@ -61,6 +61,25 @@ class RecalculoDecisoesTest(unittest.TestCase):
         self.assertAlmostEqual(resultado['subtotal'], 1200.0)
         self.assertAlmostEqual(resultado['prov_laudo'], 1200.0)
 
+    def test_obras_ficam_fora_mesmo_mantidas_na_revisao(self):
+        resultado = previsao.recalcular(montar_resultado(
+            'Despesas com Obras/Benfeitorias', 'Despesas com Mão de Obra', 'Recorrente',
+        ))
+        self.assertAlmostEqual(resultado['subtotal'], 0.0)
+        self.assertAlmostEqual(resultado['desconsideracoes'], 1200.0)
+
+    def test_sistema_de_combate_a_incendio_fica_fora(self):
+        resultado = previsao.recalcular(montar_resultado(
+            'Conservação', 'Sistema de Combate a Incêndio', 'Recorrente',
+        ))
+        self.assertAlmostEqual(resultado['subtotal'], 0.0)
+
+    def test_extintores_continuam_na_previsao(self):
+        resultado = previsao.recalcular(montar_resultado(
+            'Conservação', 'Manut. Extintores e/ou Teste mangueira', 'Recorrente',
+        ))
+        self.assertAlmostEqual(resultado['subtotal'], 1200.0)
+
 
 if __name__ == '__main__':
     unittest.main()

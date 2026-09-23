@@ -134,7 +134,55 @@ def _extrair_receitas_despesas(previsao_final):
     return receitas, despesas
 
 
-def _consolidar_despesas_relatorio(linhas, resumo):
+# Serviço identificado pela descrição da NF — usado para abrir um contrato
+# genérico ("Contrato de Manutenção") que paga mais de um fornecedor
+# (feedback José Henrique 09/2026: Segurança 350 + Piscina 700 numa linha só).
+_SERVICOS_CONTRATO = [
+    (('seguranca', 'monitoramento', 'camera', 'cftv', 'alarme'), 'Contrato de Segurança Eletrônica'),
+    (('piscina',), 'Contrato de Manutenção da Piscina'),
+    (('elevador',), 'Contrato de Manutenção do Elevador'),
+    (('jardim', 'jardinagem'), 'Contrato de Jardinagem'),
+    (('portao', 'porta automatica'), 'Contrato de Manutenção do Portão'),
+    (('interfone',), 'Contrato de Manutenção do Interfone'),
+    (('dedetiza',), 'Contrato de Dedetização'),
+]
+
+
+def _servico_contrato(descricao):
+    texto = _norm(descricao)
+    for termos, label in _SERVICOS_CONTRATO:
+        if any(t in texto for t in termos):
+            return label
+    return None
+
+
+def _dividir_contrato_por_servico(linha, lancamentos):
+    """Divide o valor final de um contrato entre os serviços que ele paga,
+    na proporção dos pagamentos dos 3 últimos meses (mesma janela da R6).
+    Devolve [(label, valor)] ou None quando não há o que dividir (um serviço
+    só, ou alguma NF sem serviço reconhecível)."""
+    chave = (_norm(linha.get('grupo')), _norm(linha.get('classe')))
+    nfs = [l for l in (lancamentos or [])
+           if (_norm(l.get('grupo')), _norm(l.get('classe'))) == chave
+           and float(l.get('valor_pago') or 0) > 0.005]
+    if not nfs:
+        return None
+    servicos = [_servico_contrato(l.get('descricao')) for l in nfs]
+    if None in servicos or len(set(servicos)) < 2:
+        return None
+    meses = sorted({str(l.get('data') or '')[:7] for l in nfs})[-3:]
+    por_servico = {}
+    for nf, servico in zip(nfs, servicos):
+        if str(nf.get('data') or '')[:7] in meses:
+            por_servico[servico] = por_servico.get(servico, 0.0) + float(nf['valor_pago'])
+    total = sum(por_servico.values())
+    if total <= 0.005:
+        return None
+    final = float(linha.get('final') or 0)
+    return [(servico, final * valor / total) for servico, valor in por_servico.items()]
+
+
+def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
     """Replica o agrupamento da seção Despesas do XLSX antigo no PDF."""
     ativas = [
         (idx, linha) for idx, linha in enumerate(linhas or [])
@@ -220,7 +268,9 @@ def _consolidar_despesas_relatorio(linhas, resumo):
         label = str(linha.get('classe') or '').strip()
         if _norm(label) in labels_contratos:
             continue
-        despesas.append((label, float(linha.get('final') or 0)))
+        partes = _dividir_contrato_por_servico(linha, lancamentos) or [
+            (label, float(linha.get('final') or 0))]
+        despesas.extend(partes)
         labels_contratos.add(_norm(label))
         consumidos.add(idx)
 
@@ -394,6 +444,17 @@ def _eh_material_limpeza(linha):
     )
 
 
+def _nome_na_composicao(classe):
+    """Nome da classe como aparece no texto de Gastos com conservação
+    (feedback José Henrique 09/2026). None = não citar."""
+    nc = _norm(classe)
+    if nc == 'outros materiais':
+        return None  # "não colocar 'Outros Materiais'" — genérico, não diz nada ao síndico
+    if 'extintor' in nc:
+        return 'Recarga de Extintores'
+    return classe
+
+
 def _componentes_conservacao(linhas, resumo):
     """Classes que formam exatamente a categoria Gastos com conservação."""
     componentes = []
@@ -405,7 +466,7 @@ def _componentes_conservacao(linhas, resumo):
         pertence = ('conservacao' in grupo
                      or ('diversas' in grupo and 'seguro' not in classe))
         if pertence:
-            _adicionar_sem_repetir(componentes, linha.get('classe'))
+            _adicionar_sem_repetir(componentes, _nome_na_composicao(linha.get('classe')))
 
     if abs(float(resumo.get('prov_laudo') or 0)) > 0.005:
         _adicionar_sem_repetir(componentes, 'Provisão para Laudo de Autovistoria')
@@ -469,17 +530,25 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
                      if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
     if not receitas:
         receitas = [('Taxas de Condomínio', resumo.get('receita_mensal') or 0)]
-    despesas = _consolidar_despesas_relatorio(linhas, resumo)
+    # A inadimplência considerada sai da Taxa de Condomínio (e de toda receita
+    # usada nos cenários/reajuste) — feedback José Henrique 09/2026: o texto
+    # dizia "subtraímos" mas a tabela mostrava a receita cheia.
+    impacto_inad_mensal = float(impacto_inad_mensal or 0)
+    if impacto_inad_mensal > 0.005:
+        pos_taxa = next((i for i, (l, _) in enumerate(receitas)
+                         if _norm(l) == _norm('Taxas de Condomínio')), 0)
+        label_taxa, valor_taxa = receitas[pos_taxa]
+        receitas[pos_taxa] = (label_taxa, valor_taxa - impacto_inad_mensal)
+    despesas = _consolidar_despesas_relatorio(
+        linhas, resumo, estado.get('lancamentos_contas'))
 
     grupos = _agrupar_por_grupo(linhas)
     total_grupo = sum(g['value'] for g in grupos)
 
-    receita_anual_com = com_fundo.get('receita_anual') or 0
-    receita_anual_sem = sem_fundo.get('receita_anual') or 0
-    resultado_com = com_fundo.get('resultado') or (receita_anual_com - total_previsto)
-    resultado_sem = sem_fundo.get('resultado') or (receita_anual_sem - total_previsto)
-    saldo_ajustado_anual = resultado_com - impacto_inad_mensal * 12
-    status = com_fundo.get('status_resultado') or core._status_resultado(saldo_ajustado_anual)
+    receita_anual_com = (com_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
+    receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
+    resultado_com = receita_anual_com - total_previsto
+    resultado_sem = receita_anual_sem - total_previsto
 
     pizza = _grafico_pizza_svg(grupos, total_grupo)
     grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
@@ -558,11 +627,8 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
 
     # Quadro de leitura: mostra so o cenario selecionado pelo usuario.
     # Se COM FUNDO e tem FR, mostra os dois lados (informativo).
-    cenario_quadro = sem_fundo if not com_fundo_pref else com_fundo
-    status_quadro = cenario_quadro.get('status_resultado') or (
-        core._status_resultado(cenario_quadro.get('resultado') or 0))
-    resultado_quadro = cenario_quadro.get('resultado') or (
-        (receita_anual_sem if not com_fundo_pref else receita_anual_com) - total_previsto)
+    resultado_quadro = resultado_com if com_fundo_pref else resultado_sem
+    status_quadro = core._status_resultado(resultado_quadro)
 
     ctx = {
         'logo_b64': _logo_base64(logo_path),

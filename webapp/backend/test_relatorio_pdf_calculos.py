@@ -126,6 +126,43 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         self.assertAlmostEqual(subtotal_pdf_anual, 900.0)
         self.assertAlmostEqual(subtotal_pdf_anual, resultado['subtotal'])
 
+    def test_conservacao_omite_outros_materiais_e_renomeia_extintores(self):
+        linhas = [
+            {'grupo': 'Conservação', 'classe': 'Outros Materiais', 'final': 100},
+            {'grupo': 'Conservação', 'classe': 'Manut. Extintores e/ou Teste mangueira', 'final': 1500},
+            {'grupo': 'Conservação', 'classe': 'Manutenção Portão', 'final': 900},
+        ]
+        self.assertEqual(
+            relatorio_pdf._componentes_conservacao(linhas, {}),
+            ['Recarga de Extintores', 'Manutenção Portão'],
+        )
+
+    def test_contrato_generico_e_dividido_por_servico(self):
+        linhas = [{'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'final': 12600}]
+        lancamentos = []
+        for mes in ('2026-06', '2026-07', '2026-08'):
+            lancamentos += [
+                {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'data': f'{mes}-03',
+                 'descricao': 'Segurança Eletrônica - Prevenir Segurança', 'valor_pago': 350},
+                {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'data': f'{mes}-05',
+                 'descricao': 'da piscina do condomínio - Moises Antunes', 'valor_pago': 700},
+            ]
+        despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}, lancamentos))
+        self.assertAlmostEqual(despesas['Contrato de Segurança Eletrônica'], 350)
+        self.assertAlmostEqual(despesas['Contrato de Manutenção da Piscina'], 700)
+        self.assertNotIn('Contrato de Manutenção', despesas)
+
+    def test_contrato_com_nf_sem_servico_reconhecido_nao_e_dividido(self):
+        linhas = [{'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'final': 1200}]
+        lancamentos = [
+            {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'data': '2026-08-03',
+             'descricao': 'Segurança Eletrônica', 'valor_pago': 50},
+            {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'data': '2026-08-05',
+             'descricao': 'Serviço mensal', 'valor_pago': 50},
+        ]
+        despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}, lancamentos))
+        self.assertAlmostEqual(despesas['Contrato de Manutenção'], 100)
+
 
 if __name__ == '__main__':
     unittest.main()

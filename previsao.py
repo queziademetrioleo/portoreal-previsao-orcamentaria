@@ -782,6 +782,10 @@ FATOR_DEDUCAO_HIST = {
 LUMPY_KEYS = list(FATOR_DEDUCAO_HIST.keys())
 
 PESSOAL_PONTUAL = ['rescisao', 'indenizacao trabalhista', 'pensao aliment']
+# Classes de gasto pontual por natureza, sempre fora da previsão (feedback
+# José Henrique 09/2026: "Sistema de combate a incêndio normalmente é um gasto
+# pontual. Não incluir na previsão"). Recarga de extintores NÃO entra aqui.
+PONTUAL_FORA = ['combate a incendio']
 ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
              '13. taxa de administrac', '13o taxa']
 # Default 10% (taxa da Porto Real sobre as despesas — feedback CEO 07/2026);
@@ -1360,6 +1364,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             desconsider += base
             ded = base; final = 0.0
             regra = 'R1: grupo Obras/Benfeitorias desconsiderado'
+        elif any(k in nc for k in PONTUAL_FORA):
+            ded = base; final = 0.0
+            regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
         # R4 diversas (exceto seguro e manutenções)
         elif 'diversas' in ng and 'seguro' not in nc:
             # Itens de manutenção/reparo no grupo Diversas NÃO são "diversas" —
@@ -1580,15 +1587,10 @@ def recalcular(R, inflacao_pct=None):
         inflacao_pct = float(inflacao_pct)
     # --- recalcular com as mesmas regras do analisar() ---
     # extra_por_classe reflete as decisoes humanas (itens aprovados como Extraordinaria)
-    # keep_por_classe reflete NFs que o humano REPROVOU (decidiu manter na base)
     extra_por_classe = defaultdict(float)
-    keep_por_classe = defaultdict(float)
     for it in R['des']['itens']:
-        key = (_norm(it['grupo'] or ''), _norm(it['classe'] or ''))
         if it['cat'] == 'Extraordinaria':
-            extra_por_classe[key] += it['valor_pago']
-        elif it['cat'] == 'Recorrente':
-            keep_por_classe[key] += it['valor_pago']
+            extra_por_classe[(_norm(it['grupo'] or ''), _norm(it['classe'] or ''))] += it['valor_pago']
 
     # Recupera dados da R3 em 2 camadas (calculados no analisar)
     outliers_est = R.get('outliers_estatisticos', {})
@@ -1611,15 +1613,15 @@ def recalcular(R, inflacao_pct=None):
         base = l['total']
         ded, regra, final = 0.0, '', base
         if 'obras' in ng or 'benfeitoria' in ng:
-            # R1: capital, excluído por padrão. Mas se o humano REPROVOU itens
-            # (decidiu manter), essa parte volta para a base (e aparece numa
-            # linha de Obras na PREVISÃO via gerador).
-            kept = min(keep_por_classe.get((ng, nc), 0.0), base)
-            final = round(kept, 2)
-            ded = base - final
+            # R1: capital, sempre fora — mesmo que a revisão tenha marcado
+            # "manter" (feedback José Henrique 09/2026: "despesas com
+            # obras/benfeitorias devem ser desconsideradas").
+            ded, final = base, 0.0
             desconsider += ded
-            regra = ('R1: Obras — parte mantida na revisão' if kept > 0.005
-                     else 'R1: Obras/Benfeitorias')
+            regra = 'R1: Obras/Benfeitorias'
+        elif any(k in nc for k in PONTUAL_FORA):
+            ded, final = base, 0.0
+            regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
         elif 'diversas' in ng and 'seguro' not in nc:
             # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
             # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
