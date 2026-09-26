@@ -422,8 +422,8 @@ def _fluxo_mensal_balanco(bal):
 
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
-    if getattr(dec, 'inflacao_pct', None) is not None:
-        estado['resumo']['inflacao'] = float(dec.inflacao_pct)
+    # Aumento previsto é fixo (core.INFLACAO); o valor do payload é ignorado.
+    estado['resumo']['inflacao'] = core.INFLACAO
     if getattr(dec, 'ultimo_reajuste', None) is not None:
         estado['resumo']['ultimo_reajuste'] = dec.ultimo_reajuste or None
     for item in estado['extraordinarias']:
@@ -452,7 +452,7 @@ def _recalcular_com_decisoes(sid, estado):
     }
 
     R = copy.deepcopy(_obter_R(sid))
-    R['inflacao_pct'] = float(estado['resumo'].get('inflacao') or core.INFLACAO)
+    R['inflacao_pct'] = core.INFLACAO
     valores_editados = {
         i['id']: _valor_revisado(i)
         for i in (estado['extraordinarias'] + estado['revisar'])
@@ -606,7 +606,7 @@ class Decisoes(BaseModel):
     revisar: dict = Field(default_factory=dict)
     inadimplencia: dict = Field(default_factory=dict)
     lancamentos: dict = Field(default_factory=dict)
-    # Fracao (ex.: 0.10). None = manter o valor atual da sessao.
+    # Ignorado: o aumento previsto é fixo em core.INFLACAO (10%).
     inflacao_pct: float | None = Field(default=None, ge=0.0, le=1.0)
     # 'AAAA-MM' (ex.: '2022-03') — mes/ano do ultimo reajuste da taxa
     # condominial, usado no item 6 do relatorio PDF. None = nao informado.

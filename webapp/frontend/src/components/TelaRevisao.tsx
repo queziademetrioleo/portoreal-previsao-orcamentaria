@@ -207,7 +207,6 @@ export default function TelaRevisao({
     aoVivo,
     buildPayload,
     inflacao,
-    setInflacao,
     ultimoReajuste,
     setUltimoReajuste,
     recalcularAgora,
@@ -630,7 +629,7 @@ export default function TelaRevisao({
             <p className="gerar-modal-intro">Confirme as informações que serão usadas no relatório antes de baixar o PDF.</p>
             <label className="gerar-modal-field">
               <span>Aumento Previsto (Salários, Tarifas, Serviços)</span>
-              <div><input type="number" className="inflacao-input" min={0} max={100} step={0.1} value={Number((inflacao * 100).toFixed(2))} onChange={e => { const pct = parseFloat(e.target.value); if (Number.isFinite(pct) && pct >= 0 && pct <= 100) setInflacao(pct / 100) }} aria-label="Percentual de aumento previsto" />%</div>
+              <div><strong>10%</strong> <small>(valor fixo)</small></div>
             </label>
             <label className="gerar-modal-field">
               <span>Último reajuste da taxa condominial</span>

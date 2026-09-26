@@ -25,7 +25,7 @@ REGRAS APRENDIDAS DO HISTORICO (2022-2026, 4 condominios):
      provisao para Sistema de Combate a Incendio / Registro da Convencao.
  R6. Contratos, Pro-labore e Taxa de Administracao -> previsao = ultimo valor
      mensal vigente x 12 (anualizacao da tarifa atual, nao a soma historica).
- R7. Reajuste de inflacao: +IPCA 4.72% sobre o subtotal (ou PREVISAO_INFLACAO_PCT).
+ R7. Aumento previsto: 10% fixo sobre o subtotal (INFLACAO).
  R8. Inadimplencia: nao entra como despesa; reportada como risco de caixa,
      com regua de criticidade > 3 meses da data-base do inad01.
 """
@@ -792,9 +792,10 @@ PONTUAL_FORA = ['combate a incendio']
 SEMPRE_RECORRENTE = ['extintor']
 ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
              '13. taxa de administrac', '13o taxa']
-# Default 10% (taxa da Porto Real sobre as despesas — feedback CEO 07/2026);
-# editavel por sessao na interface e via env PREVISAO_INFLACAO_PCT.
-INFLACAO = float(os.environ.get('PREVISAO_INFLACAO_PCT', '0.10'))
+# Aumento previsto FIXO em 10% (taxa da Porto Real sobre as despesas — feedback
+# CEO 07/2026; confirmado 09/2026: é o que o José Henrique usa nas previsões).
+# Não é mais editável por sessão nem por env.
+INFLACAO = 0.10
 
 
 def _eh_fundo_reserva(classe):

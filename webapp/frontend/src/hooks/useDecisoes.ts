@@ -52,7 +52,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
   const [lancamentos, setLancamentos] = useState<LancamentoConta[]>(sessao.lancamentos_contas ?? [])
-  const [inflacao, setInflacao] = useState<number>(sessao.resumo.inflacao ?? 0.10)
+  const [inflacao, setInflacao] = useState<number>(0.10)  // aumento previsto fixo em 10%
   const [ultimoReajuste, setUltimoReajuste] = useState<string>(sessao.resumo.ultimo_reajuste ?? '')
 
   const [vivo, setVivo] = useState({
@@ -190,7 +190,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
         total: nova.resumo.total_previsto,
         impacto: nova.resumo.impacto_receita_mensal ?? 0,
       })
-      setInflacao(nova.resumo.inflacao ?? 0.10)
+      setInflacao(0.10)
       setUltimoReajuste(nova.resumo.ultimo_reajuste ?? '')
       // Pula o proximo preview debounced — os numeros ja estao atualizados
       primeiraRender.current = true
