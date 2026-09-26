@@ -74,11 +74,29 @@ class RecalculoDecisoesTest(unittest.TestCase):
         ))
         self.assertAlmostEqual(resultado['subtotal'], 0.0)
 
-    def test_extintores_continuam_na_previsao(self):
-        resultado = previsao.recalcular(montar_resultado(
-            'Conservação', 'Manut. Extintores e/ou Teste mangueira', 'Recorrente',
-        ))
-        self.assertAlmostEqual(resultado['subtotal'], 1200.0)
+    def test_extintores_continuam_na_previsao_mesmo_deduzidos_na_revisao(self):
+        for categoria in ('Recorrente', 'Extraordinaria'):
+            with self.subTest(categoria=categoria):
+                resultado = previsao.recalcular(montar_resultado(
+                    'Conservação', 'Manut. Extintores e/ou Teste mangueira', categoria,
+                ))
+                self.assertAlmostEqual(resultado['subtotal'], 1200.0)
+
+
+class ReceitaNaoOrdinariaTest(unittest.TestCase):
+    def test_aluguel_usa_ultimo_mes_recebido(self):
+        bal = {'receitas': [
+            {'classe': 'Tx. Condomínio', 'total': 12000, 'monthly': [1000] * 12},
+            {'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'total': 100374.84,
+             'monthly': [8873.05] * 4 + [9268.95] * 7 + [0.0]},
+        ]}
+        self.assertEqual(previsao.receitas_nao_ordinarias(bal), [
+            {'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95},
+        ])
+
+    def test_aluguel_nao_entra_como_repasse(self):
+        self.assertFalse(previsao._eh_utilidade_repasse('Aluguel de Espaço p/ Antena de Telefonia'))
+        self.assertTrue(previsao._eh_utilidade_repasse('Gás'))
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ Gera um PDF limpo, para entrega ao cliente, a partir do estado ja revisado
 de uma sessao (mesmos dados exibidos na tela de resultado do webapp).
 
 Layout: logo Porto Real -> nome do condominio/ano -> Receitas -> Despesas ->
-Quadro de leitura (com/sem fundo lado a lado) -> Composicao das despesas
+Quadro de leitura (uma caixa por opção de receita) -> Composicao das despesas
 (pizza) -> Evolucao mensal -> Conclusao -> Considerações Importantes.
 """
 import base64
@@ -75,22 +75,64 @@ def _reajuste_necessario(total_previsto, receita_total):
     return abs(float(total_previsto or 0) / receita_total - 1)
 
 
-def _consideracao_fundo_reserva(incluir_fundo, total_previsto,
-                                receita_com_fundo, receita_sem_fundo):
-    receita_escolhida = receita_com_fundo if incluir_fundo else receita_sem_fundo
-    reajuste = _reajuste_necessario(total_previsto, receita_escolhida)
-    if not incluir_fundo:
-        return (
-            f'Recomendamos um reajuste de {_pct(reajuste)}% na taxa condominial para os próximos '
-            '12 meses.'
-        )
-    return (
-        'Sugestão: como foi selecionada a utilização dos valores arrecadados para a constituição '
-        'do Fundo de Reserva no custeio das despesas ordinárias — prática não recomendada —, '
-        f'o reajuste necessário da taxa condominial é de {_pct(reajuste)}% para os próximos '
-        '12 meses. O percentual foi calculado pelo valor absoluto da fórmula '
-        '|Total Previsto ÷ Receita Total − 1|.'
-    )
+def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
+    """Opções de receita para custear as despesas ordinárias (feedback José
+    Henrique 09/2026): só receita; + Fundo de Reserva; + aluguel;
+    + Fundo + aluguel. Cada condomínio mostra só as que tem.
+    receita_anual = receita ordinária (taxas + repasses), já sem o fundo e
+    sem a inadimplência considerada."""
+    aluguel_anual = sum(float(i.get('mensal') or 0) for i in nao_ordinarias or []) * 12
+    nome_aluguel = (nao_ordinarias[0]['classe'] if len(nao_ordinarias or []) == 1
+                    else 'Aluguéis de espaço')
+    tem_fundo = fundo_anual > 0.005
+    tem_aluguel = aluguel_anual > 0.005
+    candidatas = [
+        ('Só receita', receita_anual, True),
+        ('Receita + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
+        (f'Receita + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
+        (f'Receita + Fundo de Reserva + {nome_aluguel}',
+         receita_anual + fundo_anual + aluguel_anual, tem_fundo and tem_aluguel),
+    ]
+    opcoes = []
+    for label, receita, aplica in candidatas:
+        if not aplica:
+            continue
+        resultado = receita - float(total_previsto or 0)
+        opcoes.append({
+            'label': label,
+            'receita_anual': receita,
+            'resultado': resultado,
+            'status': core._status_resultado(resultado),
+            # com sobra não há reajuste; com falta, |TOTAL / RECEITA - 1|
+            'reajuste': _reajuste_necessario(total_previsto, receita) if resultado < 0 else 0.0,
+            'usa_fundo': 'Fundo de Reserva' in label,
+        })
+    return opcoes
+
+
+def _frase_opcao(opcao):
+    resultado_mensal = opcao['resultado'] / 12
+    if resultado_mensal < 0:
+        return (f'faltam {_money(-resultado_mensal)} por mês — reajuste necessário de '
+                f'{_pct(opcao["reajuste"])}% na taxa condominial')
+    return f'sobram {_money(resultado_mensal)} por mês — não é necessário reajuste'
+
+
+def _consideracao_opcoes(opcoes):
+    if len(opcoes) == 1:
+        opcao = opcoes[0]
+        if opcao['reajuste'] > 0:
+            return (f'Recomendamos um reajuste de {_pct(opcao["reajuste"])}% na taxa condominial '
+                    'para os próximos 12 meses.')
+        return 'A receita atual cobre as despesas previstas; não é necessário reajuste da taxa condominial.'
+    letras = 'abcd'
+    itens = '; '.join(f'{letras[i]}) {o["label"]}: {_frase_opcao(o)}'
+                      for i, o in enumerate(opcoes))
+    texto = f'Opções para o custeio das despesas ordinárias nos próximos 12 meses: {itens}.'
+    if any(o['usa_fundo'] for o in opcoes):
+        texto += (' A utilização dos valores arrecadados para o Fundo de Reserva no custeio das '
+                  'despesas ordinárias não é recomendada.')
+    return texto
 
 
 def _logo_base64(logo_path):
@@ -524,12 +566,20 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         if _norm(label) == 'receita media do periodo' else (label, valor)
         for label, valor in receitas
     ]
-    # Filtra Fundo de Reserva das receitas quando o usuario escolheu SEM FUNDO
-    if not com_fundo_pref:
-        receitas = [(l, v) for l, v in receitas
-                     if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
+    ordinarias = cenarios.get('receitas_ordinarias') or []
+    if not receitas and ordinarias:
+        # Uma linha por receita (Taxas, Gás, Água...), como a previsão manual;
+        # o Fundo de Reserva aparece separado, nunca somado às Taxas.
+        receitas = [(i['classe'], float(i['mensal'])) for i in ordinarias]
+        if fundo_reserva_anual > 0.005:
+            receitas.insert(1, ('Fundo de Reserva', fundo_reserva_anual / 12))
     if not receitas:
         receitas = [('Taxas de Condomínio', resumo.get('receita_mensal') or 0)]
+    # Receitas não ordinárias (aluguel de espaço) aparecem na tabela, mas só
+    # entram nas opções de cálculo — nunca na receita ordinária.
+    nao_ordinarias = cenarios.get('receitas_nao_ordinarias') or []
+    receitas += [(i['classe'], float(i['mensal'])) for i in nao_ordinarias
+                 if _norm(i['classe']) not in {_norm(l) for l, _ in receitas}]
     # A inadimplência considerada sai da Taxa de Condomínio (e de toda receita
     # usada nos cenários/reajuste) — feedback José Henrique 09/2026: o texto
     # dizia "subtraímos" mas a tabela mostrava a receita cheia.
@@ -549,6 +599,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
     resultado_com = receita_anual_com - total_previsto
     resultado_sem = receita_anual_sem - total_previsto
+    opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
 
     pizza = _grafico_pizza_svg(grupos, total_grupo)
     grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
@@ -605,13 +656,11 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
             f'ou seja, há {tempo_passado} sem aumento.'
         )
 
-    consideracao_fundo = _consideracao_fundo_reserva(
-        com_fundo_pref, total_previsto, receita_anual_com, receita_anual_sem,
-    )
-    consideracoes.append(consideracao_fundo)
-    consideracoes.append(
-        'Lembramos que o reajuste aplicado incidirá também sobre o valor arrecadado para o Fundo de Reserva.'
-    )
+    consideracoes.append(_consideracao_opcoes(opcoes))
+    if fundo_reserva_anual > 0.005:
+        consideracoes.append(
+            'Lembramos que o reajuste aplicado incidirá também sobre o valor arrecadado para o Fundo de Reserva.'
+        )
     consideracoes.append(
         'ATENÇÃO/IMPORTANTE: Sugerimos ainda que, para os próximos 12 meses, sejam executadas as '
         'seguintes manutenções: revisão do sistema geral de combate a incêndio (mangueiras, bombas, '
@@ -643,25 +692,14 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         'aumento_mensal': _money(aumento_mensal),
         'total_despesas': _money(total_despesas_mensal),
         'com_fundo_pref': com_fundo_pref,
-        'com_fundo': {
-            'receita_mensal': _money(receita_anual_com / 12),
+        'opcoes': [{
+            'label': o['label'],
+            'receita_mensal': _money(o['receita_anual'] / 12),
             'despesa_mensal': _money(total_previsto / 12),
-            'resultado_mensal': _money(resultado_com / 12),
-            'status': core._status_resultado(resultado_com),
-        },
-        'sem_fundo': {
-            'receita_mensal': _money(receita_anual_sem / 12),
-            'despesa_mensal': _money(total_previsto / 12),
-            'resultado_mensal': _money(resultado_sem / 12),
-            'status': core._status_resultado(resultado_sem),
-        },
-        'quadro': {
-            'receita_mensal': _money((receita_anual_sem if not com_fundo_pref else receita_anual_com) / 12),
-            'despesa_mensal': _money(total_previsto / 12),
-            'resultado_mensal': _money(resultado_quadro / 12),
-            'status': status_quadro,
-            'label': 'Sem fundo de reserva' if not com_fundo_pref else 'Com fundo de reserva',
-        },
+            'resultado_mensal': _money(o['resultado'] / 12),
+            'reajuste': (f"{_pct(o['reajuste'])}%" if o['reajuste'] > 0 else 'Não é necessário'),
+            'status': o['status'],
+        } for o in opcoes],
         'fundo_reserva_anual': _money(fundo_reserva_anual),
         'tem_fundo_reserva': abs(fundo_reserva_anual) > 0.005,
         'pizza': pizza,
@@ -716,8 +754,8 @@ _HTML_TEMPLATE = r"""
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.total td { font-weight: 700; border-top: 2px solid #14110c; border-bottom: none; }
   tr.subtotal td { font-weight: 700; border-top: 1px solid #898781; border-bottom: none; color: #52514e; }
-  .quadros { display: flex; gap: 14px; }
-  .quadro { flex: 1; border: 1px solid #e1e0d9; border-radius: 6px; padding: 10px 12px; }
+  .quadros { display: flex; flex-wrap: wrap; gap: 14px; }
+  .quadro { flex: 1 1 40%; border: 1px solid #e1e0d9; border-radius: 6px; padding: 10px 12px; }
   .quadro h3 { font-size: 12px; margin-bottom: 6px; color: #1c355e; }
   .quadro .linha { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #e1e0d9; }
   .quadro .linha:last-child { border-bottom: none; font-weight: 700; }
@@ -778,36 +816,18 @@ _HTML_TEMPLATE = r"""
   <div class="secao">
     <h2>Quadro de leitura</h2>
     <div class="quadros">
-      {% if com_fundo_pref and tem_fundo_reserva %}
+      {% for o in opcoes %}
       <div class="quadro">
-        <h3>Com fundo de reserva</h3>
-        <div class="linha"><span>Receita mensal</span><span>{{ com_fundo.receita_mensal }}</span></div>
-        <div class="linha"><span>Despesa mensal</span><span>{{ com_fundo.despesa_mensal }}</span></div>
-        <div class="linha"><span>Resultado mensal</span><span>{{ com_fundo.resultado_mensal }}</span></div>
-        <span class="badge {{ com_fundo.status }}">
-          {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[com_fundo.status] }}
+        <h3>{{ o.label }}</h3>
+        <div class="linha"><span>Receita mensal</span><span>{{ o.receita_mensal }}</span></div>
+        <div class="linha"><span>Despesa mensal</span><span>{{ o.despesa_mensal }}</span></div>
+        <div class="linha"><span>Resultado mensal</span><span>{{ o.resultado_mensal }}</span></div>
+        <div class="linha"><span>Reajuste necessário</span><span>{{ o.reajuste }}</span></div>
+        <span class="badge {{ o.status }}">
+          {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[o.status] }}
         </span>
       </div>
-      <div class="quadro">
-        <h3>Sem fundo de reserva</h3>
-        <div class="linha"><span>Receita mensal</span><span>{{ sem_fundo.receita_mensal }}</span></div>
-        <div class="linha"><span>Despesa mensal</span><span>{{ sem_fundo.despesa_mensal }}</span></div>
-        <div class="linha"><span>Resultado mensal</span><span>{{ sem_fundo.resultado_mensal }}</span></div>
-        <span class="badge {{ sem_fundo.status }}">
-          {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[sem_fundo.status] }}
-        </span>
-      </div>
-      {% else %}
-      <div class="quadro">
-        <h3>{{ quadro.label }}</h3>
-        <div class="linha"><span>Receita mensal</span><span>{{ quadro.receita_mensal }}</span></div>
-        <div class="linha"><span>Despesa mensal</span><span>{{ quadro.despesa_mensal }}</span></div>
-        <div class="linha"><span>Resultado mensal</span><span>{{ quadro.resultado_mensal }}</span></div>
-        <span class="badge {{ quadro.status }}">
-          {{ {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit insuficiente', 'deficit': 'Déficit'}[quadro.status] }}
-        </span>
-      </div>
-      {% endif %}
+      {% endfor %}
     </div>
   </div>
 

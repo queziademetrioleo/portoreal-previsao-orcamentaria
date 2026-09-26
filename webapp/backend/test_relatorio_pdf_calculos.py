@@ -57,22 +57,40 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
             abs(29034.47 / 32594.70 - 1),
         )
 
-    def test_consideracao_sem_fundo_e_curta_e_usa_receita_sem_fundo(self):
-        texto = relatorio_pdf._consideracao_fundo_reserva(
-            False, 35000, 32000, 30000,
-        )
+    def test_opcoes_mostram_so_o_que_o_condominio_tem(self):
+        aluguel = [{'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95}]
+        opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 0, aluguel, 27408.72 * 12)
+        self.assertEqual([o['label'] for o in opcoes], [
+            'Só receita', 'Receita + Aluguel de Espaço p/ Antena de Telefonia',
+        ])
+        so_receita, com_aluguel = opcoes
+        self.assertAlmostEqual(so_receita['resultado'] / 12, -4777.53, places=2)
+        self.assertAlmostEqual(so_receita['reajuste'], 27408.72 / 22631.19 - 1)
+        self.assertAlmostEqual(com_aluguel['resultado'] / 12, 4491.42, places=2)
+        self.assertEqual(com_aluguel['reajuste'], 0.0)
+
+    def test_quatro_opcoes_quando_tem_fundo_e_aluguel(self):
+        aluguel = [{'classe': 'Aluguel de Espaço', 'mensal': 1000}]
+        opcoes = relatorio_pdf._opcoes_receita(24000, 6000, aluguel, 30000)
+        self.assertEqual([o['label'] for o in opcoes], [
+            'Só receita', 'Receita + Fundo de Reserva', 'Receita + Aluguel de Espaço',
+            'Receita + Fundo de Reserva + Aluguel de Espaço',
+        ])
+
+    def test_consideracao_lista_as_opcoes_com_falta_e_sobra(self):
+        aluguel = [{'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95}]
+        opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 0, aluguel, 27408.72 * 12)
+        texto = relatorio_pdf._consideracao_opcoes(opcoes)
+        self.assertIn('a) Só receita: faltam R$ 4.777,53 por mês — reajuste necessário de 21,1%', texto)
+        self.assertIn('sobram R$ 4.491,42 por mês — não é necessário reajuste', texto)
+        self.assertNotIn('Fundo de Reserva', texto)
+
+    def test_consideracao_com_uma_opcao_e_curta(self):
+        opcoes = relatorio_pdf._opcoes_receita(30000, 0, [], 35000)
         self.assertEqual(
-            texto,
+            relatorio_pdf._consideracao_opcoes(opcoes),
             'Recomendamos um reajuste de 16,7% na taxa condominial para os próximos 12 meses.',
         )
-
-    def test_consideracao_aparece_com_formula_quando_fundo_e_utilizado(self):
-        texto = relatorio_pdf._consideracao_fundo_reserva(
-            True, 35000, 32000, 30000,
-        )
-        self.assertIn('9,4%', texto)
-        self.assertIn('prática não recomendada', texto)
-        self.assertIn('|Total Previsto ÷ Receita Total − 1|', texto)
 
     def test_tempo_desde_reajuste_usa_meses_antes_de_um_ano(self):
         self.assertEqual(

@@ -786,6 +786,10 @@ PESSOAL_PONTUAL = ['rescisao', 'indenizacao trabalhista', 'pensao aliment']
 # José Henrique 09/2026: "Sistema de combate a incêndio normalmente é um gasto
 # pontual. Não incluir na previsão"). Recarga de extintores NÃO entra aqui.
 PONTUAL_FORA = ['combate a incendio']
+# Classes recorrentes obrigatórias, sempre integrais na previsão — nenhuma NF
+# é deduzida como extraordinária (feedback José Henrique 09/2026: "faltou
+# colocar a recarga de extintores"; a previsão manual dele mantém o valor).
+SEMPRE_RECORRENTE = ['extintor']
 ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
              '13. taxa de administrac', '13o taxa']
 # Default 10% (taxa da Porto Real sobre as despesas — feedback CEO 07/2026);
@@ -796,6 +800,34 @@ INFLACAO = float(os.environ.get('PREVISAO_INFLACAO_PCT', '0.10'))
 def _eh_fundo_reserva(classe):
     nc = _norm(classe)
     return 'fundo' in nc and 'reserva' in nc
+
+
+# Receita que nao e taxa nem repasse de consumo: aluguel/cessao de espaco
+# (ex.: "Aluguel de Espaço p/ Antena de Telefonia"). Fica FORA da receita
+# ordinaria e entra so nas opcoes de calculo do relatorio (feedback José
+# Henrique 09/2026: só receita / + fundo / + aluguel / + fundo + aluguel).
+_RECEITA_NAO_ORDINARIA = ('aluguel', 'cessao', 'locacao')
+
+
+def _eh_receita_nao_ordinaria(classe):
+    nc = _norm(classe)
+    return any(t in nc for t in _RECEITA_NAO_ORDINARIA)
+
+
+def receitas_nao_ordinarias(bal):
+    """[{'classe', 'mensal'}] das receitas nao ordinarias do balanual.
+    Valor = ultimo mes recebido, nao a media: aluguel e reajustado no meio
+    do ano e o mes mais recente pode ainda nao ter entrado (Beach Town 09/2026:
+    8.873,05 -> 9.268,95, ultimo mes zerado)."""
+    itens = []
+    for l in (bal or {}).get('receitas') or []:
+        if not _eh_receita_nao_ordinaria(l.get('classe')):
+            continue
+        recebidos = [v for v in (l.get('monthly') or []) if abs(v) > 0.005]
+        if recebidos:
+            itens.append({'classe': str(l.get('classe')).strip(),
+                          'mensal': round(recebidos[-1], 2)})
+    return itens
 
 
 # Classes que NAO entram na projecao de receita (ajustes pontuais, nao
@@ -900,6 +932,8 @@ def _eh_utilidade_repasse(classe):
         return False
     if 'condominio' in nc or nc.startswith('tx') or _eh_fundo_reserva(classe):
         return False  # essas vem do REC, nao do balanual
+    if _eh_receita_nao_ordinaria(classe):
+        return False
     return any(t in nc for t in ('agua', 'gas', 'luz', 'tv', 'internet'))
 
 
@@ -941,14 +975,36 @@ def _receita_fundo_do_balanual(bal):
     receita_total = float((bal or {}).get('total_receitas') or 0)
     if receita_total <= 0:
         receita_total = sum(float(l.get('total') or 0) for l in receitas)
+    receita_total -= sum(float(l.get('total') or 0) for l in receitas
+                         if _eh_receita_nao_ordinaria(l.get('classe')))
     return receita_total, fundo
 
 
-def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto):
+def receitas_ordinarias(bal, rec_doc):
+    """Linhas mensais da receita ordinaria, na mesma composicao de
+    receita_anual (REC: Taxa de Condominio; balanual: agua/gas/luz/tv/internet)
+    — o relatorio mostra cada uma separada, como a previsao manual.
+    Fundo de Reserva fica de fora (vai em fundo_reserva_anual). Sem REC
+    devolve [] e o relatorio usa a receita total numa linha so."""
+    if not rec_doc:
+        return []
+    linhas = [{'classe': 'Taxas de Condomínio',
+               'mensal': round(float(rec_doc.get('tx_condominio_mensal') or 0), 2)}]
+    for l in (bal or {}).get('receitas') or []:
+        if _eh_utilidade_repasse(l.get('classe')) and abs(float(l.get('total') or 0)) > 0.005:
+            linhas.append({'classe': str(l.get('classe')).strip(),
+                           'mensal': round(float(l['total']) / 12, 2)})
+    return linhas
+
+
+def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
+                      nao_ordinarias=None, ordinarias=None):
     """Cenarios COM e SEM fundo de reserva (feedback CEO 07/2026).
     receita_anual/fundo_reserva_anual vem do REC (fonte principal desde
     07/2026) ou, na ausencia dele, do balanual (fallback).
-    Cada cenario tambem classifica o resultado (superavit/insuficiente/deficit)."""
+    Cada cenario tambem classifica o resultado (superavit/insuficiente/deficit).
+    nao_ordinarias (aluguel de espaco etc.) NAO entra em receita_anual — vai
+    junto so para o relatorio montar as opcoes de calculo."""
     cenarios = {}
     for chave, receita in (('com_fundo', receita_anual),
                            ('sem_fundo', receita_anual - fundo_reserva_anual)):
@@ -960,6 +1016,8 @@ def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto):
             'status_resultado': _status_resultado(resultado),
         }
     cenarios['fundo_reserva_anual'] = round(fundo_reserva_anual, 2)
+    cenarios['receitas_ordinarias'] = list(ordinarias or [])
+    cenarios['receitas_nao_ordinarias'] = list(nao_ordinarias or [])
     return cenarios
 
 THIN = Side(style='thin', color='CCCCCC')
@@ -1367,6 +1425,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         elif any(k in nc for k in PONTUAL_FORA):
             ded = base; final = 0.0
             regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
+        elif any(k in nc for k in SEMPRE_RECORRENTE):
+            regra = 'Recorrente obrigatória: Recarga de Extintores mantida integral'
         # R4 diversas (exceto seguro e manutenções)
         elif 'diversas' in ng and 'seguro' not in nc:
             # Itens de manutenção/reparo no grupo Diversas NÃO são "diversas" —
@@ -1569,7 +1629,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'inflacao_pct': inflacao_pct,
             'rec': rec_doc, 'receita_anual': receita_anual,
             'fundo_reserva_anual': fundo_reserva_anual,
-            'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto),
+            'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
+                                  receitas_nao_ordinarias(bal),
+                                  receitas_ordinarias(bal, rec_doc)),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias}
@@ -1622,6 +1684,8 @@ def recalcular(R, inflacao_pct=None):
         elif any(k in nc for k in PONTUAL_FORA):
             ded, final = base, 0.0
             regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
+        elif any(k in nc for k in SEMPRE_RECORRENTE):
+            regra = 'Recorrente obrigatória: Recarga de Extintores mantida integral'
         elif 'diversas' in ng and 'seguro' not in nc:
             # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
             # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
@@ -1704,7 +1768,9 @@ def recalcular(R, inflacao_pct=None):
               'base_total': base_total, 'subtotal': subtotal,
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,
-              'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto)})
+              'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
+                                            receitas_nao_ordinarias(bal),
+                                            receitas_ordinarias(bal, R.get('rec')))})
     return R
 
 
