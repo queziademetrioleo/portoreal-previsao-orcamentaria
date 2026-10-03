@@ -100,7 +100,8 @@ def _ia_provedor():
 def _ia_modelo():
     """Modelo do provedor EFETIVO (considera falhas de billing ja detectadas)."""
     prov = _ia_provedor()
-    if prov in _PROVEDOR_FALHOU:
+    forcado = os.environ.get('PREVISAO_IA_PROVEDOR', '').strip().lower()
+    if prov in _PROVEDOR_FALHOU and forcado not in ('anthropic', 'openai'):
         alt = 'openai' if prov == 'anthropic' else 'anthropic'
         if alt not in _PROVEDOR_FALHOU and (_openai_key() if alt == 'openai' else _claude_key()):
             prov = alt
@@ -130,6 +131,16 @@ def _anthropic_chat(system, user, max_tokens, temperature=None):
                    if b.get('type') == 'text')
 
 
+def _openai_reasoning_effort():
+    """Raciocinio configuravel para modelos compativeis; Sol usa high por padrao."""
+    if not OPENAI_MODEL.startswith(('gpt-5', 'gpt-6', 'o1', 'o3', 'o4')):
+        return None
+    effort = os.environ.get('PREVISAO_IA_REASONING_EFFORT', 'high').strip().lower() or 'high'
+    if effort not in ('low', 'medium', 'high', 'xhigh', 'max'):
+        raise ValueError('PREVISAO_IA_REASONING_EFFORT deve ser low, medium, high, xhigh ou max')
+    return effort
+
+
 def _openai_chat(system, user, max_tokens, temperature=None):
     """POST /v1/chat/completions da OpenAI (sem SDK). Retorna texto ou levanta excecao."""
     import json as _json, urllib.request
@@ -137,7 +148,12 @@ def _openai_chat(system, user, max_tokens, temperature=None):
             'max_completion_tokens': max_tokens,
             'messages': [{'role': 'system', 'content': system},
                          {'role': 'user', 'content': user}]}
-    if temperature is not None:
+    effort = _openai_reasoning_effort()
+    if effort:
+        body['reasoning_effort'] = effort
+        # max_completion_tokens inclui raciocinio e resposta visivel.
+        body['max_completion_tokens'] = max_tokens + 16384
+    elif temperature is not None:
         body['temperature'] = temperature
     req = urllib.request.Request(
         'https://api.openai.com/v1/chat/completions',
@@ -146,7 +162,17 @@ def _openai_chat(system, user, max_tokens, temperature=None):
                  'Authorization': f'Bearer {_openai_key()}'})
     with urllib.request.urlopen(req, timeout=300) as r:
         data = _json.loads(r.read().decode('utf-8'))
-    return data['choices'][0]['message']['content'] or ''
+    choice = data['choices'][0]
+    if choice.get('finish_reason') == 'length':
+        raise RuntimeError('OpenAI atingiu o limite de tokens; resposta incompleta')
+    content = choice['message'].get('content')
+    if not content:
+        raise RuntimeError('OpenAI retornou resposta vazia')
+    usage = data.get('usage', {})
+    logger.info('OpenAI: modelo=%s raciocinio=%s entrada=%s saida=%s',
+                OPENAI_MODEL, effort or 'padrao',
+                usage.get('prompt_tokens'), usage.get('completion_tokens'))
+    return content
 
 
 _PROVEDOR_FALHOU = set()   # provedores que falharam nesta execucao (ex.: sem credito)
@@ -155,11 +181,13 @@ _PROVEDOR_FALHOU = set()   # provedores que falharam nesta execucao (ex.: sem cr
 def _claude_chat(system, user, max_tokens=4000, temperature=None):
     """Chat com o provedor de IA ativo (Anthropic ou OpenAI). Retorna texto ou None.
     Nome mantido por compatibilidade — roteia conforme _ia_provedor().
-    Se o provedor preferido falhar (ex.: sem credito), tenta o outro automaticamente."""
+    Provedor explicito nao troca de fornecedor. Em selecao automatica, usa fallback."""
     prov = _ia_provedor()
     if prov is None:
         return None
-    ordem = [prov] + [p for p in ('anthropic', 'openai') if p != prov]
+    forcado = os.environ.get('PREVISAO_IA_PROVEDOR', '').strip().lower()
+    ordem = ([prov] if forcado in ('anthropic', 'openai') else
+             [prov] + [p for p in ('anthropic', 'openai') if p != prov])
     for p in ordem:
         if p in _PROVEDOR_FALHOU:
             continue
@@ -172,7 +200,7 @@ def _claude_chat(system, user, max_tokens=4000, temperature=None):
             return fn(system, user, max_tokens, temperature)
         except Exception as e:
             _PROVEDOR_FALHOU.add(p)
-            logger.warning('IA %s falhou (%s: %s) — tentando alternativa...', p, type(e).__name__, e)
+            logger.warning('IA %s falhou (%s: %s)', p, type(e).__name__, e)
     logger.warning('Nenhum provedor de IA disponivel — seguindo so com as regras.')
     return None
 

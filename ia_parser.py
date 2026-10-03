@@ -223,7 +223,7 @@ def ia_parse_pasta(pasta):
 # Chamada à Claude API (reusa as funções do previsao.py)
 # ---------------------------------------------------------------------------
 def _call_ia(system, user, max_tokens=16000):
-    """Chama a Claude API. Retorna texto ou None."""
+    """Usa o mesmo provedor, modelo e raciocinio do motor. Retorna texto ou None."""
     try:
         # Tenta importar as funções do previsao.py
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -231,46 +231,8 @@ def _call_ia(system, user, max_tokens=16000):
         if core._ia_disponivel():
             return core._claude_chat(system, user, max_tokens=max_tokens)
     except Exception as e:
-        pass
-
-    # Fallback: chave direta
-    key = os.environ.get('ANTHROPIC_API_KEY', '').strip()
-    if not key:
-        key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chave_claude.txt')
-        if os.path.exists(key_file):
-            for line in open(key_file, encoding='utf-8'):
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    key = line
-                    break
-    if not key:
-        return None
-
-    try:
-        import urllib.request
-        model = os.environ.get('PREVISAO_IA_MODELO', 'claude-opus-4-8')
-        body = {
-            'model': model,
-            'max_tokens': max_tokens,
-            'system': system,
-            'messages': [{'role': 'user', 'content': user}]
-        }
-        req = urllib.request.Request(
-            'https://api.anthropic.com/v1/messages',
-            data=json.dumps(body).encode('utf-8'),
-            headers={
-                'Content-Type': 'application/json',
-                'x-api-key': key,
-                'anthropic-version': '2023-06-01'
-            }
-        )
-        with urllib.request.urlopen(req, timeout=300) as r:
-            data = json.loads(r.read().decode('utf-8'))
-        return ''.join(b.get('text', '') for b in data.get('content', [])
-                       if b.get('type') == 'text')
-    except Exception as e:
         print(f"   ❌ Erro na chamada IA: {e}")
-        return None
+    return None
 
 
 def _extrair_json(texto):

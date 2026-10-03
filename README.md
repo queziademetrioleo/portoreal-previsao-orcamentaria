@@ -108,6 +108,22 @@ docker compose up -d --build
 3. Aponte o Dockerfile: `webapp/Dockerfile`
 4. Exponha a porta `8000`
 
+Para usar somente OpenAI com GPT-6.1 Sol e raciocínio alto, configure no
+serviço do EasyPanel (ou no `.env` do Docker Compose):
+
+```env
+OPENAI_API_KEY=sua-chave
+PREVISAO_IA_PROVEDOR=openai
+PREVISAO_IA_MODELO_OPENAI=gpt-6.1-sol
+PREVISAO_IA_REASONING_EFFORT=high
+```
+
+Faça o deploy depois de salvar as variáveis. O provedor explícito impede
+fallback para Anthropic, inclusive no parser. `high` é o padrão para modelos
+OpenAI de raciocínio; modelos legados como GPT-4.1 não recebem esse parâmetro.
+O limite de resposta reserva mais 16.384 tokens para raciocínio. Os logs
+registram modelo, esforço e consumo de tokens sem registrar chaves ou documentos.
+
 ---
 
 ## 🏗️ Estrutura do projeto
