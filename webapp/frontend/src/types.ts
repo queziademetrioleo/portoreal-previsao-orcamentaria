@@ -107,6 +107,9 @@ export interface Resumo {
 }
 
 export interface Sessao {
+  origem_sistema?: 'condo21' | 'misto'
+  avisos_importacao?: string[]
+  cobertura?: Record<string, string>
   sessao_id: string
   nome_condominio: string
   ano_previsao: number

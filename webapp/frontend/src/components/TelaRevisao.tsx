@@ -350,6 +350,12 @@ export default function TelaRevisao({
         </section>
 
         {erro && <div className="alert-error">{erro}</div>}
+        {(sessao.avisos_importacao?.length ?? 0) > 0 && (
+          <div className="alert-error" role="status">
+            <strong>Conferência dos documentos</strong>
+            <ul>{sessao.avisos_importacao!.map((aviso, index) => <li key={index}>{aviso}</li>)}</ul>
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -534,7 +540,9 @@ export default function TelaRevisao({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
                     <h2 className="section-title">Inadimplência</h2>
-                    <p className="section-desc">Apenas unidades com três ou mais meses consecutivos em atraso. Para cada unidade, entra somente a última taxa condominial vencida.</p>
+                    <p className="section-desc">{sessao.origem_sistema === 'misto'
+                      ? 'Somente os dois últimos meses do relatório de inadimplência do Alma. Para cada unidade, entra somente a última taxa condominial vencida; débitos antigos do Condo21 não entram.'
+                      : 'Apenas unidades com três ou mais meses consecutivos em atraso. Para cada unidade, entra somente a última taxa condominial vencida.'}</p>
                   </div>
                   <div className="choice-row">
                     <Button size="sm" variant="secondary" onClick={() => setInad((prev) => prev.map((i) => ({ ...i, decisao: 'abater' })))}>

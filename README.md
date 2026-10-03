@@ -1,7 +1,7 @@
 # 🏢 Previsão Orçamentária — Porto Real Imóveis
 
 **Sistema inteligente de previsão orçamentária para condomínios.**  
-Lê os relatórios do Condomínio21 (Group Software), aplica regras de negócio aprendidas de anos de cálculos manuais, usa **IA (Claude Opus)** para classificar cada nota fiscal, e gera o relatório PDF após a revisão humana.
+Lê os relatórios do Condomínio21 (Group Software) e do Alma durante a migração, aplica regras de negócio aprendidas de anos de cálculos manuais, usa IA para classificar cada nota fiscal, e gera o relatório PDF após a revisão humana.
 
 <p align="center">
   <img src="webapp/frontend/public/assets/logo.png" alt="Porto Real" height="80">
@@ -23,6 +23,24 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 5. **Relatório em PDF** para entrega ao condomínio, com logo, receitas/despesas, quadro comparativo com/sem fundo de reserva, gráficos e as Considerações Importantes (item de reajuste sugerido calculado automaticamente)
 
 ---
+
+## Upload conjunto Condo21 + Alma
+
+Na tela **Nova previsão**, selecione **Condo21 + Alma**. Além dos relatórios Condo21, envie:
+
+- Demonstrativo por período agrupado por contas do Alma: PDF.
+- FIN00601 de despesas detalhadas: XLSX.
+- Contas a receber agrupado por conta: PDF, com um único mês de vencimento.
+- Plano de contas Almah: XLSX, com Classificação e Descrição.
+- Inadimplência Alma: PDF; se não houver, marque **Não há inadimplência no Alma**.
+
+O período de despesas pode ser escolhido por mês ou identificado automaticamente. Os pagamentos do FIN são selecionados pela **Data Pagto**. Meses com movimentação nas duas fontes ou sem cobertura são recusados para evitar duplicidade e lacunas. Meses futuros zerados do balanual Condo21 permitem cobertura pelo Alma.
+
+O plano de contas associa classes aos grupos, inclusive classes novas. Pagamentos sem correspondência no demonstrativo permanecem na revisão; diferenças entre demonstrativo e pagamentos aparecem na tela, sem criar notas fictícias.
+
+**Somente no uso conjunto:** a inadimplência considera os dois últimos meses da referência do relatório Alma, independentemente do período de despesas. Para cada unidade, entra a última taxa condominial vencida nesse intervalo. Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico Condo21 não é recuperado. Como o PDF Alma agrega taxa, fundo e consumo, a taxa por unidade é identificada no REC Condo21; divergência com a cobrança agregada atual é avisada para conferência.
+
+Os arquivos de ambas as fontes e a seleção do período ficam salvos na sessão, inclusive para reanálise. O banco recebe as colunas necessárias automaticamente na inicialização do backend. O fluxo exclusivo Condo21 mantém sua regra de inadimplência existente.
 
 ## 🧠 Regras de cálculo (R1–R8)
 

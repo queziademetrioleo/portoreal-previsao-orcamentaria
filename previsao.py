@@ -338,7 +338,8 @@ def ia_parecer(R, nome_condo):
                        sorted(ex_top.items(), key=lambda x: -x[1])[:8])
     inad_txt = 'sem inadimplencia registrada'
     if R['inad']:
-        inad_txt = (f"total R${R['inad']['total']:,.2f}; critica (>=3 meses) "
+        criterio = 'dois últimos meses do relatório Alma' if R['inad'].get('regra') == 'misto_ultimos_2_meses_alma' else 'critica (>=3 meses)'
+        inad_txt = (f"total R${R['inad']['total']:,.2f}; {criterio} "
                     f"R${R['inad']['critica']:,.2f} ({R['inad']['unidades_criticas']} unidade(s)); "
                     f"impacto mensal na receita R${R['inad']['impacto_mensal_receita']:,.2f}")
     man_txt = 'sem previsao manual para comparar'
@@ -1253,11 +1254,17 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # --- IA-powered parsing (substitui os 4 parsers rigidos) ---
     logger.info('Passo 1/6: Carregando relatorios...')
     ia_dados = None
-    try:
-        from ia_parser import ia_parse_pasta
-        ia_dados = ia_parse_pasta(folder)
-    except Exception as e:
-        logger.warning('ia_parser indisponivel (%s) — usando parsers rigidos', e)
+    mixed_data = None
+    if os.path.exists(os.path.join(folder, 'alma_fin.xlsx')):
+        from parsers_alma import load_mixed
+        mixed_data = load_mixed(folder, sys.modules[__name__])
+        ia_dados = mixed_data
+    else:
+        try:
+            from ia_parser import ia_parse_pasta
+            ia_dados = ia_parse_pasta(folder)
+        except Exception as e:
+            logger.warning('ia_parser indisponivel (%s) — usando parsers rigidos', e)
 
     if ia_dados:
         bal = ia_dados['bal']
@@ -1268,7 +1275,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         # --- Fallback: parsers rigidos originais ---
         bal = parse_balanual(os.path.join(folder, 'balanual.xls'))
         des = parse_desbai(os.path.join(folder, 'desbai06.xls'))
-        sin = parse_dessin(os.path.join(folder, 'dessin02.xls'))
+        sin_path = os.path.join(folder, 'dessin02.xls')
+        sin = parse_dessin(sin_path) if os.path.exists(sin_path) else {'grand_total': None}
         inad_path = os.path.join(folder, 'inad01.xls')
         ina = parse_inad(inad_path) if os.path.exists(inad_path) else None
 
@@ -1277,9 +1285,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # estruturado, nao precisa de IA). Obrigatorio no fluxo do webapp
     # (main.py exige o upload); aqui fica opcional para permitir uso deste
     # motor em scripts/analises avulsas sem REC disponivel.
-    rec_doc = None
+    rec_doc = mixed_data['rec'] if mixed_data else None
     rec_path = os.path.join(folder, 'rec02.xls')
-    if os.path.exists(rec_path):
+    if not mixed_data and os.path.exists(rec_path):
         try:
             rec_doc = parse_rec(rec_path)
         except Exception as e:
@@ -1322,8 +1330,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # --- Cross-check entre relatorios ---
     tot_bal = bal.get('total_despesas', 0)
     tot_des = des.get('grand_total', 0)
-    tot_sin = sin.get('grand_total', 0) if sin else 0
-    divergencias = []
+    tot_sin = (sin.get('grand_total') or 0) if sin else 0
+    divergencias = list(mixed_data['divergencias']) if mixed_data else []
     if tot_bal > 0 and tot_des > 0:
         pct = abs(tot_bal - tot_des) / max(tot_bal, tot_des)
         if pct > 0.05:
@@ -1358,6 +1366,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     for it in des['itens']:
         nm = freq.get(_norm(it['classe']))
         cat, mot = classify(it['grupo'], it['classe'], it['descricao'], nm, it['valor_pago'])
+        if it.get('classificacao_pendente'):
+            cat, mot = 'Revisar', 'Conferir correspondência da classe com o plano de contas e o demonstrativo.'
         it['cat'], it['motivo'], it['n_meses'] = cat, mot, nm
     # Contagens
     n_extra = sum(1 for it in des['itens'] if it['cat'] == 'Extraordinaria')
@@ -1376,7 +1386,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('  IA sugeriu reclassificar %d itens', len(sugestoes_ia))
     for idx, (sug, just) in sugestoes_ia.items():
         it = des['itens'][idx]
-        if sug in ('Extraordinaria', 'Recorrente'):
+        if sug in ('Extraordinaria', 'Recorrente') and not it.get('classificacao_pendente'):
             it['cat'] = sug
             it['motivo'] = f'IA: {just}'
 
@@ -1409,7 +1419,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 continue
             threshold = mediana + 3.0 * mad * 1.4826
             for it in nfs:
-                if it['valor_pago'] > threshold and it['cat'] != 'Extraordinaria':
+                if it['valor_pago'] > threshold and it['cat'] != 'Extraordinaria' and not it.get('classificacao_pendente'):
                     it['cat'] = 'Extraordinaria'
                     it['motivo'] = (f'Outlier estatistico (MAD): R${it["valor_pago"]:,.2f} > '
                                     f'mediana + 3*MAD (R${threshold:,.2f}) na classe {it["classe"]}')
@@ -1572,8 +1582,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # Regra: unidade e critica se ficou >= 3 meses CONSECUTIVOS sem pagar.
     # Impacto: abate da receita a taxa mensal da unidade × meses consecutivos devidos.
     # O arquivo inad01 ja traz o total calculado.
-    inad_res = None
-    if ina and ina['itens']:
+    inad_res = mixed_data['inad'] if mixed_data else None
+    if not mixed_data and ina and ina['itens']:
         data_base = ina['data_base']
         # Agrupar por unidade e extrair meses consecutivos
         unidade_meses = defaultdict(set)   # unidade -> set de meses (MM/AAAA)
@@ -1663,7 +1673,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                                   receitas_ordinarias(bal, rec_doc)),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
-            'divergencias': divergencias}
+            'divergencias': divergencias,
+            'origem_sistema': 'misto' if mixed_data else 'condo21',
+            'cobertura': mixed_data['cobertura'] if mixed_data else {}}
 
 
 # ---------------------------------------------------------------------------
@@ -1845,10 +1857,11 @@ def gerar_xlsx(folder, out_path=None):
         ws.cell(r, 1, 'INADIMPLENCIA — abate da receita (nao e despesa)').font = Font(bold=True)
         r += 1
         inad = R['inad']
+        misto_inad = inad.get('regra') == 'misto_ultimos_2_meses_alma'
         for label, val, critica in [
-            ('Total em aberto (todos os devedores)', inad['total'], False),
-            (f'Critica (>= 3 meses) — {inad["unidades_criticas"]} unidade(s)', inad['critica'], True),
-            ('Recente (< 3 meses) — nao abate receita', inad['recente'], False),
+            ('Total considerado nos dois últimos meses Alma' if misto_inad else 'Total em aberto (todos os devedores)', inad['total'], False),
+            (f'{"Dois últimos meses Alma" if misto_inad else "Critica (>= 3 meses)"} — {inad["unidades_criticas"]} unidade(s)', inad['critica'], True),
+            ('Fora do período considerado' if misto_inad else 'Recente (< 3 meses) — nao abate receita', inad['recente'], False),
             ('(-) Impacto mensal na receita prevista (taxa das unidades criticas)',
              inad['impacto_mensal_receita'], True),
         ]:
@@ -1862,7 +1875,7 @@ def gerar_xlsx(folder, out_path=None):
         c = ws.cell(r, 2, round(rec_ajustada, 2)); c.number_format = MONEY; c.font = Font(bold=True)
         c.fill = (WARN_FILL if rec_ajustada < R['total_previsto'] / 12 else OK_FILL)
         r += 1
-        ws.cell(r, 1, f"Data-base inad01: {inad['data_base']}")
+        ws.cell(r, 1, f"Data-base {'Alma' if misto_inad else 'inad01'}: {inad['data_base']}")
     ws.column_dimensions['A'].width = 52; ws.column_dimensions['B'].width = 16
 
     # ============== ABA CONTAS (auto) ==============
@@ -2030,7 +2043,9 @@ def gerar_xlsx(folder, out_path=None):
     # ============== ABA INADIMPLENCIA ==============
     ws = wb.create_sheet('Inadimplencia')
     if R['inad']:
-        ws['A1'] = f"Data-base: {R['inad']['data_base']}  |  Critica = vencido ha mais de 3 meses"
+        misto_inad = R['inad'].get('regra') == 'misto_ultimos_2_meses_alma'
+        criterio = 'Dois últimos meses do relatório Alma' if misto_inad else 'Critica = vencido ha mais de 3 meses'
+        ws['A1'] = f"Data-base: {R['inad']['data_base']}  |  {criterio}"
         ws['A1'].font = Font(bold=True)
         _ws_header(ws, 3, ['Unidade/Devedor', 'Classe', 'Mes Ref', 'Vencimento',
                            'Valor', 'Meses de atraso', 'Criticidade'],
@@ -2043,8 +2058,8 @@ def gerar_xlsx(folder, out_path=None):
             ws.cell(r, 4, str(i['vencimento'] or '')).border = BORDER
             c = ws.cell(r, 5, i['valor']); c.number_format = MONEY; c.border = BORDER
             ws.cell(r, 6, i['meses_atraso']).border = BORDER
-            crit = (i['meses_atraso'] or 0) >= 3
-            cc = ws.cell(r, 7, 'CRITICA (>= 3 meses)' if crit else 'recente (< 3 meses)')
+            crit = bool(i.get('critica')) if misto_inad else (i['meses_atraso'] or 0) >= 3
+            cc = ws.cell(r, 7, 'Considerada (Alma)' if misto_inad and crit else ('CRITICA (>= 3 meses)' if crit else 'recente (< 3 meses)'))
             cc.border = BORDER
             if crit:
                 for j in range(1, 8): ws.cell(r, j).fill = WARN_FILL
@@ -2052,8 +2067,8 @@ def gerar_xlsx(folder, out_path=None):
         r += 1
         inad = R['inad']
         for label, val in [('Inadimplencia total', inad['total']),
-                           ('Critica (>= 3 meses)', inad['critica']),
-                           ('Recente (< 3 meses) — nao abate receita', inad['recente']),
+                           ('Dois últimos meses Alma' if misto_inad else 'Critica (>= 3 meses)', inad['critica']),
+                           ('Fora do período considerado' if misto_inad else 'Recente (< 3 meses) — nao abate receita', inad['recente']),
                            (f'Impacto mensal na receita ({inad["unidades_criticas"]} unidade(s) critica(s))',
                             inad['impacto_mensal_receita'])]:
             ws.cell(r, 4, label).font = Font(bold=True)

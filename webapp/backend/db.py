@@ -10,6 +10,15 @@ logger = logging.getLogger(__name__)
 
 _pool = None
 
+COLUNAS_ARQUIVOS = {
+    'balanual': 'arquivo_balanual', 'desbai': 'arquivo_desbai',
+    'dessin': 'arquivo_dessin', 'inad': 'arquivo_inad',
+    'rec': 'arquivo_rec', 'xlsx': 'arquivo_xlsx',
+    'alma_bal': 'arquivo_alma_bal', 'alma_fin': 'arquivo_alma_fin',
+    'alma_rec': 'arquivo_alma_rec', 'alma_inad': 'arquivo_alma_inad',
+    'plano_alma': 'arquivo_plano_alma',
+}
+
 
 def _get_pool():
     global _pool
@@ -100,6 +109,9 @@ def _init_schema():
         # se o condominio tem Fundo de Reserva — o sindico marca isso na
         # tela de upload. NULL = sessao criada antes desse campo existir.
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'tem_fundo_reserva', 'TINYINT(1) DEFAULT NULL')
+        _adicionar_coluna_se_ausente(cursor, 'sessoes', 'config_importacao', 'LONGTEXT')
+        for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad', 'plano_alma'):
+            _adicionar_coluna_se_ausente(cursor, 'sessoes', COLUNAS_ARQUIVOS[campo], 'LONGBLOB')
         conn.commit()
         cursor.close()
         conn.close()
@@ -169,15 +181,7 @@ def salvar_arquivo(sid, campo, conteudo_bytes):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        colunas_validas = {
-            'balanual': 'arquivo_balanual',
-            'desbai': 'arquivo_desbai',
-            'dessin': 'arquivo_dessin',
-            'inad': 'arquivo_inad',
-            'rec': 'arquivo_rec',
-            'xlsx': 'arquivo_xlsx',
-        }
-        col = colunas_validas.get(campo)
+        col = COLUNAS_ARQUIVOS.get(campo)
         if not col:
             raise ValueError(f'Campo invalido: {campo}')
         cur.execute(f"UPDATE sessoes SET {col} = %s WHERE id = %s", (conteudo_bytes, sid))
@@ -190,20 +194,22 @@ def obter_arquivo(sid, campo):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        colunas_validas = {
-            'balanual': 'arquivo_balanual',
-            'desbai': 'arquivo_desbai',
-            'dessin': 'arquivo_dessin',
-            'inad': 'arquivo_inad',
-            'rec': 'arquivo_rec',
-            'xlsx': 'arquivo_xlsx',
-        }
-        col = colunas_validas.get(campo)
+        col = COLUNAS_ARQUIVOS.get(campo)
         if not col:
             raise ValueError(f'Campo invalido: {campo}')
         cur.execute(f"SELECT {col} FROM sessoes WHERE id = %s", (sid,))
         row = cur.fetchone()
         return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def salvar_config_importacao(sid, config_json):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute('UPDATE sessoes SET config_importacao = %s WHERE id = %s', (config_json, sid))
+        conn.commit()
     finally:
         conn.close()
 

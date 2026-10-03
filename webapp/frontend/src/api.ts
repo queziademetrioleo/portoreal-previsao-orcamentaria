@@ -75,6 +75,15 @@ export async function criarSessao(form: {
   rec: File
   dessin?: File | null
   inad?: File | null
+  origemSistema?: 'condo21' | 'misto'
+  almaBal?: File | null
+  almaFin?: File | null
+  almaRec?: File | null
+  almaInad?: File | null
+  planoAlma?: File | null
+  semInadAlma?: boolean
+  periodoInicio?: string
+  periodoFim?: string
 }): Promise<Sessao> {
   const fd = new FormData()
   fd.append('nome_condominio', form.nome)
@@ -84,6 +93,19 @@ export async function criarSessao(form: {
   fd.append('rec', form.rec)
   if (form.dessin) fd.append('dessin', form.dessin)
   if (form.inad) fd.append('inad', form.inad)
+  fd.append('origem_sistema', form.origemSistema ?? 'condo21')
+  if (form.origemSistema === 'misto') {
+    for (const [campo, arquivo] of [
+      ['alma_bal', form.almaBal], ['alma_fin', form.almaFin],
+      ['alma_rec', form.almaRec], ['alma_inad', form.almaInad],
+      ['plano_alma', form.planoAlma],
+    ] as const) {
+      if (arquivo) fd.append(campo, arquivo)
+    }
+    fd.append('sem_inadimplencia_alma', String(form.semInadAlma ?? false))
+    if (form.periodoInicio) fd.append('periodo_inicio', form.periodoInicio)
+    if (form.periodoFim) fd.append('periodo_fim', form.periodoFim)
+  }
   const r = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })
   if (!r.ok) await lancarErroResposta(r)
   return r.json()

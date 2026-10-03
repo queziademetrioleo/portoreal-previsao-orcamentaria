@@ -33,6 +33,7 @@ COPY webapp/backend/ ./
 # modulos raiz — fonte unica, sem duplicatas
 COPY previsao.py ./
 COPY ia_parser.py ./
+COPY parsers_alma.py ./
 
 # frontend buildado
 COPY --from=front /app/dist/ ./static/

@@ -91,7 +91,23 @@ ARQUIVOS_ESPERADOS = {
     'dessin': 'dessin02.xls',
     'inad': 'inad01.xls',
     'rec': 'rec02.xls',
+    'alma_bal': 'alma_bal.pdf',
+    'alma_fin': 'alma_fin.xlsx',
+    'alma_rec': 'alma_rec.pdf',
+    'alma_inad': 'alma_inad.pdf',
+    'plano_alma': 'plano_alma.xlsx',
 }
+
+
+def _restaurar_arquivos(row, tmpdir):
+    for campo, filename in ARQUIVOS_ESPERADOS.items():
+        content = row.get(db.COLUNAS_ARQUIVOS[campo])
+        if content:
+            with open(os.path.join(tmpdir, filename), 'wb') as output:
+                output.write(content)
+    if row.get('config_importacao'):
+        with open(os.path.join(tmpdir, 'importacao.json'), 'w', encoding='utf-8') as output:
+            output.write(row['config_importacao'])
 
 
 # ---------------------------------------------------------------------------
@@ -151,11 +167,7 @@ def _obter_R(sid):
             pass
     # Fallback: reconstituir arquivos do MySQL e re-analisar
     with tempfile.TemporaryDirectory() as tmpdir:
-        for chave, fname in ARQUIVOS_ESPERADOS.items():
-            content = db.obter_arquivo(sid, chave)
-            if content:
-                with open(os.path.join(tmpdir, fname), 'wb') as f:
-                    f.write(content)
+        _restaurar_arquivos(row, tmpdir)
         R = core.analisar(tmpdir)
         R = _aplicar_aprendizado_resultado(R)
         db.salvar_cache_analise(sid, _json_dumps(R))
@@ -202,7 +214,8 @@ def _aplicar_aprendizado_resultado(R):
     except Exception as exc:
         logger.warning('Não foi possível carregar aprendizado humano: %s', exc)
         return R
-    aplicados = aprendizado.aplicar_memorias(R.get('des', {}).get('itens'), memorias)
+    itens = [it for it in R.get('des', {}).get('itens', []) if not it.get('classificacao_pendente')]
+    aplicados = aprendizado.aplicar_memorias(itens, memorias)
     if not aplicados:
         return R
     R = core.recalcular(R)
@@ -311,6 +324,10 @@ def _explicacao_deterministica_despesa(item):
 
 
 def _explicacao_deterministica_inad(item):
+    if item.get('regra_inad') == 'misto_ultimos_2_meses_alma':
+        return {'resumo': 'Parcela em aberto nos dois últimos meses da referência do relatório Almah. O abatimento considera uma taxa mensal da unidade.',
+                'evidencias': ['Posição atual Almah; histórico Condo21 não é somado.',
+                               f"Última parcela: {item.get('mes_ref', '')}."]}
     critica = bool(item.get('critica'))
     meses = item.get('meses_atraso', 0)
     if item.get('decisao') == 'abater':
@@ -547,6 +564,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
                 'critica': True,
                 'decisao': 'abater',
                 'ultima_parcela': it.get('mes_ref', ''),
+                'regra_inad': it.get('regra_inad'),
             })
 
     linhas = [{
@@ -566,6 +584,9 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'criado_em': datetime.datetime.now().isoformat(timespec='seconds'),
         'modelo_ia': core._ia_modelo(),
         'ia_ativa': core._ia_disponivel(),
+        'origem_sistema': R.get('origem_sistema', 'condo21'),
+        'avisos_importacao': R.get('divergencias', []),
+        'cobertura': R.get('cobertura', {}),
         'resumo': {
             'base_total': round(R['base_total'], 2),
             'desconsideracoes': round(R['desconsideracoes'], 2),
@@ -589,6 +610,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             'total': round(R['inad']['total'], 2),
             'critica': round(R['inad']['critica'], 2),
             'data_base': str(R['inad']['data_base']),
+            'meses_considerados': R['inad'].get('meses_considerados'),
         } if R['inad'] else None),
         'linhas_contas': linhas,
         'lancamentos_contas': lancamentos_contas,
@@ -654,15 +676,39 @@ async def criar_sessao(
     rec: UploadFile = File(...),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
+    origem_sistema: str = Form('condo21'),
+    periodo_inicio: str | None = Form(None),
+    periodo_fim: str | None = Form(None),
+    alma_bal: UploadFile = File(None),
+    alma_fin: UploadFile = File(None),
+    alma_rec: UploadFile = File(None),
+    alma_inad: UploadFile = File(None),
+    plano_alma: UploadFile = File(None),
+    sem_inadimplencia_alma: bool = Form(False),
 ):
     nome_condominio = nome_condominio.strip()
     if not nome_condominio:
         raise HTTPException(400, 'Nome do condomínio é obrigatório.')
 
-    sid = uuid.uuid4().hex[:12]
+    if origem_sistema not in ('condo21', 'misto'):
+        raise HTTPException(400, 'Selecione Condo21 ou Condo21 + Alma.')
+    if origem_sistema == 'misto':
+        if not all((alma_bal, alma_fin, alma_rec, plano_alma)):
+            raise HTTPException(400, 'No uso conjunto, envie o demonstrativo, FIN, contas a receber e plano de contas do Alma.')
+        if not alma_inad and not sem_inadimplencia_alma:
+            raise HTTPException(400, 'Envie a inadimplência do Alma ou marque que não há inadimplência nessa fonte.')
+        if alma_inad and sem_inadimplencia_alma:
+            raise HTTPException(400, 'Escolha enviar o relatório de inadimplência Alma ou declarar ausência de inadimplência.')
+        if bool(periodo_inicio) != bool(periodo_fim):
+            raise HTTPException(400, 'Informe início e fim do período, ou deixe ambos em branco.')
+        if periodo_inicio:
+            try:
+                from parsers_alma import months_between
+                months_between(periodo_inicio, periodo_fim)
+            except ValueError as exc:
+                raise HTTPException(400, f'Período inválido: {exc}')
 
-    # Criar registro PRIMEIRO (INSERT), depois salvar arquivos (UPDATE)
-    db.criar_sessao(sid, nome_condominio.strip(), ano_previsao, tem_fundo_reserva)
+    sid = uuid.uuid4().hex[:12]
 
     uploads = {
         'balanual': balanual,
@@ -671,25 +717,39 @@ async def criar_sessao(
         'dessin': dessin,
         'inad': inad,
     }
+    if origem_sistema == 'misto':
+        uploads.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec,
+                       alma_inad=alma_inad, plano_alma=plano_alma)
     file_bytes = {}
     for chave, up in uploads.items():
         if up is None:
             continue
-        # Validar extensao — xlrd so suporta .xls (BIFF)
-        if up.filename and not up.filename.lower().endswith('.xls'):
-            db.deletar_sessao(sid)
-            raise HTTPException(400, f'Arquivo {up.filename}: apenas .xls e suportado. Converta .xlsx para .xls antes de enviar.')
+        extension = os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
+        if not up.filename or not up.filename.lower().endswith(extension):
+            raise HTTPException(400, f'Arquivo {up.filename}: use o formato {extension} para esse relatório.')
         # Validar tamanho
         if up.size and up.size > MAX_UPLOAD_BYTES:
-            db.deletar_sessao(sid)
             raise HTTPException(413, f'Arquivo {up.filename} excede o limite de 20 MB.')
-        conteudo = await up.read()
+        conteudo = await up.read(MAX_UPLOAD_BYTES + 1)
+        if len(conteudo) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f'Arquivo {up.filename} excede o limite de 20 MB.')
+        if not conteudo:
+            raise HTTPException(400, f'Arquivo {up.filename} está vazio.')
         file_bytes[chave] = conteudo
-        db.salvar_arquivo(sid, chave, conteudo)
 
     if 'balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes:
-        db.deletar_sessao(sid)
         raise HTTPException(400, 'Arquivos obrigatorios ausentes (balanual, desbai06 e REC)')
+    db.criar_sessao(sid, nome_condominio, ano_previsao, tem_fundo_reserva)
+    try:
+        for chave, conteudo in file_bytes.items():
+            db.salvar_arquivo(sid, chave, conteudo)
+        db.salvar_config_importacao(sid, json.dumps({
+            'origem_sistema': origem_sistema, 'periodo_inicio': periodo_inicio,
+            'periodo_fim': periodo_fim, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
+        }))
+    except Exception:
+        db.deletar_sessao(sid)
+        raise
     logger.info(f'Sessao {sid} criada: {nome_condominio.strip()} ({ano_previsao})')
 
     return {'sessao_id': sid, 'nome_condominio': nome_condominio.strip(),
@@ -717,15 +777,12 @@ async def analisar_sse(sid: str):
 
     async def gerar():
         loop = asyncio.get_event_loop()
+        future = None
 
         try:
             # Reconstitui arquivos do MySQL para diretorio temporario
             with tempfile.TemporaryDirectory() as tmpdir:
-                for chave, fname in ARQUIVOS_ESPERADOS.items():
-                    content = db.obter_arquivo(sid, chave)
-                    if content:
-                        with open(os.path.join(tmpdir, fname), 'wb') as f:
-                            f.write(content)
+                _restaurar_arquivos(row, tmpdir)
 
                 # Inicia analise em thread
                 future = loop.run_in_executor(None, core.analisar, tmpdir, on_progress)
@@ -765,7 +822,7 @@ async def analisar_sse(sid: str):
             cancelado.set()
             logger.warning('SSE cancelado pelo cliente — sessao %s', sid)
             # Tenta cancelar a future se ainda nao terminou
-            if not future.done():
+            if future is not None and not future.done():
                 future.cancel()
         except Exception as exc:
             logger.error('Erro na analise SSE da sessao %s: %s', sid, exc)
@@ -786,11 +843,7 @@ async def reanalisar_sincrono(sid: str):
     loop = asyncio.get_event_loop()
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            for chave, fname in ARQUIVOS_ESPERADOS.items():
-                content = db.obter_arquivo(sid, chave)
-                if content:
-                    with open(os.path.join(tmpdir, fname), 'wb') as f:
-                        f.write(content)
+            _restaurar_arquivos(row, tmpdir)
 
             # Executa analise completa em thread separada
             R = await loop.run_in_executor(None, core.analisar, tmpdir)
@@ -800,7 +853,7 @@ async def reanalisar_sincrono(sid: str):
             nome = row['nome_condominio']
             ano = row['ano_previsao']
 
-            estado = _montar_estado(sid, nome, ano, R)
+            estado = _montar_estado(sid, nome, ano, R, row.get('tem_fundo_reserva'))
             _salvar_estado_sync(sid, estado)
 
             return estado
