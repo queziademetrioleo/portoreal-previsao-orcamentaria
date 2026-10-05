@@ -17,6 +17,26 @@ import relatorio_pdf
 
 
 class RelatorioPdfCalculosTest(unittest.TestCase):
+    def test_composicao_administrativa_nunca_cita_decima_terceira_taxa(self):
+        for classe in ('13º Taxa de Administração', '13o Taxa de Administracao',
+                       '13. Taxa de Administração', '13ª taxa de administração',
+                       'Décima terceira taxa de administração', '13° Tx. de Administração'):
+            with self.subTest(classe=classe):
+                linhas = [
+                    {'grupo': 'Despesas Administrativas', 'classe': classe, 'final': 1200},
+                    {'grupo': 'Despesas Administrativas', 'classe': 'Correios', 'final': 120},
+                    {'grupo': 'Despesas Administrativas', 'classe': 'Taxa de Administração', 'final': 2400},
+                ]
+                self.assertEqual(relatorio_pdf._componentes_administrativas(linhas),
+                                 ['Correios', 'Taxa de Administração'])
+                despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}))
+                self.assertAlmostEqual(despesas['Despesas Administrativas'] * 12, 3720)
+
+    def test_composicao_apenas_com_decima_terceira_fica_sem_mencao(self):
+        linhas = [{'grupo': 'Despesas Administrativas',
+                   'classe': '13º Taxa de Administração', 'final': 1200}]
+        self.assertEqual(relatorio_pdf._componentes_administrativas(linhas), [])
+
     def test_consideracoes_listam_todas_as_classes_das_categorias(self):
         linhas = [
             {'grupo': 'Conservação', 'classe': 'Manutenção Elétrica', 'final': 100},

@@ -518,13 +518,19 @@ def _componentes_conservacao(linhas, resumo):
 
 
 def _componentes_administrativas(linhas):
-    """Classes que formam exatamente a categoria Despesas Administrativas."""
+    """Composição apresentada ao condomínio, sem citar a 13ª taxa de administração.
+
+    A omissão é apenas textual: a consolidação financeira preserva essa classe.
+    """
     componentes = []
     for linha in linhas or []:
         if abs(float(linha.get('final') or 0)) <= 0.005:
             continue
         grupo = _norm(linha.get('grupo'))
         classe = _norm(linha.get('classe'))
+        if (re.search(r'(?:taxa|tx\.?)\s+(?:de\s+)?administrac', classe)
+                and re.search(r'\b13(?:[º°ªoa])?(?!\d)|decim[oa] terceir[oa]', classe)):
+            continue  # Omitir a menção, preservando os valores consolidados.
         consumida_em_outra_categoria = (
             _eh_material_limpeza(linha)
             or 'tarifas bancarias' in grupo or 'tarifas bancarias' in classe

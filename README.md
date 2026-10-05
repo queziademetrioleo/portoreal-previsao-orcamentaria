@@ -43,6 +43,8 @@ Os arquivos de ambas as fontes e a seleção do período ficam salvos na sessão
 
 ## 🧠 Regras de cálculo (R1–R8)
 
+Regra permanente de apresentação: nunca citar a **13ª taxa de administração** no texto de composição de **Despesas Administrativas** do relatório entregue ao condomínio. Seu valor permanece no cálculo e no total da categoria; a omissão é somente da menção textual.
+
 Aprendidas por engenharia reversa dos arquivos `Previsão 20XX.xlsx` manuais (2022–2026, 4 condomínios):
 
 | Regra | Descrição |
