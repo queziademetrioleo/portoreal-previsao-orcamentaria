@@ -118,6 +118,18 @@ def _frase_opcao(opcao):
     return f'sobram {_money(resultado_mensal)} por mês — não é necessário reajuste'
 
 
+def _consideracao_suficiencia_receita(resultado_anual):
+    """Conclusão baseada na receita ordinária, sem usar o Fundo de Reserva."""
+    if resultado_anual < 0:
+        return ('A receita ordinária prevista, sem utilizar o Fundo de Reserva, não será suficiente '
+                'para cobrir as despesas ordinárias nos próximos 12 meses.')
+    texto = ('A receita ordinária prevista será suficiente para cobrir as despesas ordinárias '
+             'nos próximos 12 meses, sem utilizar o Fundo de Reserva.')
+    if resultado_anual / 12 < 2000:
+        texto += ' A margem mensal é inferior a R$ 2.000,00 e requer atenção.'
+    return texto
+
+
 def _consideracao_opcoes(opcoes):
     if len(opcoes) == 1:
         opcao = opcoes[0]
@@ -648,9 +660,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
             + _lista_portugues(administrativas_itens) + '.'
         )
 
-    consideracoes.append(
-        'A receita, provavelmente, não será suficiente para cobrir as despesas ordinárias nos próximos 12 meses.'
-    )
+    consideracoes.append(_consideracao_suficiencia_receita(resultado_sem))
 
     ultimo_reajuste_raw = resumo.get('ultimo_reajuste')
     if ultimo_reajuste_raw:

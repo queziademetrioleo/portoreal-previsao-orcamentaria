@@ -17,6 +17,22 @@ import relatorio_pdf
 
 
 class RelatorioPdfCalculosTest(unittest.TestCase):
+    def test_santorini_superavit_nao_gera_frase_de_insuficiencia(self):
+        texto = relatorio_pdf._consideracao_suficiencia_receita(2176.58 * 12)
+        self.assertIn('será suficiente', texto)
+        self.assertNotIn('não será suficiente', texto)
+        self.assertIn('sem utilizar o Fundo de Reserva', texto)
+
+    def test_deficit_sem_fundo_gera_insuficiencia(self):
+        self.assertIn('não será suficiente',
+                      relatorio_pdf._consideracao_suficiencia_receita(-12000))
+
+    def test_margem_pequena_cobre_despesa_com_alerta(self):
+        for resultado in (0, 12000):
+            texto = relatorio_pdf._consideracao_suficiencia_receita(resultado)
+            self.assertNotIn('não será suficiente', texto)
+            self.assertIn('requer atenção', texto)
+
     def test_composicao_administrativa_nunca_cita_decima_terceira_taxa(self):
         for classe in ('13º Taxa de Administração', '13o Taxa de Administracao',
                        '13. Taxa de Administração', '13ª taxa de administração',
