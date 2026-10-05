@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { criarSessao, mensagemErroApi } from '../api'
+import { BASE, criarSessao, mensagemErroApi } from '../api'
+import FileZone from './FileZone'
 import type { Sessao } from '../types'
 import Header from './ui/Header'
 import Card from './ui/Card'
@@ -38,16 +39,21 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
     detalhe: '',
   })
   const eventSourceRef = useRef<EventSource | null>(null)
+  const envioEmCursoRef = useRef(false)
+  const mountedRef = useRef(true)
 
   // Cleanup EventSource on unmount
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       eventSourceRef.current?.close()
     }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (envioEmCursoRef.current) return
     if (!nome.trim()) {
       setErro('Informe o nome do condomínio.')
       return
@@ -73,6 +79,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       return
     }
     setErro('')
+    envioEmCursoRef.current = true
+    setProgresso({ fase: 'Enviando documentos...', passo: 0, total: 6, detalhe: '' })
     setLoading(true)
 
     try {
@@ -83,15 +91,16 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         desbai,
         rec,
         dessin,
-        inad,
+        inad: misto ? null : inad,
         origemSistema: origemRelatorios,
         ...(misto ? {
           almaBal, almaFin, almaRec, almaInad,
           semInadAlma, periodoInicio, periodoFim,
         } : {}),
       })
+      if (!mountedRef.current) return
 
-      const base = import.meta.env.DEV ? 'http://localhost:8000' : ''
+      const base = BASE
       const source = new EventSource(
         `${base}/api/sessao/${sessao_id}/analisar`,
       )
@@ -103,6 +112,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
           source.close()
           setErro(mensagemErroApi(data.error, 'Erro ao analisar os relatórios.'))
           setLoading(false)
+          envioEmCursoRef.current = false
           return
         }
         if (data.done) {
@@ -115,10 +125,11 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
               }
               return r.json() as Promise<Sessao>
             })
-            .then((s) => onCriada(s))
+            .then((s) => { if (mountedRef.current) onCriada(s) })
             .catch((err) => {
               setErro(err.message || 'Erro ao carregar resultado.')
               setLoading(false)
+              envioEmCursoRef.current = false
             })
         } else {
           setProgresso(data)
@@ -129,11 +140,13 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         source.close()
         setErro('Erro na conexão com o servidor. Tente novamente.')
         setLoading(false)
+        envioEmCursoRef.current = false
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao enviar os arquivos.'
       setErro(msg)
       setLoading(false)
+      envioEmCursoRef.current = false
     }
   }
 
@@ -148,7 +161,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         <div className="page">
           <div className="upload-card">
             <Card>
-              <Spinner text="Analisando os relatórios..." />
+              <Spinner text={progresso.fase === 'Enviando documentos...' ? 'Enviando documentos...' : 'Analisando os relatórios...'} />
               <ProgressBar
                 passo={progresso.passo}
                 total={progresso.total}
@@ -182,7 +195,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
               Selecione a origem e anexe os relatórios do condomínio.
             </p>
 
-            {erro && <div className="alert-error">{erro}</div>}
+            {erro && <div className="alert-error" role="alert">{erro}</div>}
 
             <form onSubmit={handleSubmit}>
               <fieldset className="form-group report-source">
@@ -326,36 +339,5 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         </div>
       </div>
     </>
-  )
-}
-
-function FileZone({
-  label,
-  file,
-  setFile,
-  required,
-  accept = '.xls',
-}: {
-  label: string
-  file: File | null
-  setFile: (f: File | null) => void
-  required?: boolean
-  accept?: string
-}) {
-  return (
-    <label className={`file-zone${file ? ' has-file' : ''}`}>
-      <input
-        type="file"
-        accept={accept}
-        aria-label={label}
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-      />
-      <span className="file-icon">{file ? '📄' : '📎'}</span>
-      <span className="file-name">
-        {file ? file.name : label}
-        {required ? ' *' : ''}
-      </span>
-      {file && <span className="file-check">✓</span>}
-    </label>
   )
 }

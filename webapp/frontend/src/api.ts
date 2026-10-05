@@ -91,12 +91,12 @@ export async function criarSessao(form: {
   fd.append('desbai', form.desbai)
   fd.append('rec', form.rec)
   if (form.dessin) fd.append('dessin', form.dessin)
-  if (form.inad) fd.append('inad', form.inad)
+  if (form.inad && form.origemSistema !== 'misto') fd.append('inad', form.inad)
   fd.append('origem_sistema', form.origemSistema ?? 'condo21')
   if (form.origemSistema === 'misto') {
     for (const [campo, arquivo] of [
       ['alma_bal', form.almaBal], ['alma_fin', form.almaFin],
-      ['alma_rec', form.almaRec], ['alma_inad', form.almaInad],
+      ['alma_rec', form.almaRec], ['alma_inad', form.semInadAlma ? null : form.almaInad],
     ] as const) {
       if (arquivo) fd.append(campo, arquivo)
     }

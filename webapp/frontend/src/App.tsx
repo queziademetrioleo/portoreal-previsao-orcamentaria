@@ -10,7 +10,7 @@ export default function App() {
   const [tela, setTela] = useState<Tela>('lista')
   const [sessao, setSessao] = useState<Sessao | null>(null)
 
-  const abrirSessao = async (id: string, _status: string) => {
+  const abrirSessao = async (id: string) => {
     try {
       const r = await fetch(`/api/sessao/${id}`)
       if (!r.ok) throw new Error(`Erro ${r.status}`)
