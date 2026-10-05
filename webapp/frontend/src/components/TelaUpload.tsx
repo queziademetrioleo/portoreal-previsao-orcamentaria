@@ -25,7 +25,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [almaFin, setAlmaFin] = useState<File | null>(null)
   const [almaRec, setAlmaRec] = useState<File | null>(null)
   const [almaInad, setAlmaInad] = useState<File | null>(null)
-  const [planoAlma, setPlanoAlma] = useState<File | null>(null)
   const [semInadAlma, setSemInadAlma] = useState(false)
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim] = useState('')
@@ -61,8 +60,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       setErro('Os arquivos balanual.xls, desbai06.xls e rec02.xls são obrigatórios.')
       return
     }
-    if (misto && (!almaBal || !almaFin || !almaRec || !planoAlma)) {
-      setErro('Envie também o demonstrativo, FIN, contas a receber e plano de contas do Alma.')
+    if (misto && (!almaBal || !almaFin || !almaRec)) {
+      setErro('Envie também o demonstrativo por período, FIN e contas a receber do Alma.')
       return
     }
     if (misto && !almaInad && !semInadAlma) {
@@ -87,7 +86,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         inad,
         origemSistema: origemRelatorios,
         ...(misto ? {
-          almaBal, almaFin, almaRec, almaInad, planoAlma,
+          almaBal, almaFin, almaRec, almaInad,
           semInadAlma, periodoInicio, periodoFim,
         } : {}),
       })
@@ -285,10 +284,9 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                   <div className="form-group">
                     <h2 className="form-label">Relatórios do Alma</h2>
                     <div className="file-grid">
-                      <FileZone label="Demonstrativo por período (PDF)" file={almaBal} setFile={setAlmaBal} accept=".pdf" required />
+                      <FileZone label="Por período agrupado por contas (PDF)" file={almaBal} setFile={setAlmaBal} accept=".pdf" required />
                       <FileZone label="FIN00601 — despesas detalhadas (XLSX)" file={almaFin} setFile={setAlmaFin} accept=".xlsx" required />
                       <FileZone label="Contas a receber agrupado por conta (PDF)" file={almaRec} setFile={setAlmaRec} accept=".pdf" required />
-                      <FileZone label="Plano de contas Almah (XLSX)" file={planoAlma} setFile={setPlanoAlma} accept=".xlsx" required />
                       {!semInadAlma && <FileZone label="Inadimplência Alma (PDF)" file={almaInad} setFile={setAlmaInad} accept=".pdf" required />}
                     </div>
                     <label className="form-hint" style={{ display: 'flex', gap: 'var(--s-sm)', alignItems: 'center', marginTop: 'var(--s-md)' }}>

@@ -166,6 +166,12 @@ def read_plan(path):
     return accounts
 
 
+def read_internal_plan():
+    """Contexto de classificação versionado com a aplicação, sem upload por sessão."""
+    path = Path(__file__).resolve().parent / 'data' / 'plano_contas_alma.json'
+    return json.loads(path.read_text(encoding='utf-8'))['contas']
+
+
 def read_balance(path):
     lines = pdf_lines(path)
     text = '\n'.join(line for _, line in lines)
@@ -362,7 +368,7 @@ def load_mixed(folder, core):
     condo = core.parse_balanual(str(root / 'balanual.xls'))
     alma = read_balance(root / 'alma_bal.pdf')
     bal, keys, coverage = consolidate_balances(condo, alma, config.get('periodo_inicio'), config.get('periodo_fim'))
-    plan = read_plan(root / 'plano_alma.xlsx')
+    plan = read_internal_plan()
     pdf_accounts = {norm(r['classe']): r['grupo'] for r in alma['despesas']}
     alma_items = read_fin(root / 'alma_fin.xlsx', plan, pdf_accounts)
     # Nomes canônicos usados no balanço também precisam ser usados nos detalhes.

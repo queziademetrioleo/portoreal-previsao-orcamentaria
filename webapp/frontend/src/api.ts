@@ -80,7 +80,6 @@ export async function criarSessao(form: {
   almaFin?: File | null
   almaRec?: File | null
   almaInad?: File | null
-  planoAlma?: File | null
   semInadAlma?: boolean
   periodoInicio?: string
   periodoFim?: string
@@ -98,7 +97,6 @@ export async function criarSessao(form: {
     for (const [campo, arquivo] of [
       ['alma_bal', form.almaBal], ['alma_fin', form.almaFin],
       ['alma_rec', form.almaRec], ['alma_inad', form.almaInad],
-      ['plano_alma', form.planoAlma],
     ] as const) {
       if (arquivo) fd.append(campo, arquivo)
     }

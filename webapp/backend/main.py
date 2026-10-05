@@ -95,7 +95,6 @@ ARQUIVOS_ESPERADOS = {
     'alma_fin': 'alma_fin.xlsx',
     'alma_rec': 'alma_rec.pdf',
     'alma_inad': 'alma_inad.pdf',
-    'plano_alma': 'plano_alma.xlsx',
 }
 
 
@@ -683,7 +682,6 @@ async def criar_sessao(
     alma_fin: UploadFile = File(None),
     alma_rec: UploadFile = File(None),
     alma_inad: UploadFile = File(None),
-    plano_alma: UploadFile = File(None),
     sem_inadimplencia_alma: bool = Form(False),
 ):
     nome_condominio = nome_condominio.strip()
@@ -693,8 +691,8 @@ async def criar_sessao(
     if origem_sistema not in ('condo21', 'misto'):
         raise HTTPException(400, 'Selecione Condo21 ou Condo21 + Alma.')
     if origem_sistema == 'misto':
-        if not all((alma_bal, alma_fin, alma_rec, plano_alma)):
-            raise HTTPException(400, 'No uso conjunto, envie o demonstrativo, FIN, contas a receber e plano de contas do Alma.')
+        if not all((alma_bal, alma_fin, alma_rec)):
+            raise HTTPException(400, 'No uso conjunto, envie o demonstrativo por período, FIN e contas a receber do Alma.')
         if not alma_inad and not sem_inadimplencia_alma:
             raise HTTPException(400, 'Envie a inadimplência do Alma ou marque que não há inadimplência nessa fonte.')
         if alma_inad and sem_inadimplencia_alma:
@@ -719,7 +717,7 @@ async def criar_sessao(
     }
     if origem_sistema == 'misto':
         uploads.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec,
-                       alma_inad=alma_inad, plano_alma=plano_alma)
+                       alma_inad=alma_inad)
     file_bytes = {}
     for chave, up in uploads.items():
         if up is None:

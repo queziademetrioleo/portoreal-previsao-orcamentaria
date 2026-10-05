@@ -18,6 +18,10 @@ def balance(months, values):
 
 
 class MixedImportTest(unittest.TestCase):
+    def test_internal_chart_maps_pool_guardian_without_uploaded_workbook(self):
+        plan = alma.read_internal_plan()
+        self.assertEqual(plan[alma.norm('CONTRATO DE GUARDIÃO DE PISCINA')][0]['grupo'], 'Contratos')
+
     def test_fin_uses_payment_date_even_when_due_date_is_in_another_month(self):
         wb = MagicMock()
         wb.active.values = iter([
@@ -76,10 +80,9 @@ class MixedImportTest(unittest.TestCase):
 
 
 SANTORINI = Path('/Users/Usuario/Downloads/Santorini')
-PLAN = Path('/Users/Usuario/Downloads/Plano de Contas Almah.xlsx')
 
 
-@unittest.skipUnless(SANTORINI.exists() and PLAN.exists(), 'Documentos locais de validação indisponíveis')
+@unittest.skipUnless(SANTORINI.exists(), 'Documentos locais de validação indisponíveis')
 class SantoriniIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -97,9 +100,9 @@ class SantoriniIntegrationTest(unittest.TestCase):
         actual = {unicodedata.normalize('NFC', p.name): p for p in SANTORINI.iterdir()}
         for target, source in mapping.items():
             shutil.copyfile(actual[source], self.folder / target)
-        shutil.copyfile(PLAN, self.folder / 'plano_alma.xlsx')
 
     def test_full_analysis_reconciles_sources_and_ignores_old_arrears(self):
+        self.assertFalse((self.folder / 'plano_alma.xlsx').exists())
         with patch.object(previsao, '_ia_disponivel', return_value=False):
             result = previsao.analisar(str(self.folder))
         self.assertEqual(len(result['des']['itens']), 249)
@@ -120,11 +123,6 @@ class SantoriniIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(result['des']['grand_total'], 33668.19)
         self.assertIsNone(result['inad'])
         self.assertEqual(result['des']['periodo'], (dt.date(2026, 7, 1), dt.date(2026, 8, 31)))
-
-    def test_chart_maps_new_pool_guardian_class_to_contracts(self):
-        plan = alma.read_plan(self.folder / 'plano_alma.xlsx')
-        self.assertEqual(plan[alma.norm('CONTRATO DE GUARDIÃO DE PISCINA')][0]['grupo'], 'Contratos')
-
 
 if __name__ == '__main__':
     unittest.main()

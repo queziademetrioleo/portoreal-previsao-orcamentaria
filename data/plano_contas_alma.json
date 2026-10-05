@@ -1,0 +1,1227 @@
+{
+  "fonte": "Plano de Contas Almah.xlsx fornecido pela Porto Real",
+  "contas": {
+    "receitas gerais": [
+      {
+        "codigo": "3.01.01.01.0001",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "taxa de condominio": [
+      {
+        "codigo": "3.01.01.01.0002",
+        "grupo": "Receitas Operacionais"
+      },
+      {
+        "codigo": "4.01.01.08.0010",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "fundo de reserva": [
+      {
+        "codigo": "3.01.01.01.0003",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "fundo de obras": [
+      {
+        "codigo": "3.01.01.01.0004",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "taxa extra - fins rescisorios": [
+      {
+        "codigo": "3.01.01.01.0005",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "gas": [
+      {
+        "codigo": "3.01.01.01.0006",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "complemento tx. condominio": [
+      {
+        "codigo": "3.01.01.01.0007",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "luz": [
+      {
+        "codigo": "3.01.01.01.0008",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "telefone": [
+      {
+        "codigo": "3.01.01.01.0009",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "tv a cabo": [
+      {
+        "codigo": "3.01.01.01.0010",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "credito": [
+      {
+        "codigo": "3.01.01.01.0011",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "tx. extra reforma do predio": [
+      {
+        "codigo": "3.01.01.01.0012",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "transferencia da aplicacao": [
+      {
+        "codigo": "3.01.01.01.0013",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "transferencia poupanca": [
+      {
+        "codigo": "3.01.01.01.0014",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "consumo de agua das lojas": [
+      {
+        "codigo": "3.01.01.01.0015",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "complemento fundo reserva": [
+      {
+        "codigo": "3.01.01.01.0016",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "tarifa bancaria": [
+      {
+        "codigo": "3.01.01.01.0017",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "multa": [
+      {
+        "codigo": "3.01.01.01.0018",
+        "grupo": "Receitas Operacionais"
+      },
+      {
+        "codigo": "4.01.01.06.0006",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "estorno": [
+      {
+        "codigo": "3.01.01.01.0019",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "emprestimo": [
+      {
+        "codigo": "3.01.01.01.0020",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "diferenca de taxa de condominio": [
+      {
+        "codigo": "3.01.01.01.0021",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "correcao judicial": [
+      {
+        "codigo": "3.01.01.01.0022",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "custas processuais": [
+      {
+        "codigo": "3.01.01.01.0023",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "vaga de garagem": [
+      {
+        "codigo": "3.01.01.01.0024",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "cota de agua": [
+      {
+        "codigo": "3.01.01.01.0025",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "fundo de verao": [
+      {
+        "codigo": "3.01.01.01.0026",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "agua": [
+      {
+        "codigo": "3.01.01.01.0027",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "locacao": [
+      {
+        "codigo": "3.01.01.01.0028",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "salao de festas / churrasqueira": [
+      {
+        "codigo": "3.01.01.01.0029",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "resgate da conta de aplicacao/poupanca": [
+      {
+        "codigo": "3.01.01.01.0030",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "rateio gas/internet/tv": [
+      {
+        "codigo": "3.01.01.01.0031",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "taxa extra - d.p.": [
+      {
+        "codigo": "3.01.01.01.0032",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "fundo de melhoria": [
+      {
+        "codigo": "3.01.01.01.0033",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "pro-labore": [
+      {
+        "codigo": "3.01.01.01.0034",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "aluguel de espaco p/ antena de telefonia": [
+      {
+        "codigo": "3.01.01.01.0035",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "energia eletrica da antena de telefonia": [
+      {
+        "codigo": "3.01.01.01.0036",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "juros": [
+      {
+        "codigo": "3.01.01.01.0037",
+        "grupo": "Receitas Operacionais"
+      },
+      {
+        "codigo": "4.01.01.06.0003",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "desconto": [
+      {
+        "codigo": "3.01.01.01.0038",
+        "grupo": "Receitas Operacionais"
+      },
+      {
+        "codigo": "4.01.01.06.0007",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "receitas diversas": [
+      {
+        "codigo": "3.01.01.01.0039",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "taxa extra": [
+      {
+        "codigo": "3.01.01.01.0040",
+        "grupo": "Receitas Operacionais"
+      }
+    ],
+    "rendimento": [
+      {
+        "codigo": "3.01.01.02.0001",
+        "grupo": "OUTRAS RECEITAS"
+      },
+      {
+        "codigo": "4.01.01.06.0008",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "bonus": [
+      {
+        "codigo": "3.01.01.02.0002",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "reembolso": [
+      {
+        "codigo": "3.01.01.02.0003",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "acordo judicial": [
+      {
+        "codigo": "3.01.01.02.0004",
+        "grupo": "OUTRAS RECEITAS"
+      },
+      {
+        "codigo": "4.01.01.10.0007",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "debitos anteriores": [
+      {
+        "codigo": "3.01.01.02.0005",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "honorarios advocaticios": [
+      {
+        "codigo": "3.01.01.02.0006",
+        "grupo": "OUTRAS RECEITAS"
+      },
+      {
+        "codigo": "4.01.01.10.0002",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "acordo extrajudicial": [
+      {
+        "codigo": "3.01.01.02.0007",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "correcao monetaria": [
+      {
+        "codigo": "3.01.01.02.0008",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "outras receitas": [
+      {
+        "codigo": "3.01.01.02.0009",
+        "grupo": "OUTRAS RECEITAS"
+      }
+    ],
+    "estorno (credito)": [
+      {
+        "codigo": "3.01.01.03.0001",
+        "grupo": "AJUSTES / ESTORNOS (CRÉDITO)"
+      }
+    ],
+    "salario empregado(s)": [
+      {
+        "codigo": "4.01.01.01.0001",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "inss/irrf/pis/cofins/csll": [
+      {
+        "codigo": "4.01.01.01.0002",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "pis": [
+      {
+        "codigo": "4.01.01.01.0003",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "inss s/ 13º salario": [
+      {
+        "codigo": "4.01.01.01.0004",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "vale transporte": [
+      {
+        "codigo": "4.01.01.01.0005",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "consultoria, medicina e seg. do trabalho": [
+      {
+        "codigo": "4.01.01.01.0006",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "contrato medico de saude": [
+      {
+        "codigo": "4.01.01.01.0007",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "fgts": [
+      {
+        "codigo": "4.01.01.01.0008",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "ferias empregado(s)": [
+      {
+        "codigo": "4.01.01.01.0009",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "cesta basica": [
+      {
+        "codigo": "4.01.01.01.0010",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "rescisao trabalhista": [
+      {
+        "codigo": "4.01.01.01.0011",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "indenizacao trabalhista": [
+      {
+        "codigo": "4.01.01.01.0012",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "treinamento": [
+      {
+        "codigo": "4.01.01.01.0013",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "adiantamento de salario": [
+      {
+        "codigo": "4.01.01.01.0014",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "piso salarial": [
+      {
+        "codigo": "4.01.01.01.0015",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "homologacao/exame": [
+      {
+        "codigo": "4.01.01.01.0016",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "contribuicao sindical - empregado": [
+      {
+        "codigo": "4.01.01.01.0017",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "contribuicao confederativa - empregado": [
+      {
+        "codigo": "4.01.01.01.0018",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "contribuicao assistencial - empregado": [
+      {
+        "codigo": "4.01.01.01.0019",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "seguro funcionario": [
+      {
+        "codigo": "4.01.01.01.0020",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "pensao alimenticia": [
+      {
+        "codigo": "4.01.01.01.0021",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "uniformes": [
+      {
+        "codigo": "4.01.01.01.0022",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "recolhimento do irrf": [
+      {
+        "codigo": "4.01.01.01.0023",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "vale alimentacao": [
+      {
+        "codigo": "4.01.01.01.0024",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "plano de assistencia e cuidado pessoal": [
+      {
+        "codigo": "4.01.01.01.0025",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "certificado digital": [
+      {
+        "codigo": "4.01.01.01.0026",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "confeccao ppra/pcmso": [
+      {
+        "codigo": "4.01.01.01.0027",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "13º salario": [
+      {
+        "codigo": "4.01.01.01.0028",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "outros (pessoal)": [
+      {
+        "codigo": "4.01.01.01.0029",
+        "grupo": "Despesas com Pessoal"
+      }
+    ],
+    "luz do condominio": [
+      {
+        "codigo": "4.01.01.02.0001",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "agua do condominio": [
+      {
+        "codigo": "4.01.01.02.0002",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "telefone do condominio": [
+      {
+        "codigo": "4.01.01.02.0003",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "luz apartamento(s)": [
+      {
+        "codigo": "4.01.01.02.0004",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "telefone apartamento(s)": [
+      {
+        "codigo": "4.01.01.02.0005",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "luz do zelador": [
+      {
+        "codigo": "4.01.01.02.0006",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "gas do condominio": [
+      {
+        "codigo": "4.01.01.02.0007",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "conta de luz": [
+      {
+        "codigo": "4.01.01.02.0008",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "conta de agua": [
+      {
+        "codigo": "4.01.01.02.0009",
+        "grupo": "Tarifas Públicas"
+      }
+    ],
+    "manutencao eletrica": [
+      {
+        "codigo": "4.01.01.03.0001",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao hidraulica": [
+      {
+        "codigo": "4.01.01.03.0002",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao pintura": [
+      {
+        "codigo": "4.01.01.03.0003",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao impermeabilizacao": [
+      {
+        "codigo": "4.01.01.03.0004",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao portao / porta": [
+      {
+        "codigo": "4.01.01.03.0005",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao piscina / e.t.a.": [
+      {
+        "codigo": "4.01.01.03.0006",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao combate a incendio": [
+      {
+        "codigo": "4.01.01.03.0007",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao jardim": [
+      {
+        "codigo": "4.01.01.03.0008",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao cameras / cftv": [
+      {
+        "codigo": "4.01.01.03.0009",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao interfone": [
+      {
+        "codigo": "4.01.01.03.0010",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao vidracaria / esquadria": [
+      {
+        "codigo": "4.01.01.03.0011",
+        "grupo": "Conservação"
+      }
+    ],
+    "serralheria": [
+      {
+        "codigo": "4.01.01.03.0012",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao de bomba hidraulica": [
+      {
+        "codigo": "4.01.01.03.0013",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao de maquinas": [
+      {
+        "codigo": "4.01.01.03.0014",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao de sauna": [
+      {
+        "codigo": "4.01.01.03.0015",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao e.t.a.": [
+      {
+        "codigo": "4.01.01.03.0016",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao/confeccao poco semi-artesiano": [
+      {
+        "codigo": "4.01.01.03.0017",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao antena": [
+      {
+        "codigo": "4.01.01.03.0018",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao de internet / rede": [
+      {
+        "codigo": "4.01.01.03.0019",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao de quadra": [
+      {
+        "codigo": "4.01.01.03.0020",
+        "grupo": "Conservação"
+      }
+    ],
+    "manutencao do sistema de gas": [
+      {
+        "codigo": "4.01.01.03.0021",
+        "grupo": "Conservação"
+      }
+    ],
+    "outras manutencoes": [
+      {
+        "codigo": "4.01.01.03.0022",
+        "grupo": "Conservação"
+      }
+    ],
+    "material eletrico": [
+      {
+        "codigo": "4.01.01.04.0001",
+        "grupo": "Conservação"
+      }
+    ],
+    "material hidraulico": [
+      {
+        "codigo": "4.01.01.04.0002",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de pintura": [
+      {
+        "codigo": "4.01.01.04.0003",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de impermeabilizacao": [
+      {
+        "codigo": "4.01.01.04.0004",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de portao / porta": [
+      {
+        "codigo": "4.01.01.04.0005",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de piscina / e.t.a.": [
+      {
+        "codigo": "4.01.01.04.0006",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de combate a incendio": [
+      {
+        "codigo": "4.01.01.04.0007",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de jardim": [
+      {
+        "codigo": "4.01.01.04.0008",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de cameras / cftv": [
+      {
+        "codigo": "4.01.01.04.0009",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de interfone": [
+      {
+        "codigo": "4.01.01.04.0010",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de vidracaria / esquadria": [
+      {
+        "codigo": "4.01.01.04.0011",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de serralheria": [
+      {
+        "codigo": "4.01.01.04.0012",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de limpeza": [
+      {
+        "codigo": "4.01.01.04.0013",
+        "grupo": "Conservação"
+      }
+    ],
+    "material de construcao (geral)": [
+      {
+        "codigo": "4.01.01.04.0014",
+        "grupo": "Conservação"
+      }
+    ],
+    "outros materiais de manutencao": [
+      {
+        "codigo": "4.01.01.04.0015",
+        "grupo": "Conservação"
+      }
+    ],
+    "servico de faxina / limpeza avulsa": [
+      {
+        "codigo": "4.01.01.05.0001",
+        "grupo": "Conservação"
+      }
+    ],
+    "dedetizacao / descupinizacao / desratizacao": [
+      {
+        "codigo": "4.01.01.05.0002",
+        "grupo": "Conservação"
+      }
+    ],
+    "limpeza de fossa e/ou caixa de gordura": [
+      {
+        "codigo": "4.01.01.05.0003",
+        "grupo": "Conservação"
+      }
+    ],
+    "limpeza caixa dagua / reservatorio": [
+      {
+        "codigo": "4.01.01.05.0004",
+        "grupo": "Conservação"
+      }
+    ],
+    "teste de mangueira de incendio": [
+      {
+        "codigo": "4.01.01.05.0005",
+        "grupo": "Conservação"
+      }
+    ],
+    "reparo no elevador": [
+      {
+        "codigo": "4.01.01.05.0006",
+        "grupo": "Conservação"
+      }
+    ],
+    "teste de estanqueidade (gas)": [
+      {
+        "codigo": "4.01.01.05.0007",
+        "grupo": "Conservação"
+      }
+    ],
+    "laudo de autovistoria predial": [
+      {
+        "codigo": "4.01.01.05.0008",
+        "grupo": "Conservação"
+      }
+    ],
+    "cpmf": [
+      {
+        "codigo": "4.01.01.06.0001",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "iof": [
+      {
+        "codigo": "4.01.01.06.0002",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "tarifas bancarias": [
+      {
+        "codigo": "4.01.01.06.0004",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "titulo de capitalizacao": [
+      {
+        "codigo": "4.01.01.06.0005",
+        "grupo": "Tarifas Bancárias."
+      }
+    ],
+    "seguro condominial obrigatorio": [
+      {
+        "codigo": "4.01.01.07.0001",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "seguro sobre sistema fotovoltaico": [
+      {
+        "codigo": "4.01.01.07.0002",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "chaveiro / copia de chave": [
+      {
+        "codigo": "4.01.01.08.0001",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "placas / sinalizacao / comunicacao visual": [
+      {
+        "codigo": "4.01.01.08.0002",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "controle de acesso / tag / cartao": [
+      {
+        "codigo": "4.01.01.08.0003",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "frete / transporte": [
+      {
+        "codigo": "4.01.01.08.0004",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "taxas e retencoes (iss, ir, pis/cofins)": [
+      {
+        "codigo": "4.01.01.08.0005",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "informatica / impressora": [
+      {
+        "codigo": "4.01.01.08.0006",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "devolucao de emprestimo": [
+      {
+        "codigo": "4.01.01.08.0007",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "reembolso / ressarcimento": [
+      {
+        "codigo": "4.01.01.08.0008",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "outras despesas": [
+      {
+        "codigo": "4.01.01.08.0009",
+        "grupo": "Despesas Diversas"
+      }
+    ],
+    "contrato de manutencao do elevador": [
+      {
+        "codigo": "4.01.01.09.0001",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de manutencao do jardim": [
+      {
+        "codigo": "4.01.01.09.0002",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato tv a cabo": [
+      {
+        "codigo": "4.01.01.09.0003",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de manutencao da e.t.a.": [
+      {
+        "codigo": "4.01.01.09.0004",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de manut. hidraulica/eletrica": [
+      {
+        "codigo": "4.01.01.09.0005",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de manutencao (geral)": [
+      {
+        "codigo": "4.01.01.09.0006",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato vigia noturno": [
+      {
+        "codigo": "4.01.01.09.0007",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato prestacao servico administracao": [
+      {
+        "codigo": "4.01.01.09.0008",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de assinatura de internet": [
+      {
+        "codigo": "4.01.01.09.0009",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato manut. interfonia/portao/antena": [
+      {
+        "codigo": "4.01.01.09.0010",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato terceirizacao de mao de obra": [
+      {
+        "codigo": "4.01.01.09.0011",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de monitoramento e seguranca": [
+      {
+        "codigo": "4.01.01.09.0012",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato (outros)": [
+      {
+        "codigo": "4.01.01.09.0013",
+        "grupo": "Contratos"
+      }
+    ],
+    "contrato de guardiao de piscina": [
+      {
+        "codigo": "4.01.01.09.0014",
+        "grupo": "Contratos"
+      }
+    ],
+    "registro da convencao do condominio": [
+      {
+        "codigo": "4.01.01.10.0001",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "custas judiciais": [
+      {
+        "codigo": "4.01.01.10.0003",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "registro habite-se": [
+      {
+        "codigo": "4.01.01.10.0004",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "registro de ata": [
+      {
+        "codigo": "4.01.01.10.0005",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "indenizacao judicial": [
+      {
+        "codigo": "4.01.01.10.0006",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "legalizacao do condominio": [
+      {
+        "codigo": "4.01.01.10.0008",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "despesas cartoriais": [
+      {
+        "codigo": "4.01.01.10.0009",
+        "grupo": "Despesas Cartoriais e Honorários"
+      }
+    ],
+    "provisao": [
+      {
+        "codigo": "4.01.01.11.0001",
+        "grupo": "PROVISÃO"
+      }
+    ],
+    "despesas com material": [
+      {
+        "codigo": "4.01.01.12.0001",
+        "grupo": "Despesas com Obras/Benfeitorias"
+      }
+    ],
+    "despesas com mao de obra": [
+      {
+        "codigo": "4.01.01.12.0002",
+        "grupo": "Despesas com Obras/Benfeitorias"
+      }
+    ],
+    "despesas com benfeitorias": [
+      {
+        "codigo": "4.01.01.12.0003",
+        "grupo": "Despesas com Obras/Benfeitorias"
+      }
+    ],
+    "pequenas reformas e reparos": [
+      {
+        "codigo": "4.01.01.12.0004",
+        "grupo": "Despesas com Obras/Benfeitorias"
+      }
+    ],
+    "estorno (debito)": [
+      {
+        "codigo": "4.01.01.13.0001",
+        "grupo": "AJUSTES / ESTORNOS (DÉBITO)"
+      }
+    ],
+    "xerox": [
+      {
+        "codigo": "4.01.01.14.0001",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "correio": [
+      {
+        "codigo": "4.01.01.14.0002",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "material de expediente": [
+      {
+        "codigo": "4.01.01.14.0003",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "13º taxa de administracao": [
+      {
+        "codigo": "4.01.01.14.0004",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "impressao de boleto condominial": [
+      {
+        "codigo": "4.01.01.14.0005",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "taxa sobre realizacao de ages": [
+      {
+        "codigo": "4.01.01.14.0006",
+        "grupo": "Despesas Administrativas"
+      }
+    ],
+    "aquisicao de eletrodomesticos": [
+      {
+        "codigo": "4.01.01.15.0001",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "aquisicao de bomba hidraulica": [
+      {
+        "codigo": "4.01.01.15.0002",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "aquisicao de equipamento": [
+      {
+        "codigo": "4.01.01.15.0003",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "aquisicao de moveis": [
+      {
+        "codigo": "4.01.01.15.0004",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "montagem e instalacao": [
+      {
+        "codigo": "4.01.01.15.0005",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "aquisicao de portas/portoes": [
+      {
+        "codigo": "4.01.01.15.0006",
+        "grupo": "MÓVEIS E EQUIPAMENTOS"
+      }
+    ],
+    "pro-labore do sindico": [
+      {
+        "codigo": "4.01.01.16.0001",
+        "grupo": "REEMBOLSO / PRÓ-LABORE AO SÍNDICO"
+      }
+    ],
+    "reembolso despesas diversas": [
+      {
+        "codigo": "4.01.01.16.0002",
+        "grupo": "REEMBOLSO / PRÓ-LABORE AO SÍNDICO"
+      }
+    ],
+    "aplicacao para investimento/poupanca": [
+      {
+        "codigo": "4.01.01.17.0001",
+        "grupo": "INVESTIMENTOS"
+      }
+    ],
+    "transferencia para o fundo de reserva": [
+      {
+        "codigo": "4.01.01.17.0002",
+        "grupo": "INVESTIMENTOS"
+      }
+    ],
+    "iptu": [
+      {
+        "codigo": "4.01.01.18.0001",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "funesbom": [
+      {
+        "codigo": "4.01.01.18.0002",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "contribuicao confederativa - patronal": [
+      {
+        "codigo": "4.01.01.18.0003",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "contribuicao sindical - patronal": [
+      {
+        "codigo": "4.01.01.18.0004",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "contribuicao assistencial - patronal": [
+      {
+        "codigo": "4.01.01.18.0005",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "taxas / tributos / multas diversas": [
+      {
+        "codigo": "4.01.01.18.0006",
+        "grupo": "TAXAS E IMPOSTOS"
+      }
+    ],
+    "previsao orcamentaria": [
+      {
+        "codigo": "4.01.01.19.0001",
+        "grupo": "PREVISÃO ORÇAMENTÁRIA"
+      }
+    ],
+    "desconto pagamento antecipado": [
+      {
+        "codigo": "4.01.01.20.0001",
+        "grupo": "DESCONTO PAGAMENTO ANTECIPADO"
+      }
+    ]
+  }
+}

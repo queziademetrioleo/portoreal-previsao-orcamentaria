@@ -31,12 +31,11 @@ Na tela **Nova previsão**, selecione **Condo21 + Alma**. Além dos relatórios 
 - Demonstrativo por período agrupado por contas do Alma: PDF.
 - FIN00601 de despesas detalhadas: XLSX.
 - Contas a receber agrupado por conta: PDF, com um único mês de vencimento.
-- Plano de contas Almah: XLSX, com Classificação e Descrição.
 - Inadimplência Alma: PDF; se não houver, marque **Não há inadimplência no Alma**.
 
 O período de despesas pode ser escolhido por mês ou identificado automaticamente. Os pagamentos do FIN são selecionados pela **Data Pagto**. Meses com movimentação nas duas fontes ou sem cobertura são recusados para evitar duplicidade e lacunas. Meses futuros zerados do balanual Condo21 permitem cobertura pelo Alma.
 
-O plano de contas associa classes aos grupos, inclusive classes novas. Pagamentos sem correspondência no demonstrativo permanecem na revisão; diferenças entre demonstrativo e pagamentos aparecem na tela, sem criar notas fictícias.
+O plano de contas fornecido pela Porto Real é contexto interno do sistema, versionado em `data/plano_contas_alma.json`; não precisa ser enviado em cada previsão. Ele associa classes aos grupos, inclusive classes novas. Pagamentos sem correspondência no demonstrativo permanecem na revisão; diferenças entre demonstrativo e pagamentos aparecem na tela, sem criar notas fictícias.
 
 **Somente no uso conjunto:** a inadimplência considera os dois últimos meses da referência do relatório Alma, independentemente do período de despesas. Para cada unidade, entra a última taxa condominial vencida nesse intervalo. Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico Condo21 não é recuperado. Como o PDF Alma agrega taxa, fundo e consumo, a taxa por unidade é identificada no REC Condo21; divergência com a cobrança agregada atual é avisada para conferência.
 
