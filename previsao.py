@@ -748,6 +748,16 @@ def _has(text, keys):
             return k
     return None
 
+def _has_capital(text):
+    for keyword in CAPITAL_KW:
+        # Projetor é equipamento de iluminação, não um projeto de obra.
+        if keyword == 'projeto':
+            if re.search(r'\bprojetos?\b', text):
+                return keyword
+        elif keyword in text:
+            return keyword
+    return None
+
 def classify(grupo, classe, descricao='', n_meses_classe=None, valor=0.0):
     """Retorna (categoria, motivo). Conservador: so remove (Extraordinaria) com forte indicio pontual."""
     g = _norm(grupo); c = _norm(classe); d = _norm(descricao)
@@ -764,7 +774,7 @@ def classify(grupo, classe, descricao='', n_meses_classe=None, valor=0.0):
         return ('Revisar', f'Classe "{classe}" — despesa periodica/ambigua, mantida na base p/ revisao')
     # 4) classes genericas -> frequencia mensal decide; capital na descricao escala
     if _has(c, GENERIC_CLASSES):
-        ke = _has(d, CAPITAL_KW)
+        ke = _has_capital(d)
         if ke:
             return ('Extraordinaria', f'Conta generica com descricao de capital ("{ke}")')
         recorrente = (n_meses_classe is not None and n_meses_classe >= 6)
@@ -778,7 +788,7 @@ def classify(grupo, classe, descricao='', n_meses_classe=None, valor=0.0):
     if k:
         return ('Recorrente', f'Despesa recorrente de funcionamento ("{k}")')
     # 6) descricao com forte indicio de capital -> revisar (nao remove automaticamente)
-    ke = _has(d, CAPITAL_KW)
+    ke = _has_capital(d)
     if ke:
         return ('Revisar', f'Descricao com possivel obra/capital ("{ke}") — revisar')
     # 7) default conservador por frequencia

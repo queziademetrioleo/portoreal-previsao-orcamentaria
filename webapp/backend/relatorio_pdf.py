@@ -380,6 +380,12 @@ def _agrupar_por_grupo(linhas):
     grupos.sort(key=lambda g: g['value'], reverse=True)
     return grupos
 
+def _grupos_despesas_relatorio(despesas):
+    """Gráfico com a mesma consolidação da tabela, incluindo as provisões."""
+    return _agrupar_por_grupo([
+        {'grupo': label, 'final': mensal * 12} for label, mensal in despesas
+    ])
+
 
 # ---------------------------------------------------------------------------
 # Grafico de pizza (SVG) — mesma matematica/paleta da tela de resultado
@@ -610,7 +616,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     despesas = _consolidar_despesas_relatorio(
         linhas, resumo, estado.get('lancamentos_contas'))
 
-    grupos = _agrupar_por_grupo(linhas)
+    grupos = _grupos_despesas_relatorio(despesas)
     total_grupo = sum(g['value'] for g in grupos)
 
     receita_anual_com = (com_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12

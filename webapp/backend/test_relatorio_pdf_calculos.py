@@ -17,6 +17,22 @@ import relatorio_pdf
 
 
 class RelatorioPdfCalculosTest(unittest.TestCase):
+    def test_grafico_usa_mesma_composicao_da_tabela_incluindo_provisoes(self):
+        linhas = [
+            {'grupo': 'Conservação', 'classe': 'Manutenção Elétrica', 'final': 1200},
+            {'grupo': 'Despesas Diversas', 'classe': 'Outras Despesas', 'final': 600},
+            {'grupo': 'Despesas Cartoriais', 'classe': 'Cartório', 'final': 0},
+            {'grupo': 'Conservação', 'classe': 'Material de Limpeza', 'final': 240},
+        ]
+        despesas = relatorio_pdf._consolidar_despesas_relatorio(
+            linhas, {'prov_laudo': 120, 'prov_incendio': 60, 'subtotal': 2220})
+        grupos = relatorio_pdf._grupos_despesas_relatorio(despesas)
+        self.assertEqual(grupos, [
+            {'label': 'Gastos com conservação', 'value': 1980},
+            {'label': 'Material de Limpeza', 'value': 240},
+        ])
+        self.assertAlmostEqual(sum(g['value'] for g in grupos), 2220)
+
     def test_santorini_superavit_nao_gera_frase_de_insuficiencia(self):
         texto = relatorio_pdf._consideracao_suficiencia_receita(2176.58 * 12)
         self.assertIn('será suficiente', texto)
