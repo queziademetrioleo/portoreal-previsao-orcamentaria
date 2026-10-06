@@ -77,7 +77,7 @@ def _reajuste_necessario(total_previsto, receita_total):
 
 def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
     """Opções de receita para custear as despesas ordinárias (feedback José
-    Henrique 09/2026): só receita; + Fundo de Reserva; + aluguel;
+    Henrique 09/2026): só taxa de condomínio; + Fundo de Reserva; + aluguel;
     + Fundo + aluguel. Cada condomínio mostra só as que tem.
     receita_anual = receita ordinária (taxas + repasses), já sem o fundo e
     sem a inadimplência considerada."""
@@ -87,10 +87,10 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
     tem_fundo = fundo_anual > 0.005
     tem_aluguel = aluguel_anual > 0.005
     candidatas = [
-        ('Só receita', receita_anual, True),
-        ('Receita + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
-        (f'Receita + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
-        (f'Receita + Fundo de Reserva + {nome_aluguel}',
+        ('Só Taxa de Condomínio', receita_anual, True),
+        ('Taxa de Condomínio + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
+        (f'Taxa de Condomínio + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
+        (f'Taxa de Condomínio + Fundo de Reserva + {nome_aluguel}',
          receita_anual + fundo_anual + aluguel_anual, tem_fundo and tem_aluguel),
     ]
     opcoes = []

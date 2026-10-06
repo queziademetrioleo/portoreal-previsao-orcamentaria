@@ -597,12 +597,19 @@ export default function TelaRevisao({
                                 </div>
                                 <div className="audit-table-wrap">
                                   <table className="audit-table">
+                                    <colgroup>
+                                      <col className="audit-col-date" />
+                                      <col />
+                                      <col className="audit-col-value" />
+                                      <col className="audit-col-status" />
+                                      <col className="audit-col-actions" />
+                                    </colgroup>
                                     <thead><tr><th>Data</th><th>Descrição</th><th className="num">Valor pago</th><th>Status</th><th>Decisão</th></tr></thead>
                                     <tbody>{itens.map((item) => (
                                       <tr key={item.id} className={item.deduzido ? 'is-deducted' : ''}>
-                                        <td>{item.data || '—'}</td>
+                                        <td data-label="Data">{item.data || '—'}</td>
                                         <td><strong>{item.descricao || 'Sem descrição'}</strong>{item.motivo && <small>{item.motivo}</small>}</td>
-                                        <td className="num">{money(item.valor_pago)}</td>
+                                        <td className="num" data-label="Valor pago">{money(item.valor_pago)}</td>
                                         <td><span className={`audit-status ${item.deduzido ? 'deducted' : item.status === 'Aguardando decisão' ? 'pending' : 'kept'}`}>{item.status}</span></td>
                                         <td>
                                           <div className="audit-actions" role="group" aria-label={`Decisão para ${item.descricao || item.classe}`}>

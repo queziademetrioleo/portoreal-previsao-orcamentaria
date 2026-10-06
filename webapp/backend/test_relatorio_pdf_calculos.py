@@ -113,7 +113,7 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         aluguel = [{'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95}]
         opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 0, aluguel, 27408.72 * 12)
         self.assertEqual([o['label'] for o in opcoes], [
-            'Só receita', 'Receita + Aluguel de Espaço p/ Antena de Telefonia',
+            'Só Taxa de Condomínio', 'Taxa de Condomínio + Aluguel de Espaço p/ Antena de Telefonia',
         ])
         so_receita, com_aluguel = opcoes
         self.assertAlmostEqual(so_receita['resultado'] / 12, -4777.53, places=2)
@@ -125,15 +125,15 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         aluguel = [{'classe': 'Aluguel de Espaço', 'mensal': 1000}]
         opcoes = relatorio_pdf._opcoes_receita(24000, 6000, aluguel, 30000)
         self.assertEqual([o['label'] for o in opcoes], [
-            'Só receita', 'Receita + Fundo de Reserva', 'Receita + Aluguel de Espaço',
-            'Receita + Fundo de Reserva + Aluguel de Espaço',
+            'Só Taxa de Condomínio', 'Taxa de Condomínio + Fundo de Reserva', 'Taxa de Condomínio + Aluguel de Espaço',
+            'Taxa de Condomínio + Fundo de Reserva + Aluguel de Espaço',
         ])
 
     def test_consideracao_lista_as_opcoes_com_falta_e_sobra(self):
         aluguel = [{'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95}]
         opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 0, aluguel, 27408.72 * 12)
         texto = relatorio_pdf._consideracao_opcoes(opcoes)
-        self.assertIn('a) Só receita: faltam R$ 4.777,53 por mês — reajuste necessário de 21,1%', texto)
+        self.assertIn('a) Só Taxa de Condomínio: faltam R$ 4.777,53 por mês — reajuste necessário de 21,1%', texto)
         self.assertIn('sobram R$ 4.491,42 por mês — não é necessário reajuste', texto)
         self.assertNotIn('Fundo de Reserva', texto)
 
