@@ -238,8 +238,11 @@ TAREFA: Para cada lancamento, classificar como:
 - "Extraordinaria": remove da base — evento pontual claro, nao se repetira
 - "Revisar": ambiguo, impossivel decidir sem contexto humano
 
-REGRA PRINCIPAL — SEJA CONSERVADOR:
-Na duvida, prefira "Recorrente". So marque "Extraordinaria" quando ha evidencia clara e inequivoca de que e um evento unico.
+REGRA PRINCIPAL — DECIDA PELO CONTEXTO:
+Nao empurre automaticamente compras pontuais para "Revisar". Use a descricao, o tipo
+de item e a frequencia da classe. Marque "Extraordinaria" quando a compra for de um
+objeto acabado, equipamento, peca ou melhoria que normalmente e adquirido uma vez.
+Use "Revisar" somente quando os sinais forem realmente conflitantes ou insuficientes.
 
 EXTRAORDINARIA (evidencia inequivoca):
 - Empresa de pintura/reforma contratada para projeto especifico com NFs em serie ou "Sinal"/"Parcela X/Y"/"Restante"
@@ -260,9 +263,11 @@ PERGUNTA OBRIGATORIA PARA AQUISICOES:
 Antes de classificar uma compra, pergunte internamente: "isso e consumo/reposicao
 que se repete ou uma aquisicao pontual?". Uma compra isolada de espelho, vidro,
 equipamento, peca ou melhoria deve ser EXTRAORDINARIA quando a descricao indicar
-que nao e consumo recorrente. Se nao houver informacao suficiente para decidir,
-responda REVISAR. Nao trate toda descricao iniciada por "Aquisicao de" como
-recorrente.
+que nao e consumo recorrente. Descricoes como "AQUISICAO DE ESPELHO 60CM" sao,
+por si so, evidencia suficiente de compra pontual e devem ser EXTRAORDINARIA.
+Materiais consumiveis (limpeza, expediente, lampadas, pequenos insumos) continuam
+RECORRENTE. Nao trate toda descricao iniciada por "Aquisicao de" como recorrente;
+REVISAR fica reservado para casos sem sinal claro em nenhuma das duas direcoes.
 
 CALIBRACAO:
 Se houver valores de referencia do calculo manual do especialista, use-os para calibrar.
