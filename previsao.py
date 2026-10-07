@@ -741,7 +741,9 @@ GENERIC_CLASSES = ['outras despesas', 'outros materiais', 'outros', 'estorno']
 DIVERSAS_GENERICAS = ['outras despesa', 'outros', 'estorno', 'diversas']
 # Termos inequivocamente de CAPITAL/obra (nunca aparecem em compras rotineiras de consumo)
 CAPITAL_KW = ['reforma', 'benfeitoria', 'laudo', 'projeto',
-              'reconstruc', 'autovistoria']
+              'reconstruc', 'autovistoria', 'motor', 'bomba nova',
+              'camera completa', 'central nova', 'amplificador',
+              'projetor', 'elevador novo']
 # Valor a partir do qual um item dentro de classe generica recorrente e' sinalizado p/ revisao
 BIG_ITEM = 2000.0
 
@@ -775,6 +777,11 @@ def classify(grupo, classe, descricao='', n_meses_classe=None, valor=0.0):
     k = _has(c, REVISAR_CLASSES)
     if k:
         return ('Revisar', f'Classe "{classe}" — despesa periodica/ambigua, mantida na base p/ revisao')
+    # Compra de material comum (por exemplo, espelho, lâmpada ou torneira)
+    # representa reposição/manutenção ordinária. Só sobe para revisão se a
+    # descrição indicar obra ou equipamento de capital.
+    if ('aquisicao' in d or 'compra de' in d) and not _has_capital(d):
+        return ('Recorrente', 'Aquisição de material comum — reposição/manutenção ordinária')
     # 4) classes genericas -> frequencia mensal decide; capital na descricao escala
     if _has(c, GENERIC_CLASSES):
         ke = _has_capital(d)
