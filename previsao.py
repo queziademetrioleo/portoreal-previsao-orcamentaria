@@ -899,38 +899,84 @@ def parse_rec(path):
 
     mes_ref = None
     nome_condominio = None
-    for r in range(min(20, sh.nrows)):
+    for r in range(min(30, sh.nrows)):
+        for c in range(sh.ncols):
+            texto = str(sh.cell_value(r, c)).strip()
+            m = (re.search(r'Contas de\s+(\d{2}/\d{4})', texto, re.I)
+                 or re.search(r'Compet[eê]ncia:\s*(\d{2}/\d{4})', texto, re.I))
+            if m:
+                mes_ref = m.group(1)
         c0 = str(sh.cell_value(r, 0)).strip()
-        m = re.match(r'Contas de (\d{2}/\d{4})', c0)
-        if m:
-            mes_ref = m.group(1)
-        elif (c0 and r > 5 and nome_condominio is None
-              and 'DEMONSTRATIVO' not in c0.upper() and 'V.H.R' not in c0.upper()):
+        if (c0 and nome_condominio is None
+                and (c0.upper().startswith('COND.') or r > 5)
+                and 'DEMONSTRATIVO' not in c0.upper()
+                and 'RECEITAS DETALHADAS' not in c0.upper()
+                and c0.lower() not in ('unidade', 'fornecedor', 'classe de conta')
+                and not re.fullmatch(r'\d+(?:[A-Za-z-]+)?', c0)):
             nome_condominio = c0
 
+    # No layout detalhado, a competência fica nas linhas das unidades e não
+    # no cabeçalho inicial.
+    if mes_ref is None:
+        for r in range(sh.nrows):
+            for c in range(sh.ncols):
+                texto = str(sh.cell_value(r, c)).strip()
+                if re.fullmatch(r'\d{2}/\d{4}', texto):
+                    mes_ref = texto
+                    break
+            if mes_ref:
+                break
+
     header_row = None
+    header_kind = None
     for r in range(sh.nrows):
         joined = ' '.join(str(sh.cell_value(r, c)).strip() for c in range(sh.ncols)).lower()
         if 'classe de conta' in joined and 'total lan' in joined:
             header_row = r
+            header_kind = 'legacy'
+            break
+        if 'classe de conta' in joined and 'total (r$)' in joined:
+            header_row = r
+            header_kind = 'summary'
             break
     if header_row is None:
         return None
 
     por_classe = {}
     r = header_row + 1
-    while r < sh.nrows:
-        nome = str(sh.cell_value(r, 0)).strip()
-        if not nome:
-            break
-        lancado = sh.cell_value(r, 6)
-        liquidado = sh.cell_value(r, 7)
-        if isinstance(lancado, (int, float)):
-            por_classe[nome] = {
-                'lancado': float(lancado),
-                'liquidado': float(liquidado) if isinstance(liquidado, (int, float)) else float(lancado),
-            }
-        r += 1
+    if header_kind == 'summary':
+        header = [str(sh.cell_value(header_row, c)).strip().lower()
+                  for c in range(sh.ncols)]
+        classe_col = header.index('classe de conta')
+        lancado_col = next((c for c, value in enumerate(header)
+                            if value.startswith('total (')), 1)
+        liquidado_col = next((c for c, value in enumerate(header)
+                              if 'total recebido' in value), 2)
+        while r < sh.nrows:
+            nome = str(sh.cell_value(r, classe_col)).strip()
+            if not nome or nome.lower().startswith('total de receitas'):
+                break
+            lancado = sh.cell_value(r, lancado_col)
+            liquidado = sh.cell_value(r, liquidado_col)
+            if isinstance(lancado, (int, float)):
+                por_classe[nome] = {
+                    'lancado': float(lancado),
+                    'liquidado': float(liquidado) if isinstance(liquidado, (int, float)) else 0.0,
+                }
+            r += 1
+    else:
+        while r < sh.nrows:
+            nome = str(sh.cell_value(r, 0)).strip()
+            if not nome:
+                break
+            lancado = sh.cell_value(r, 6)
+            liquidado = sh.cell_value(r, 7)
+            if isinstance(lancado, (int, float)):
+                por_classe[nome] = {
+                    'lancado': float(lancado),
+                    'liquidado': float(liquidado) if isinstance(liquidado, (int, float)) else float(lancado),
+                }
+            r += 1
 
     total_lancado_mes = sum(v['lancado'] for k, v in por_classe.items() if _rec_classe_entra(k))
     total_liquidado_mes = sum(v['liquidado'] for k, v in por_classe.items() if _rec_classe_entra(k))
