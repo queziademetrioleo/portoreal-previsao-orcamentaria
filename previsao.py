@@ -249,11 +249,20 @@ EXTRAORDINARIA (evidencia inequivoca):
 - Rescisao trabalhista, indenizacao, processo judicial
 
 RECORRENTE (manter na base — incluindo casos ambiguos):
-- "Aquisicao de material" sem indicar equipamento novo especifico = provavelmente reposicao/manutencao = RECORRENTE
+- materiais de consumo e reposicoes claramente periodicas (limpeza, expediente,
+  pequenas compras operacionais)
 - Material de pintura (tinta, rolo, lixa, sika) independente do valor = manutencao preventiva corriqueira = RECORRENTE
 - Visitas mensais/periodicas de qualquer tipo de manutencao
 - Pequenas compras de material eletrico, hidraulico, de seguranca
 - Revisoes periodicas (trimestral, semestral, anual) de qualquer sistema
+
+PERGUNTA OBRIGATORIA PARA AQUISICOES:
+Antes de classificar uma compra, pergunte internamente: "isso e consumo/reposicao
+que se repete ou uma aquisicao pontual?". Uma compra isolada de espelho, vidro,
+equipamento, peca ou melhoria deve ser EXTRAORDINARIA quando a descricao indicar
+que nao e consumo recorrente. Se nao houver informacao suficiente para decidir,
+responda REVISAR. Nao trate toda descricao iniciada por "Aquisicao de" como
+recorrente.
 
 CALIBRACAO:
 Se houver valores de referencia do calculo manual do especialista, use-os para calibrar.
@@ -777,11 +786,6 @@ def classify(grupo, classe, descricao='', n_meses_classe=None, valor=0.0):
     k = _has(c, REVISAR_CLASSES)
     if k:
         return ('Revisar', f'Classe "{classe}" — despesa periodica/ambigua, mantida na base p/ revisao')
-    # Compra de material comum (por exemplo, espelho, lâmpada ou torneira)
-    # representa reposição/manutenção ordinária. Só sobe para revisão se a
-    # descrição indicar obra ou equipamento de capital.
-    if ('aquisicao' in d or 'compra de' in d) and not _has_capital(d):
-        return ('Recorrente', 'Aquisição de material comum — reposição/manutenção ordinária')
     # 4) classes genericas -> frequencia mensal decide; capital na descricao escala
     if _has(c, GENERIC_CLASSES):
         ke = _has_capital(d)
