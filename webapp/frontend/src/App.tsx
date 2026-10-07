@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { reanalisarSessao } from './api'
 import type { Sessao } from './types'
 import ListaSessoes from './components/ListaSessoes'
 import TelaUpload from './components/TelaUpload'
@@ -13,9 +14,23 @@ export default function App() {
   const abrirSessao = async (id: string) => {
     try {
       const r = await fetch(`/api/sessao/${id}`)
-      if (!r.ok) throw new Error(`Erro ${r.status}`)
-      setSessao(await r.json())
-      setTela('revisao')
+      if (r.ok) {
+        setSessao(await r.json())
+        setTela('revisao')
+        return
+      }
+
+      // Sessões antigas podem existir no histórico sem estado_json salvo
+      // (por exemplo, se a análise foi interrompida). Reaproveita os arquivos
+      // originais e reconstrói o estado antes de abrir a revisão.
+      if (r.status === 404) {
+        const reprocessada = await reanalisarSessao(id)
+        setSessao(reprocessada)
+        setTela('revisao')
+        return
+      }
+
+      throw new Error(`Erro ${r.status}`)
     } catch {
       alert('Erro ao carregar sessao. Tente novamente.')
     }
