@@ -350,13 +350,6 @@ export default function TelaRevisao({
         </section>
 
         {erro && <div className="alert-error">{erro}</div>}
-        {(sessao.avisos_importacao?.length ?? 0) > 0 && (
-          <div className="alert-error" role="status">
-            <strong>Conferência dos documentos</strong>
-            <ul>{sessao.avisos_importacao!.map((aviso, index) => <li key={index}>{aviso}</li>)}</ul>
-          </div>
-        )}
-
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <NumberBlock
