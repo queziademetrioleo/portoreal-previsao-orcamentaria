@@ -51,9 +51,8 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ===================== CAMADA DE IA (Anthropic OU OpenAI) =====================
-# A IA AUXILIA: sugere classificacao p/ itens ambiguos ("Revisar") e escreve um
-# parecer executivo. As regras R1-R8 continuam deterministicas — a IA nao
-# altera numeros, apenas adiciona sugestoes e analise.
+# A IA avalia gastos ambiguos e compras; suas classificacoes alimentam as deducoes
+# por lancamento. As regras R1-R8 calculam os valores a partir dessas decisoes.
 #
 # Provedores suportados (escolha automatica pela chave disponivel):
 #   Anthropic: ANTHROPIC_API_KEY ou arquivo chave_claude.txt  (prioridade)
@@ -251,12 +250,12 @@ EXTRAORDINARIA (evidencia inequivoca):
 - Material de obra em volume claramente acima do normal (argamassa, pastilhas, estrutural)
 - Rescisao trabalhista, indenizacao, processo judicial
 
-RECORRENTE (manter na base — incluindo casos ambiguos):
+RECORRENTE (manter na base quando ha contexto de operacao periodica):
 - materiais de consumo e reposicoes claramente periodicas (limpeza, expediente,
   pequenas compras operacionais)
-- Material de pintura (tinta, rolo, lixa, sika) independente do valor = manutencao preventiva corriqueira = RECORRENTE
+- Material de pintura usado em manutencao preventiva periodica; se vinculado a uma obra pontual, avaliar como extraordinario
 - Visitas mensais/periodicas de qualquer tipo de manutencao
-- Pequenas compras de material eletrico, hidraulico, de seguranca
+- Compras de insumos eletricos, hidraulicos e de seguranca cujo consumo/reposicao periodica esteja sustentado pelo contexto
 - Revisoes periodicas (trimestral, semestral, anual) de qualquer sistema
 
 PERGUNTA OBRIGATORIA PARA AQUISICOES:
@@ -270,6 +269,27 @@ ou reposicao periodica, classifique RECORRENTE. Nao use uma palavra isolada como
 avalie o significado completo da descricao, o valor, a frequencia e o contexto.
 REVISAR fica reservado para casos em que, mesmo apos essas perguntas, nao houver
 evidencia suficiente para decidir.
+O historico fornecido cobre apenas o periodo observado: nao invente compras em anos
+anteriores. Meses com gasto na classe NAO significam meses com compra do mesmo item.
+Parcelas de uma unica aquisicao NAO provam recorrencia. A falta de correspondencia
+com o demonstrativo e uma questao de conciliacao, nao prova de ambiguidade do gasto.
+Valor baixo NAO prova recorrencia. Nao presuma reposicao rotineira apenas porque o
+objeto custa pouco, pertence a manutencao ou porque a conta tem outros pagamentos.
+Para bens duraveis e melhorias, avalie a expectativa de nova compra no proximo ano:
+sem indicio de consumo ou reposicao periodica, uma aquisicao identificada como
+pontual deve ser EXTRAORDINARIA. Nao invente quebra, reparo ou reposicao se a
+descricao nao informa isso. Uma manutencao anual pode ser RECORRENTE mesmo com
+apenas um pagamento; a natureza e a finalidade prevalecem sobre a contagem.
+Possibilidade de quebrar, desgastar ou precisar de troca algum dia NAO implica
+compra anual. Um bem duravel adquirido para instalar ou melhorar uma area nao deve
+entrar automaticamente na base do proximo ano. Para afirmar reposicao periodica,
+aponte um fato concreto da descricao ou do historico; nao use suposicoes como
+"frequentemente substituido em areas comuns" sem evidencia. Compare o caso com
+consumo de insumos e servicos periodicos versus aquisicao de um bem que permanece
+em uso por varios anos. Nao confunda despesa de manutencao pontual com contrato
+ou rotina de manutencao periodica.
+Na justificativa, apresente o caso resumido: natureza do gasto, evidencia observada
+e expectativa de repeticao no proximo ano. Use ate 60 palavras, sem expor raciocinio interno.
 
 CALIBRACAO:
 Se houver valores de referencia do calculo manual do especialista, use-os para calibrar.
@@ -277,16 +297,32 @@ Quando uma classe tem muitos itens e o total de "Extraordinaria" que voce calcul
 significativamente o que o especialista historicamente remove, seja mais conservador e
 reclassifique itens ambiguos para "Recorrente".
 
-Responda APENAS JSON: {"itens": [{"id": <numero>, "sugestao": "Recorrente|Extraordinaria|Revisar", "justificativa": "<=15 palavras"}]}
+Responda APENAS JSON: {"itens": [{"id": <numero>, "sugestao": "Recorrente|Extraordinaria|Revisar", "justificativa": "caso resumido em ate 60 palavras"}]}
 """
 
 def ia_classificar_revisar(itens, nome_condo, manual=None):
-    """Sugestao da IA para itens 'Revisar'. Retorna {indice_do_item: (sugestao, justificativa)}.
+    """Avalia itens ambiguos e compras. Retorna {indice: (categoria, justificativa)}.
     manual: resultado de parse_previsao() — usado como referencia de calibracao."""
-    rev = [(i, it) for i, it in enumerate(itens) if it['cat'] == 'Revisar']
-    if not rev or not _ia_disponivel():
+    import json
+    rev = [(i, it) for i, it in enumerate(itens)
+           if it['cat'] == 'Revisar' or
+           (it['cat'] == 'Recorrente' and re.search(
+               r'\b(aquisicao|compra|compras)\b', _norm(it.get('descricao'))))]
+    if not rev:
         return {}
-    logger.info('🤖 IA analisando %d itens ambiguos (%s)...', len(rev), _ia_modelo())
+    if not _ia_disponivel():
+        logger.warning('Avaliador sem IA disponivel: %d lancamentos nao avaliados.', len(rev))
+        return {}
+    logger.info('🤖 IA avaliando %d lancamentos (%s)...', len(rev), _ia_modelo())
+
+    def registro(it):
+        return {'data': str(it.get('data') or ''),
+                'valor': it['valor_pago'], 'descricao': it.get('descricao') or '',
+                'sistema': it.get('sistema') or 'condo21'}
+
+    historico = defaultdict(list)
+    for it in itens:
+        historico[(_norm(it.get('grupo')), _norm(it.get('classe')))].append(registro(it))
 
     # Contexto de referencia: valores de cada classe no calculo manual do especialista
     ref_ctx = ''
@@ -308,16 +344,24 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
     n_lotes = (len(rev) + LOTE - 1) // LOTE
     for nlote, k in enumerate(range(0, len(rev), LOTE), 1):
         lote = rev[k:k + LOTE]
-        linhas = '\n'.join(
-            f"id={j} | grupo={it['grupo']} | classe={it['classe']} | "
-            f"valor=R${it['valor_pago']:.2f} | meses_com_gasto_na_classe={it.get('n_meses','?')} | "
-            f"descricao={(it['descricao'] or '')[:100]}"
-            for j, (i, it) in enumerate(lote))
-        prompt = f'Condominio: {nome_condo}{ref_ctx}\n\nLancamentos:\n{linhas}'
+        lancamentos = [dict(registro(it), id=j, grupo=it['grupo'], classe=it['classe'],
+                            meses_com_gasto_na_classe=it.get('n_meses'),
+                            sem_correspondencia_demonstrativo=bool(it.get('classificacao_pendente')))
+                       for j, (i, it) in enumerate(lote)]
+        classes = {(_norm(it['grupo']), _norm(it['classe'])) for i, it in lote}
+        contexto = [{'grupo': g, 'classe': c, 'lancamentos': historico[(g, c)]}
+                    for g, c in sorted(classes)]
+        prompt = (f'Condominio: {nome_condo}{ref_ctx}\n\n'
+                  'Avalie somente os IDs em lancamentos_a_avaliar. O historico inclui '
+                  'todos os pagamentos das respectivas contas, inclusive outros lotes.\n' +
+                  json.dumps({'lancamentos_a_avaliar': lancamentos,
+                              'historico_das_contas': contexto}, ensure_ascii=False))
         # Cada lote e independente: ate 3 tentativas; NUNCA aborta os demais lotes.
-        itens_lote = []
+        respostas_lote = {}
         for tentativa in range(3):
-            resp = _claude_chat(IA_SISTEMA_CLASSIF, prompt, max_tokens=8000)
+            faltantes = sorted(set(range(len(lote))) - set(respostas_lote))
+            pedido = prompt + f'\nResponda todos estes IDs ainda sem avaliacao: {faltantes}.'
+            resp = _claude_chat(IA_SISTEMA_CLASSIF, pedido, max_tokens=8000)
             if not resp:
                 continue
             try:
@@ -325,13 +369,24 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
                 itens_lote = dados_lote.get('itens', []) if isinstance(dados_lote, dict) else []
             except Exception:
                 itens_lote = _recupera_itens_json(resp)  # JSON truncado -> recupera o que der
-            if itens_lote:
-                logger.info('Lote %d/%d: %d sugestoes recebidas', nlote, n_lotes, len(itens_lote))
+            for d in itens_lote if isinstance(itens_lote, list) else []:
+                if not isinstance(d, dict):
+                    continue
+                try:
+                    j = int(d.get('id', -1))
+                except (ValueError, TypeError):
+                    continue
+                if (j in faltantes and str(d.get('sugestao', '')).strip().capitalize()
+                        in ('Recorrente', 'Extraordinaria', 'Revisar')):
+                    respostas_lote[j] = d
+            if len(respostas_lote) == len(lote):
                 break
-        if not itens_lote:
-            logger.warning('Lote %d/%d sem resposta valida apos 3 tentativas (%d itens ficam para revisao humana).',
-                           nlote, n_lotes, len(lote))
-        for d in itens_lote:
+        logger.info('Lote %d/%d: %d/%d avaliacoes recebidas',
+                    nlote, n_lotes, len(respostas_lote), len(lote))
+        if len(respostas_lote) < len(lote):
+            logger.warning('Lote %d/%d: %d lancamentos sem avaliacao apos 3 tentativas.',
+                           nlote, n_lotes, len(lote) - len(respostas_lote))
+        for d in respostas_lote.values():
             try:
                 j = int(d.get('id', -1))
             except (ValueError, TypeError):
@@ -341,8 +396,22 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
                 sug = str(d.get('sugestao', '')).strip().capitalize()
                 if sug not in ('Recorrente', 'Extraordinaria', 'Revisar'):
                     sug = 'Revisar'
-                out[idx] = (sug, str(d.get('justificativa', ''))[:160])
+                out[idx] = (sug, str(d.get('justificativa', ''))[:600])
     return out
+
+
+def aplicar_avaliacoes_ia(itens, sugestoes):
+    """Aplica a natureza do gasto sem apagar alertas de conciliacao documental."""
+    aplicadas = 0
+    for idx, (categoria, justificativa) in sugestoes.items():
+        it = itens[idx]
+        if categoria in ('Extraordinaria', 'Recorrente', 'Revisar'):
+            it['cat'] = categoria
+            it['motivo'] = f'IA: {justificativa}'
+            aplicadas += categoria != 'Revisar'
+    logger.info('Avaliador: %d respostas, %d decisoes aplicadas, %d gastos ainda em revisao',
+                len(sugestoes), aplicadas, sum(it['cat'] == 'Revisar' for it in itens))
+    return aplicadas
 
 def ia_parecer(R, nome_condo):
     """Parecer executivo escrito pela IA a partir dos numeros calculados."""
@@ -1467,11 +1536,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('Passo 3/6: IA — reclassificando itens Revisar...')
     sugestoes_ia = ia_classificar_revisar(des['itens'], nome, manual=manual)
     logger.info('  IA sugeriu reclassificar %d itens', len(sugestoes_ia))
-    for idx, (sug, just) in sugestoes_ia.items():
-        it = des['itens'][idx]
-        if sug in ('Extraordinaria', 'Recorrente') and not it.get('classificacao_pendente'):
-            it['cat'] = sug
-            it['motivo'] = f'IA: {just}'
+    aplicar_avaliacoes_ia(des['itens'], sugestoes_ia)
 
     if progress_callback:
         progress_callback({'fase': 'IA analisando itens ambíguos', 'passo': 3, 'total': 6, 'detalhe': f'{len(sugestoes_ia)} sugestões recebidas'})
@@ -1502,7 +1567,10 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 continue
             threshold = mediana + 3.0 * mad * 1.4826
             for it in nfs:
-                if it['valor_pago'] > threshold and it['cat'] != 'Extraordinaria' and not it.get('classificacao_pendente'):
+                # Um valor alto sozinho nao substitui a avaliacao contextual da IA.
+                if (it['valor_pago'] > threshold and it['cat'] != 'Extraordinaria'
+                        and not it.get('classificacao_pendente')
+                        and not (it.get('motivo') or '').startswith('IA:')):
                     it['cat'] = 'Extraordinaria'
                     it['motivo'] = (f'Outlier estatistico (MAD): R${it["valor_pago"]:,.2f} > '
                                     f'mediana + 3*MAD (R${threshold:,.2f}) na classe {it["classe"]}')
@@ -1618,7 +1686,10 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 regra = 'R3: sem itens extraordinarios — mantido integral'
             final = base - ded
         else:
-            regra = 'Recorrente: mantida integral'
+            ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+            final = base - ded
+            regra = ('Lancamentos extraordinarios identificados — removidos da previsao'
+                     if ded > 0.005 else 'Recorrente: mantida integral')
         linhas.append({'grupo': g, 'classe': c, 'base': base, 'deducao': ded,
                        'final': final, 'regra': regra, 'n_meses': l['n_meses'],
                        'monthly': l['monthly']})
