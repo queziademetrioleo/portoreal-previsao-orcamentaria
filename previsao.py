@@ -1428,8 +1428,11 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     for it in des['itens']:
         nm = freq.get(_norm(it['classe']))
         cat, mot = classify(it['grupo'], it['classe'], it['descricao'], nm, it['valor_pago'])
-        if it.get('classificacao_pendente'):
-            cat, mot = 'Revisar', 'Conferir correspondência da classe com o plano de contas e o demonstrativo.'
+        if it.get('classificacao_pendente') and cat == 'Revisar':
+            cat, mot = 'Revisar', (
+                'Lançamento sem correspondência exata no demonstrativo; '
+                'confirmar se é ordinário ou extraordinário.'
+            )
         it['cat'], it['motivo'], it['n_meses'] = cat, mot, nm
     # Contagens
     n_extra = sum(1 for it in des['itens'] if it['cat'] == 'Extraordinaria')
