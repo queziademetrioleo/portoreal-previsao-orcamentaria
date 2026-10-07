@@ -213,7 +213,7 @@ def _aplicar_aprendizado_resultado(R):
     except Exception as exc:
         logger.warning('Não foi possível carregar aprendizado humano: %s', exc)
         return R
-    itens = [it for it in R.get('des', {}).get('itens', []) if not it.get('classificacao_pendente')]
+    itens = [it for it in (R.get('des') or {}).get('itens', []) if not it.get('classificacao_pendente')]
     aplicados = aprendizado.aplicar_memorias(itens, memorias)
     if not aplicados:
         return R
@@ -509,10 +509,11 @@ def _montar_lancamentos_contas(des):
 
 def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
-    des = R['des']
+    des = R.get('des') or {}
+    itens_des = des.get('itens') or []
 
     extraordinarias, revisar = [], []
-    for idx, it in enumerate(des['itens']):
+    for idx, it in enumerate(itens_des):
         item = {
             'id': idx,
             'grupo': it['grupo'],
@@ -524,7 +525,6 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             'n_meses': it.get('n_meses'),
         }
         if it['cat'] == 'Extraordinaria':
-            ia = R.get('sugestoes_ia', {}).get(idx) or R.get('sugestoes_ia', {}).get(str(idx))
             item['origem'] = ('Aprendizado' if (it['motivo'] or '').startswith('Aprendizado humano:')
                               else 'IA' if (it['motivo'] or '').startswith('IA:') else 'Regra')
             item['decisao'] = 'aprovada'        # default: remover da base
@@ -535,12 +535,13 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             revisar.append(item)
 
     inad_itens = []
-    if R['inad']:
+    inad = R.get('inad') or None
+    if inad:
         # Apenas inadimplência crítica: 3+ meses consecutivos sem pagar.
         # Para cada unidade, a previsão abate somente a taxa condominial da
         # última parcela em atraso, jamais a soma de parcelas vencidas.
         ultima_critica = {}
-        for original_id, it in enumerate(R['inad']['itens']):
+        for original_id, it in enumerate(inad.get('itens') or []):
             critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
             classe = core._norm(it.get('classe'))
             eh_taxa_condominio = 'condom' in classe and ('taxa' in classe or 'tx' in classe)
@@ -571,10 +572,10 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'base': round(l['base'], 2), 'deducao': round(l['deducao'], 2),
         'final': round(l['final'], 2), 'regra': l['regra'],
         'n_meses': l['n_meses'],
-    } for l in R['linhas']]
+    } for l in (R.get('linhas') or [])]
     lancamentos_contas = _montar_lancamentos_contas(des)
 
-    bal = R['bal']
+    bal = R.get('bal') or {}
     return {
         'sessao_id': sid,
         'nome_condominio': nome,
@@ -600,17 +601,18 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             'n_meses_balanco': bal.get('n_meses'),
             'ultimo_reajuste': None,  # 'AAAA-MM', preenchido na revisao p/ o relatorio PDF
             'cenarios': R.get('cenarios'),
-            'periodo': [str(R['des']['periodo'][0]), str(R['des']['periodo'][1])],
+            'periodo': [str((des.get('periodo') or ('', ''))[0]),
+                        str((des.get('periodo') or ('', ''))[1])],
         },
         'extraordinarias': extraordinarias,
         'revisar': revisar,
         'inadimplencia': inad_itens,
         'inad_meta': ({
-            'total': round(R['inad']['total'], 2),
-            'critica': round(R['inad']['critica'], 2),
-            'data_base': str(R['inad']['data_base']),
-            'meses_considerados': R['inad'].get('meses_considerados'),
-        } if R['inad'] else None),
+            'total': round(inad.get('total') or 0, 2),
+            'critica': round(inad.get('critica') or 0, 2),
+            'data_base': str(inad.get('data_base') or ''),
+            'meses_considerados': inad.get('meses_considerados'),
+        } if inad else None),
         'linhas_contas': linhas,
         'lancamentos_contas': lancamentos_contas,
         'previsao_final': [],
@@ -823,8 +825,10 @@ async def analisar_sse(sid: str):
             if future is not None and not future.done():
                 future.cancel()
         except Exception as exc:
-            logger.error('Erro na analise SSE da sessao %s: %s', sid, exc)
-            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
+            logger.exception('Erro na analise SSE da sessao %s', sid)
+            # A excecao tecnica fica no log; o navegador recebe uma mensagem
+            # acionavel e nao transforma ``None.get`` em erro da interface.
+            yield f"data: {json.dumps({'error': 'Não foi possível concluir a análise. Confira os arquivos enviados e tente novamente.'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gerar(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})

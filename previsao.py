@@ -1224,9 +1224,12 @@ def ia_analisar_classes_lumpy(itens, nome_condo, outliers_por_classe):
         logger.warning('Falha ao extrair JSON da resposta IA para classes lumpy')
         return {}
 
-    logger.info('IA retornou %% para %d classes', len(data.get('classes', {})))
+    data = data if isinstance(data, dict) else {}
+    logger.info('IA retornou %% para %d classes', len(data.get('classes') or {}))
     resultado = {}
-    for nome_classe, info in data.get('classes', {}).items():
+    for nome_classe, info in (data.get('classes') or {}).items():
+        if not isinstance(info, dict):
+            continue
         try:
             pct = float(info.get('pct', 0))
         except (ValueError, TypeError):
@@ -1592,7 +1595,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # Regra: unidade e critica se ficou >= 3 meses CONSECUTIVOS sem pagar.
     # Impacto: abate da receita a taxa mensal da unidade × meses consecutivos devidos.
     # O arquivo inad01 ja traz o total calculado.
-    inad_res = mixed_data['inad'] if mixed_data else None
+    inad_res = mixed_data.get('inad') if mixed_data else None
     if not mixed_data and ina and ina['itens']:
         data_base = ina['data_base']
         # Agrupar por unidade e extrair meses consecutivos
@@ -1685,7 +1688,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias,
             'origem_sistema': 'misto' if mixed_data else 'condo21',
-            'cobertura': mixed_data['cobertura'] if mixed_data else {}}
+            'cobertura': (mixed_data.get('cobertura') or {}) if mixed_data else {}}
 
 
 # ---------------------------------------------------------------------------
@@ -2000,7 +2003,7 @@ def gerar_xlsx(folder, out_path=None):
     # ============== ABAS EXTRAORDINARIAS / REVISAR (com sugestao da IA) ==============
     # sugestoes_ia ja foi calculado em analisar() e aplicado nos itens.
     # Aqui usamos para exibir a justificativa nos itens que continuam "Revisar".
-    sugestoes_ia = R.get('sugestoes_ia', {})
+    sugestoes_ia = R.get('sugestoes_ia') or {}
     for aba, cat in (('Extraordinarias', 'Extraordinaria'), ('Revisar', 'Revisar')):
         ws = wb.create_sheet(aba)
         heads = ['Grupo', 'Classe', 'Data', 'Fornecedor/Historico', 'Valor', 'Motivo']
