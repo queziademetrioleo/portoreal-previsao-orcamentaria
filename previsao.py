@@ -238,11 +238,11 @@ TAREFA: Para cada lancamento, classificar como:
 - "Extraordinaria": remove da base — evento pontual claro, nao se repetira
 - "Revisar": ambiguo, impossivel decidir sem contexto humano
 
-REGRA PRINCIPAL — DECIDA PELO CONTEXTO:
-Nao empurre automaticamente compras pontuais para "Revisar". Use a descricao, o tipo
-de item e a frequencia da classe. Marque "Extraordinaria" quando a compra for de um
-objeto acabado, equipamento, peca ou melhoria que normalmente e adquirido uma vez.
-Use "Revisar" somente quando os sinais forem realmente conflitantes ou insuficientes.
+REGRA PRINCIPAL — AVALIE CADA CASO:
+Atue como um avaliador financeiro, e nao como um classificador por palavra-chave.
+Para cada lancamento, monte mentalmente um pequeno caso: o que foi comprado, qual a
+finalidade no condominio, se e consumo ou reposicao, se existe periodicidade observada
+e se seria razoavel comprar esse mesmo item novamente no proximo ano.
 
 EXTRAORDINARIA (evidencia inequivoca):
 - Empresa de pintura/reforma contratada para projeto especifico com NFs em serie ou "Sinal"/"Parcela X/Y"/"Restante"
@@ -260,14 +260,16 @@ RECORRENTE (manter na base — incluindo casos ambiguos):
 - Revisoes periodicas (trimestral, semestral, anual) de qualquer sistema
 
 PERGUNTA OBRIGATORIA PARA AQUISICOES:
-Antes de classificar uma compra, pergunte internamente: "isso e consumo/reposicao
-que se repete ou uma aquisicao pontual?". Uma compra isolada de espelho, vidro,
-equipamento, peca ou melhoria deve ser EXTRAORDINARIA quando a descricao indicar
-que nao e consumo recorrente. Descricoes como "AQUISICAO DE ESPELHO 60CM" sao,
-por si so, evidencia suficiente de compra pontual e devem ser EXTRAORDINARIA.
-Materiais consumiveis (limpeza, expediente, lampadas, pequenos insumos) continuam
-RECORRENTE. Nao trate toda descricao iniciada por "Aquisicao de" como recorrente;
-REVISAR fica reservado para casos sem sinal claro em nenhuma das duas direcoes.
+Antes de classificar, responda mentalmente, nesta ordem:
+1. "Isso e consumo/reposicao que se repete ou uma aquisicao pontual?"
+2. "Ha evidencia de que esse condominio compra isso todo ano ou periodicamente?"
+3. "Se eu estivesse montando a previsao do proximo ano, eu colocaria esse gasto na
+   base ordinaria ou o retiraria por ser um evento excepcional?"
+Se a resposta indicar compra pontual, classifique EXTRAORDINARIA; se indicar consumo
+ou reposicao periodica, classifique RECORRENTE. Nao use uma palavra isolada como prova:
+avalie o significado completo da descricao, o valor, a frequencia e o contexto.
+REVISAR fica reservado para casos em que, mesmo apos essas perguntas, nao houver
+evidencia suficiente para decidir.
 
 CALIBRACAO:
 Se houver valores de referencia do calculo manual do especialista, use-os para calibrar.
