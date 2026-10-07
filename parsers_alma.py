@@ -423,7 +423,10 @@ def load_mixed(folder, core):
     rec = read_receivables(root / 'alma_rec.pdf')
     if (root / 'rec02.xls').exists():
         condo_rec = core.parse_rec(str(root / 'rec02.xls'))
-        if condo_rec.get('mes_ref') and month_key(condo_rec['mes_ref']) > month_key(rec['mes_ref']):
+        # Alguns REC antigos existem no upload, mas não têm estrutura legível
+        # pelo parser. Nesse caso, mantenha o REC do Alma como fonte válida.
+        if (condo_rec and condo_rec.get('mes_ref')
+                and month_key(condo_rec['mes_ref']) > month_key(rec['mes_ref'])):
             rec = condo_rec
     if (root / 'alma_inad.pdf').exists():
         unit_taxes = read_unit_taxes(root / 'rec02.xls')
