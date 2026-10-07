@@ -211,7 +211,7 @@ def ia_parse_pasta(pasta):
         return None
 
     # Validar estrutura mínima
-    if 'bal' not in dados:
+    if not isinstance(dados, dict) or not isinstance(dados.get('bal'), dict):
         print("   ⚠️  JSON da IA sem campo 'bal' — fallback para parsers rígidos")
         return None
 
@@ -261,15 +261,15 @@ def _extrair_json(texto):
 
 def _pos_processar(dados):
     """Garante tipos corretos e preenche defaults no JSON retornado pela IA."""
-    bal = dados.get('bal', {})
-    des = dados.get('des', {})
-    sin = dados.get('sin', {})
-    inad = dados.get('inad', {})
+    bal = dados.get('bal') or {}
+    des = dados.get('des') or {}
+    sin = dados.get('sin') or {}
+    inad = dados.get('inad') or {}
 
     # bal: garante arrays e tipos numéricos
     for sec in ('receitas', 'despesas'):
-        if sec not in bal:
-            bal[sec] = []
+        itens = bal.get(sec) or []
+        bal[sec] = [item for item in itens if isinstance(item, dict)]
         for item in bal[sec]:
             item['total'] = _num(item.get('total', 0))
             item['n_meses'] = int(item.get('n_meses', 0))
@@ -288,8 +288,8 @@ def _pos_processar(dados):
         bal['saldo_final'] = None
 
     # des: garante itens com data
-    if 'itens' not in des:
-        des['itens'] = []
+    des['itens'] = [item for item in (des.get('itens') or [])
+                    if isinstance(item, dict)]
     for item in des['itens']:
         item['valor_lcto'] = _num(item.get('valor_lcto', 0))
         item['valor_pago'] = _num(item.get('valor_pago', 0)) or item['valor_lcto']
@@ -318,6 +318,8 @@ def _pos_processar(dados):
 
     # inad
     if inad and 'itens' in inad:
+        inad['itens'] = [item for item in (inad.get('itens') or [])
+                         if isinstance(item, dict)]
         data_base = inad.get('data_base')
         if isinstance(data_base, str):
             try:

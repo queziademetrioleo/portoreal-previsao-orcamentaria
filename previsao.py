@@ -127,8 +127,10 @@ def _anthropic_chat(system, user, max_tokens, temperature=None):
                  'anthropic-version': '2023-06-01'})
     with urllib.request.urlopen(req, timeout=300) as r:
         data = _json.loads(r.read().decode('utf-8'))
+    if not isinstance(data, dict):
+        raise RuntimeError('Anthropic retornou JSON inválido')
     return ''.join(b.get('text', '') for b in data.get('content', [])
-                   if b.get('type') == 'text')
+                   if isinstance(b, dict) and b.get('type') == 'text')
 
 
 def _openai_reasoning_effort():
@@ -303,7 +305,8 @@ def ia_classificar_revisar(itens, nome_condo, manual=None):
             if not resp:
                 continue
             try:
-                itens_lote = _extrai_json(resp).get('itens', [])
+                dados_lote = _extrai_json(resp)
+                itens_lote = dados_lote.get('itens', []) if isinstance(dados_lote, dict) else []
             except Exception:
                 itens_lote = _recupera_itens_json(resp)  # JSON truncado -> recupera o que der
             if itens_lote:

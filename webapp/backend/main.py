@@ -860,7 +860,7 @@ async def reanalisar_sincrono(sid: str):
 
             return estado
     except Exception as exc:
-        logger.error('Erro na reanalise da sessao %s: %s', sid, exc)
+        logger.exception('Erro na reanalise da sessao %s: %s', sid, exc)
         raise HTTPException(500, f'Erro ao reanalisar: {exc}')
 
 
