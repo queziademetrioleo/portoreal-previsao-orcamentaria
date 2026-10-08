@@ -18,6 +18,44 @@ def balance(months, values):
 
 
 class MixedImportTest(unittest.TestCase):
+    def test_wrapped_balance_names_do_not_replace_group_headers(self):
+        lines = [
+            {'text': 'DESPESAS COM PESSOAL', 'x0': 54, 'top': 100},
+            {'text': 'CONSULTORIA, MEDICINA E 10,00 10,00 10,00', 'x0': 65, 'top': 115},
+            {'text': 'SEG. DO TRABALHO', 'x0': 65, 'top': 123},
+            {'text': 'FGTS 20,00 20,00 20,00', 'x0': 65, 'top': 138},
+            {'text': 'CONTRATOS', 'x0': 54, 'top': 146},
+            {'text': 'CONTRATO DE MANUTENÇÃO DO 30,00 30,00 30,00', 'x0': 65, 'top': 160},
+            {'text': 'ELEVADOR', 'x0': 65, 'top': 168},
+        ]
+        merged = alma._merge_wrapped_balance_lines(lines)
+        self.assertEqual(len(merged), 5)
+        self.assertIn('CONSULTORIA, MEDICINA E SEG. DO TRABALHO 10,00', merged[1])
+        self.assertEqual(merged[3], 'CONTRATOS')
+        self.assertIn('CONTRATO DE MANUTENÇÃO DO ELEVADOR 30,00', merged[4])
+
+    @unittest.skipUnless(Path('tmp/berlin-db-audit/alma_bal.pdf').exists(), 'Documentos privados de Berlin indisponíveis')
+    def test_berlin_real_wrapped_accounts_reconcile_without_duplicate_expenses(self):
+        import parsers_sistemas
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ('alma_bal.pdf', 'alma_fin.xlsx', 'alma_rec.pdf'):
+                shutil.copyfile(Path('tmp/berlin-db-audit') / name, Path(folder) / name)
+            (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': ['alma'], 'sem_inadimplencia_alma': True}))
+            result = parsers_sistemas.load_selected(folder, previsao)
+        account_warnings = [w for w in result['divergencias'] if 'demonstrativo' in w or 'pagamento sem conta' in w]
+        self.assertEqual(len(account_warnings), 1)
+        self.assertIn('TARIFAS BANCÁRIAS', account_warnings[0])
+        self.assertAlmostEqual(result['bal']['total_despesas'], 110850.08, places=2)
+        self.assertAlmostEqual(result['bal']['total_despesas'], result['bal']['total_despesas_demonstrativos'], places=2)
+        rows = result['bal']['despesas']
+        self.assertEqual(next(r for r in rows if r['classe'] == 'FGTS')['grupo'], 'Despesas com Pessoal')
+        self.assertFalse(any(r.get('somente_detalhe') for r in rows))
+
+    @unittest.skipUnless(Path('tmp/berlin-db-audit/balanual.xls').exists(), 'Documentos privados de Berlin indisponíveis')
+    def test_group_legacy_xls_is_rejected_by_condo_reader(self):
+        with self.assertRaisesRegex(ValueError, 'selecione Group'):
+            previsao.parse_balanual('tmp/berlin-db-audit/balanual.xls')
+
     def test_internal_chart_maps_pool_guardian_without_uploaded_workbook(self):
         plan = alma.read_internal_plan()
         self.assertEqual(plan[alma.norm('CONTRATO DE GUARDIÃO DE PISCINA')][0]['grupo'], 'Contratos')

@@ -638,6 +638,8 @@ def parse_balanual(path):
     if not mlabels and despesas:
         # se receitas falhou, derivar meses da secao de despesas
         mlabels = [f'M{i+1}' for i in range(len(despesas[0]['monthly']))]
+    if not mlabels or not despesas:
+        raise ValueError('O balancete não tem a estrutura esperada do Condo21. Se os relatórios são da Group, selecione Group e envie as exportações XLSX originais.')
     return {'receitas': receitas, 'despesas': despesas,
             'total_receitas': tot_rec, 'total_despesas': tot_desp,
             'saldo_inicial': saldo_ini, 'saldo_final': saldo_fim,

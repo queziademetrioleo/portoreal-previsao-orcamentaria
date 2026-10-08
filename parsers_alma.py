@@ -12,6 +12,9 @@ import pdfplumber
 
 MONEY = re.compile(r'(?<![\w/])(-?\d[\d.]*,\d{2})(?!\d)')
 MONTH = re.compile(r'\b(\d{2}/\d{4})\b')
+FIN_ACCOUNT_ALIASES = {
+    'manutencao do sistema de gas (aquisicao de gas glp)': 'manutencao do sistema de gas',
+}
 
 
 def norm(value):
@@ -45,10 +48,32 @@ def months_between(start, end):
     return result
 
 
-def pdf_lines(path):
+def _merge_wrapped_balance_lines(lines):
+    result = []
+    previous = None
+    for line in lines:
+        text = line['text'].strip()
+        matches = list(MONEY.finditer(result[-1])) if result else []
+        if (previous and matches and not MONEY.search(text)
+                and abs(line['x0'] - previous['x0']) <= 2
+                and 0 < line['top'] - previous['top'] <= 12
+                and result[-1][:matches[0].start()].strip()):
+            offset = matches[0].start()
+            result[-1] = result[-1][:offset].rstrip() + ' ' + text + ' ' + result[-1][offset:]
+        else:
+            result.append(text)
+        previous = line
+    return result
+
+
+def pdf_lines(path, join_wrapped=False):
     with pdfplumber.open(path) as pdf:
-        lines = [(page_no, line.strip()) for page_no, page in enumerate(pdf.pages, 1)
-                 for line in (page.dedupe_chars().extract_text() or '').splitlines()]
+        lines = []
+        for page_no, page in enumerate(pdf.pages, 1):
+            page = page.dedupe_chars()
+            text_lines = (_merge_wrapped_balance_lines(page.extract_text_lines()) if join_wrapped
+                          else (page.extract_text() or '').splitlines())
+            lines.extend((page_no, line.strip()) for line in text_lines)
     if not lines:
         raise ValueError('PDF sem texto legível. Envie o relatório exportado pelo Almah.')
     return lines
@@ -173,7 +198,7 @@ def read_internal_plan():
 
 
 def read_balance(path):
-    lines = pdf_lines(path)
+    lines = pdf_lines(path, join_wrapped=True)
     text = '\n'.join(line for _, line in lines)
     period = re.search(r'Período\s*(\d{2}/\d{4})\s*até\s*(\d{2}/\d{4})', text, re.I)
     if not period:
@@ -262,7 +287,8 @@ def read_fin(path, plan, pdf_accounts):
         elif not isinstance(date, dt.date):
             date = dt.datetime.strptime(str(date).strip(), '%d/%m/%Y').date()
         candidates = plan.get(norm(account), [])
-        group = candidates[0]['grupo'] if len(candidates) == 1 else pdf_accounts.get(norm(account))
+        account_key = FIN_ACCOUNT_ALIASES.get(norm(account), norm(account))
+        group = pdf_accounts.get(account_key) or (candidates[0]['grupo'] if len(candidates) == 1 else None)
         group = group or 'Classes a revisar'
         supplier = str(get('fornecedor') or '').strip()
         items.append({'grupo': group, 'classe': account, 'data': date,
@@ -374,7 +400,8 @@ def load_mixed(folder, core):
     # Nomes canônicos usados no balanço também precisam ser usados nos detalhes.
     aliases = {'manutencao jardim': 'manutencao de jardim',
                'manutencao portao / porta': 'manutencao portao',
-               'consultoria, medicina e seg. do trabalho': 'consult., medicina e seg. do trabalho'}
+               'consultoria, medicina e seg. do trabalho': 'consult., medicina e seg. do trabalho',
+               'manutencao do sistema de gas (aquisicao de gas glp)': 'manutencao do sistema de gas'}
     names = {norm(r['classe']): r['classe'] for r in bal['despesas']}
     items = []
     for source, source_items in (('condo21', core.parse_desbai(str(root / 'desbai06.xls'))['itens']), ('alma', alma_items)):
