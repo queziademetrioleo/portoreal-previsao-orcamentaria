@@ -578,6 +578,70 @@ body {
 }
 
 /* ── FILE UPLOAD ───────────────────────── */
+.upload-identity {
+  padding: var(--s-lg);
+  margin-bottom: var(--s-xl);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.upload-section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.upload-section-description {
+  margin-top: var(--s-xs);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.upload-identity-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--s-md);
+  margin-top: var(--s-lg);
+}
+
+.upload-identity-fields .form-group { margin-bottom: 0; }
+
+.upload-documents-heading {
+  border-top: 2px solid var(--accent);
+  padding-top: var(--s-lg);
+  margin-bottom: var(--s-lg);
+}
+
+.upload-document-block {
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: var(--s-lg);
+  margin-top: var(--s-lg);
+  margin-bottom: var(--s-lg);
+}
+
+.upload-document-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  padding-bottom: var(--s-md);
+  margin-bottom: var(--s-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.upload-document-header h3 { color: var(--accent); font-size: 22px; }
+.upload-document-header span { color: var(--text-secondary); font-size: 13px; }
+.upload-document-block .form-hint { color: var(--text-secondary); margin-top: var(--s-md); }
+
+@media (max-width: 600px) {
+  .upload-identity-fields { grid-template-columns: 1fr; }
+  .upload-identity, .upload-document-block { padding: var(--s-md); }
+}
+
 .file-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

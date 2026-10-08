@@ -211,6 +211,42 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
             {erro && <div className="alert-error" role="alert">{erro}</div>}
 
             <form onSubmit={handleSubmit}>
+              <section className="upload-identity" aria-labelledby="condominio-heading">
+                <h2 id="condominio-heading" className="upload-section-title">Dados do condomínio</h2>
+                <p className="upload-section-description">Esta análise e todos os documentos abaixo pertencem ao mesmo condomínio.</p>
+                <div className="upload-identity-fields">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="condominio-nome">Condomínio</label>
+                    <input
+                      className="form-input"
+                      id="condominio-nome"
+                      type="text"
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      placeholder="Nome do condomínio"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="previsao-ano">Ano da previsão</label>
+                    <input
+                      className="form-input"
+                      id="previsao-ano"
+                      type="number"
+                      value={ano}
+                      onChange={(e) => setAno(Number(e.target.value))}
+                      min={2020}
+                      max={2035}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <div className="upload-documents-heading">
+                <h2 className="upload-section-title">Documentos do condomínio</h2>
+                <p className="upload-section-description">Selecione os sistemas e envie os arquivos na caixa correspondente.</p>
+              </div>
+
               <fieldset className="form-group report-source">
                 <legend className="form-label">Sistemas dos relatórios</legend>
                 <div className="report-source-options">
@@ -249,31 +285,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                 <p className="form-hint">Marque todos os sistemas usados no período. Cada seleção abre seus próprios campos abaixo.</p>
               </fieldset>
 
-              <div className="form-group">
-                <label className="form-label">Condomínio</label>
-                <input
-                  className="form-input"
-                  type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Nome do condomínio"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Ano da previsão</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  value={ano}
-                  onChange={(e) => setAno(Number(e.target.value))}
-                  min={2020}
-                  max={2035}
-                />
-              </div>
-
-              {condo && <div className="form-group">
-                <h2 className="form-label">Relatórios do Condo21</h2>
+              {condo && <section className="upload-document-block" aria-labelledby="condo21-documentos">
+                <div className="upload-document-header"><h3 id="condo21-documentos">Condo21</h3><span>Documentos · XLS</span></div>
                 <div className="file-grid">
                   <FileZone
                     label="balanual.xls"
@@ -309,21 +322,21 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     ? 'Envie os relatórios do período que ficou no Condo21. Os meses não podem sobrepor os dos outros sistemas.'
                     : '* balanual.xls, desbai06.xls e rec02.xls são obrigatórios. inad01.xls é opcional — só anexe se houver inadimplência.'}
                 </p>
-              </div>}
+              </section>}
 
-              {group && <div className="form-group">
-                <h2 className="form-label">Relatórios da Group</h2>
+              {group && <section className="upload-document-block" aria-labelledby="group-documentos">
+                <div className="upload-document-header"><h3 id="group-documentos">Group</h3><span>Documentos · XLSX</span></div>
                 <div className="file-grid">
                   <FileZone label="Balancete anual (XLSX)" file={groupBal} setFile={setGroupBal} accept=".xlsx" required />
                   <FileZone label="Despesas detalhadas por classe de conta (XLSX)" file={groupDes} setFile={setGroupDes} accept=".xlsx" required />
                   <FileZone label="Receitas detalhadas por unidade/cliente (XLSX)" file={groupRec} setFile={setGroupRec} accept=".xlsx" required />
                 </div>
                 <p className="form-hint">Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.</p>
-              </div>}
+              </section>}
 
               {alma && (
-                  <div className="form-group">
-                    <h2 className="form-label">Relatórios do Alma</h2>
+                  <section className="upload-document-block" aria-labelledby="alma-documentos">
+                    <div className="upload-document-header"><h3 id="alma-documentos">Alma</h3><span>Documentos · PDF e XLSX</span></div>
                     <div className="file-grid">
                       <FileZone label="Por período agrupado por contas (PDF)" file={almaBal} setFile={setAlmaBal} accept=".pdf" required />
                       <FileZone label="FIN00601 — despesas detalhadas (XLSX)" file={almaFin} setFile={setAlmaFin} accept=".xlsx" required />
@@ -338,7 +351,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       Não há inadimplência no Alma
                     </label>
                     <p className="form-hint">Consideramos apenas os dois últimos meses da referência do relatório de inadimplência do Alma.</p>
-                  </div>
+                  </section>
               )}
               {(multiplos || alma) && (
                   <div className="form-group">
