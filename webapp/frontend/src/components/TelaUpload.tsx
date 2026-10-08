@@ -81,7 +81,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       return
     }
     if (group && (!groupBal || !groupDes || !groupRec)) {
-      setErro('Envie o balancete anual, as despesas detalhadas e as receitas por unidade da Group em XLSX.')
+      setErro('Envie o balancete anual, as despesas detalhadas e as receitas por unidade da Group em XLS ou XLSX.')
       return
     }
     if (alma && (!almaBal || !almaFin || !almaRec)) {
@@ -279,7 +279,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                   <label className={`report-source-option${group ? ' is-selected' : ''}`}>
                     <input type="checkbox" name="origem-relatorios" value="group" checked={group}
                       onChange={() => escolherSistema('group')} />
-                    <span><strong>Group</strong><small>Relatórios em XLSX</small></span>
+                    <span><strong>Group</strong><small>Relatórios em XLS ou XLSX</small></span>
                   </label>
                 </div>
                 <p className="form-hint">Marque todos os sistemas usados no período. Cada seleção abre seus próprios campos abaixo.</p>
@@ -325,11 +325,11 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
               </section>}
 
               {group && <section className="upload-document-block" aria-labelledby="group-documentos">
-                <div className="upload-document-header"><h3 id="group-documentos">Group</h3><span>Documentos · XLSX</span></div>
+                <div className="upload-document-header"><h3 id="group-documentos">Group</h3><span>Documentos · XLS ou XLSX</span></div>
                 <div className="file-grid">
-                  <FileZone label="Balancete anual (XLSX)" file={groupBal} setFile={setGroupBal} accept=".xlsx" required />
-                  <FileZone label="Despesas detalhadas por classe de conta (XLSX)" file={groupDes} setFile={setGroupDes} accept=".xlsx" required />
-                  <FileZone label="Receitas detalhadas por unidade/cliente (XLSX)" file={groupRec} setFile={setGroupRec} accept=".xlsx" required />
+                  <FileZone label="Balancete anual (XLS ou XLSX)" file={groupBal} setFile={setGroupBal} accept=".xls,.xlsx" required />
+                  <FileZone label="Despesas detalhadas por classe de conta (XLS ou XLSX)" file={groupDes} setFile={setGroupDes} accept=".xls,.xlsx" required />
+                  <FileZone label="Receitas detalhadas por unidade/cliente (XLS ou XLSX)" file={groupRec} setFile={setGroupRec} accept=".xls,.xlsx" required />
                 </div>
                 <p className="form-hint">Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.</p>
               </section>}

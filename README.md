@@ -46,7 +46,7 @@ dois últimos meses Alma. O fluxo Condo21 + Alma existente mantém suas regras.
 
 ## Upload Group
 
-Na tela **Nova previsão**, selecione **Group** e envie os três XLSX exportados:
+Na tela **Nova previsão**, selecione **Group** e envie os três relatórios exportados em XLS ou XLSX:
 
 - **Balancete anual**: 12 meses consecutivos, com classes de conta e totais.
 - **Despesas detalhadas por classe de conta**: pagamentos do mesmo período.
@@ -65,7 +65,8 @@ cobertura e da referência da receita também aparecem nas considerações do PD
 Sem relatório específico de inadimplência Group, **não há abatimento calculado
 por débitos**, nem declaração de ausência de inadimplência.
 
-As sessões preservam os XLSX e a origem Group para reanálise, com colunas
+O leitor identifica XLS/XLSX pelo conteúdo, inclusive na restauração das sessões.
+As sessões preservam os arquivos originais e a origem Group para reanálise, com colunas
 dedicadas no banco adicionadas automaticamente pelo bootstrap. Sessões Group
 criadas pelo formulário anterior continuam compatíveis. Os formatos exclusivos Condo21 e misto
 Condo21 + Alma continuam com seus leitores próprios.

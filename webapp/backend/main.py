@@ -742,7 +742,7 @@ async def criar_sessao(
         raise HTTPException(400, 'Selecione Condo21, Condo21 + Alma ou Group.')
     if not selecionados and origem_sistema == 'group' and any((dessin, inad, alma_bal, alma_fin, alma_rec, alma_inad,
                                          periodo_inicio, periodo_fim, sem_inadimplencia_alma)):
-        raise HTTPException(400, 'Group: envie somente o balancete anual, despesas detalhadas e receitas por unidade em XLSX.')
+        raise HTTPException(400, 'Group: envie somente o balancete anual, despesas detalhadas e receitas por unidade em XLS ou XLSX.')
     if not selecionados and origem_sistema == 'misto':
         if not all((alma_bal, alma_fin, alma_rec)):
             raise HTTPException(400, 'No uso conjunto, envie o demonstrativo por período, FIN e contas a receber do Alma.')
@@ -782,10 +782,12 @@ async def criar_sessao(
         if up is None:
             continue
         extension = '.xlsx' if origem_sistema == 'group' and not selecionados else os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
-        if not up.filename or not up.filename.lower().endswith(extension):
+        group_file = chave.startswith('group_') or (origem_sistema == 'group' and not selecionados)
+        extensions = ('.xls', '.xlsx') if group_file else (extension,)
+        if not up.filename or not up.filename.lower().endswith(extensions):
             if extension == '.xls' and up.filename and up.filename.lower().endswith('.xlsx'):
                 raise HTTPException(400, f'Arquivo {up.filename}: este campo é do Condo21 e aceita XLS. Se os relatórios são da Group, selecione Group e envie os três arquivos nas caixas da Group.')
-            raise HTTPException(400, f'Arquivo {up.filename}: use o formato {extension} para esse relatório.')
+            raise HTTPException(400, f'Arquivo {up.filename}: use o formato {" ou ".join(extensions)} para esse relatório.')
         # Validar tamanho
         if up.size and up.size > MAX_UPLOAD_BYTES:
             raise HTTPException(413, f'Arquivo {up.filename} excede o limite de 20 MB.')

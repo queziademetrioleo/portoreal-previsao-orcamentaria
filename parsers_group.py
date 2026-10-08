@@ -1,4 +1,4 @@
-"""Importação determinística dos XLSX exportados pela Group.
+"""Importação determinística dos XLS e XLSX exportados pela Group.
 
 Cabeçalhos identificam colunas; códigos ligam contas entre relatórios.
 Valores cobrados excluídos permanecem na auditoria, nunca na projeção.
@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import openpyxl
+import xlrd
 
 FILES = {'balanual': 'group_bal.xlsx', 'desbai': 'group_des.xlsx',
          'rec': 'group_rec.xlsx'}
@@ -74,13 +75,23 @@ def month(value):
 
 def read(path):
     try:
-        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        try:
-            rows = [tuple(row) for row in wb.worksheets[0].iter_rows(values_only=True)]
-        finally:
-            wb.close()
+        with open(path, 'rb') as source:
+            signature = source.read(8)
+        if signature == bytes.fromhex('d0cf11e0a1b11ae1'):
+            wb = xlrd.open_workbook(path)
+            sheet = wb.sheet_by_index(0)
+            rows = [tuple(xlrd.xldate_as_datetime(cell.value, wb.datemode)
+                          if cell.ctype == xlrd.XL_CELL_DATE else cell.value
+                          for cell in sheet.row(index)) for index in range(sheet.nrows)]
+        else:
+            with open(path, 'rb') as source:
+                wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
+                try:
+                    rows = [tuple(row) for row in wb.worksheets[0].iter_rows(values_only=True)]
+                finally:
+                    wb.close()
     except Exception as exc:
-        raise ValueError(f'Group: não foi possível ler {Path(path).name} como XLSX.') from exc
+        raise ValueError(f'Group: não foi possível ler {Path(path).name} como XLS ou XLSX.') from exc
     names = [str(row[0]).strip() for row in rows if row and
              norm(row[0]).startswith(('cond.', 'condominio '))]
     if not names:

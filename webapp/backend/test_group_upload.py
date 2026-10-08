@@ -12,6 +12,16 @@ import parsers_group
 
 
 class GroupUploadTest(unittest.TestCase):
+    @unittest.skipUnless(Path('tmp/berlin-db-audit/balanual.xls').exists(), 'XLS privados de Berlin indisponíveis')
+    def test_real_group_legacy_xls_upload_and_restoration(self):
+        files = {field: (name, (Path('tmp/berlin-db-audit') / name).read_bytes())
+                 for field, name in {'group_bal': 'balanual.xls', 'group_des': 'desbai06.xls', 'group_rec': 'rec02.xls'}.items()}
+        with patch.object(main.db, 'criar_sessao'), patch.object(main.db, 'salvar_arquivo') as save, patch.object(main.db, 'salvar_config_importacao'):
+            response = TestClient(main.app).post('/api/sessao',
+                data={'nome_condominio': 'Berlin', 'ano_previsao': '2026', 'sistemas': '["group"]'}, files=files)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(save.call_count, 3)
+
     def test_condo21_rejects_group_xlsx_even_when_renamed_before_persistence(self):
         for selection in ({'sistemas': '["condo21"]'}, {'origem_sistema': 'condo21'}):
             for name in ('Balancete anual Berlin.xlsx', 'balanual.xls'):
