@@ -21,6 +21,7 @@ test('aceita os formatos reais de cada relatório, inclusive extensão maiúscul
 })
 
 test('recusa formato errado, arquivo vazio e tamanho acima do limite do backend', () => {
+  assert.match(validarArquivo({ name: 'Balancete anual Berlin.xlsx', size: 100 }, '.xls'), /selecione Group/)
   assert.match(validarArquivo({ name: 'FIN.xls', size: 100 }, '.xlsx'), /Formato inválido/)
   assert.match(validarArquivo({ name: 'relatório.pdf', size: 0 }, '.pdf'), /vazio/)
   assert.match(validarArquivo({ name: 'relatório.pdf', size: MAX_UPLOAD_BYTES + 1 }, '.pdf'), /20 MB/)

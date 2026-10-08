@@ -12,6 +12,18 @@ import parsers_group
 
 
 class GroupUploadTest(unittest.TestCase):
+    def test_condo21_rejects_group_xlsx_even_when_renamed_before_persistence(self):
+        for selection in ({'sistemas': '["condo21"]'}, {'origem_sistema': 'condo21'}):
+            for name in ('Balancete anual Berlin.xlsx', 'balanual.xls'):
+                with self.subTest(selection=selection, name=name), patch.object(main.db, 'criar_sessao') as create:
+                    files = {'balanual': (name, b'PK\x03\x04xlsx'),
+                             'desbai': ('desbai06.xls', b'xls'), 'rec': ('rec02.xls', b'xls')}
+                    response = TestClient(main.app).post('/api/sessao',
+                        data={'nome_condominio': 'Berlin', 'ano_previsao': '2026', **selection}, files=files)
+                    self.assertEqual(response.status_code, 400, response.text)
+                    self.assertIn('selecione Group', response.json()['detail'])
+                    create.assert_not_called()
+
     def setUp(self):
         self.client = TestClient(main.app)
         self.form = {'nome_condominio': 'Berlin', 'ano_previsao': '2027', 'origem_sistema': 'group'}

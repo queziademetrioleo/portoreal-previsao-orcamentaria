@@ -783,6 +783,8 @@ async def criar_sessao(
             continue
         extension = '.xlsx' if origem_sistema == 'group' and not selecionados else os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
         if not up.filename or not up.filename.lower().endswith(extension):
+            if extension == '.xls' and up.filename and up.filename.lower().endswith('.xlsx'):
+                raise HTTPException(400, f'Arquivo {up.filename}: este campo é do Condo21 e aceita XLS. Se os relatórios são da Group, selecione Group e envie os três arquivos nas caixas da Group.')
             raise HTTPException(400, f'Arquivo {up.filename}: use o formato {extension} para esse relatório.')
         # Validar tamanho
         if up.size and up.size > MAX_UPLOAD_BYTES:
@@ -792,6 +794,8 @@ async def criar_sessao(
             raise HTTPException(413, f'Arquivo {up.filename} excede o limite de 20 MB.')
         if not conteudo:
             raise HTTPException(400, f'Arquivo {up.filename} está vazio.')
+        if extension == '.xls' and conteudo.startswith(b'PK\x03\x04'):
+            raise HTTPException(400, f'Arquivo {up.filename}: o conteúdo está em XLSX, embora o nome termine em XLS. Para relatórios da Group, selecione Group e use os arquivos XLSX originais.')
         file_bytes[chave] = conteudo
 
     if not selecionados and ('balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes):
