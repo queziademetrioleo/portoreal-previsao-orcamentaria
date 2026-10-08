@@ -350,15 +350,6 @@ export default function TelaRevisao({
         </section>
 
         {erro && <div className="alert-error">{erro}</div>}
-        {!!sessao.avisos_importacao?.length && (
-          <details className="report-checks">
-            <summary>
-              <span><strong>Observações da importação</strong><small>{sessao.avisos_importacao.length} {sessao.avisos_importacao.length === 1 ? 'observação sobre os documentos enviados' : 'observações sobre os documentos enviados'}</small></span>
-              <span className="report-checks-action"><span className="report-checks-show">Ver detalhes</span><span className="report-checks-hide">Recolher</span><span aria-hidden="true">⌄</span></span>
-            </summary>
-            <ul>{sessao.avisos_importacao.map((aviso, i) => <li key={i}>{aviso}</li>)}</ul>
-          </details>
-        )}
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <NumberBlock
