@@ -106,8 +106,12 @@ export interface Resumo {
   ultimo_reajuste?: string | null
 }
 
+export type Sistema = 'condo21' | 'alma' | 'group'
+
 export interface Sessao {
-  origem_sistema?: 'condo21' | 'misto'
+  origem_sistema?: Sistema | 'misto'
+  sistemas?: Sistema[]
+  inadimplencia_apurada?: boolean
   avisos_importacao?: string[]
   cobertura?: Record<string, string>
   sessao_id: string

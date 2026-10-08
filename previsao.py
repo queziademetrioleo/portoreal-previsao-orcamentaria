@@ -1404,7 +1404,23 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('Passo 1/6: Carregando relatorios...')
     ia_dados = None
     mixed_data = None
-    if os.path.exists(os.path.join(folder, 'alma_fin.xlsx')):
+    group_data = None
+    selected_data = None
+    config_path = os.path.join(folder, 'importacao.json')
+    import_config = {}
+    if os.path.exists(config_path):
+        import json
+        with open(config_path, encoding='utf-8') as config_file:
+            import_config = json.load(config_file)
+    if import_config.get('sistemas'):
+        from parsers_sistemas import load_selected
+        selected_data = load_selected(folder, sys.modules[__name__])
+        ia_dados = selected_data
+    elif os.path.exists(os.path.join(folder, 'group_bal.xlsx')):
+        from parsers_group import load_group
+        group_data = load_group(folder, sys.modules[__name__])
+        ia_dados = group_data
+    elif os.path.exists(os.path.join(folder, 'alma_fin.xlsx')):
         from parsers_alma import load_mixed
         mixed_data = load_mixed(folder, sys.modules[__name__])
         ia_dados = mixed_data
@@ -1434,9 +1450,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # estruturado, nao precisa de IA). Obrigatorio no fluxo do webapp
     # (main.py exige o upload); aqui fica opcional para permitir uso deste
     # motor em scripts/analises avulsas sem REC disponivel.
-    rec_doc = mixed_data['rec'] if mixed_data else None
+    rec_doc = (selected_data or group_data or mixed_data or {}).get('rec')
     rec_path = os.path.join(folder, 'rec02.xls')
-    if not mixed_data and os.path.exists(rec_path):
+    if not selected_data and not mixed_data and not group_data and os.path.exists(rec_path):
         try:
             rec_doc = parse_rec(rec_path)
         except Exception as e:
@@ -1480,7 +1496,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     tot_bal = bal.get('total_despesas', 0)
     tot_des = des.get('grand_total', 0)
     tot_sin = (sin.get('grand_total') or 0) if sin else 0
-    divergencias = list(mixed_data['divergencias']) if mixed_data else []
+    divergencias = list((selected_data or group_data or mixed_data or {}).get('divergencias', []))
     if tot_bal > 0 and tot_des > 0:
         pct = abs(tot_bal - tot_des) / max(tot_bal, tot_des)
         if pct > 0.05:
@@ -1490,7 +1506,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         if pct > 0.05:
             divergencias.append(f'balanual (R${tot_bal:,.2f}) vs dessin02 (R${tot_sin:,.2f}) = {pct:.1%}')
     if divergencias:
-        logger.warning('DIVERGENCIA ENTRE RELATORIOS (>5%%):')
+        logger.warning('AVISOS DE IMPORTACAO E CONFERENCIA DOS RELATORIOS:')
         for d in divergencias:
             logger.warning('  %s', d)
 
@@ -1736,8 +1752,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # Regra: unidade e critica se ficou >= 3 meses CONSECUTIVOS sem pagar.
     # Impacto: abate da receita a taxa mensal da unidade × meses consecutivos devidos.
     # O arquivo inad01 ja traz o total calculado.
-    inad_res = mixed_data.get('inad') if mixed_data else None
-    if not mixed_data and ina and ina['itens']:
+    inad_res = (selected_data or mixed_data or {}).get('inad')
+    inad_res = inad_res if inad_res and inad_res.get('regra') == 'misto_ultimos_2_meses_alma' else None
+    if inad_res is None and ina and ina['itens']:
         data_base = ina['data_base']
         # Agrupar por unidade e extrair meses consecutivos
         unidade_meses = defaultdict(set)   # unidade -> set de meses (MM/AAAA)
@@ -1828,8 +1845,10 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias,
-            'origem_sistema': 'misto' if mixed_data else 'condo21',
-            'cobertura': (mixed_data.get('cobertura') or {}) if mixed_data else {}}
+            'origem_sistema': selected_data['origem_sistema'] if selected_data else ('group' if group_data else ('misto' if mixed_data else 'condo21')),
+            'sistemas': selected_data['sistemas'] if selected_data else (['group'] if group_data else (['condo21', 'alma'] if mixed_data else ['condo21'])),
+            'inadimplencia_apurada': selected_data.get('inadimplencia_apurada', True) if selected_data else not bool(group_data),
+            'cobertura': (selected_data or group_data or mixed_data or {}).get('cobertura', {})}
 
 
 # ---------------------------------------------------------------------------

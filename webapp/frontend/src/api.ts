@@ -70,12 +70,16 @@ export interface PayloadDecisoes {
 export async function criarSessao(form: {
   nome: string
   ano: number
-  balanual: File
-  desbai: File
-  rec: File
+  balanual?: File | null
+  desbai?: File | null
+  rec?: File | null
   dessin?: File | null
   inad?: File | null
-  origemSistema?: 'condo21' | 'misto'
+  origemSistema?: 'condo21' | 'misto' | 'group'
+  sistemas?: ('condo21' | 'alma' | 'group')[]
+  groupBal?: File | null
+  groupDes?: File | null
+  groupRec?: File | null
   almaBal?: File | null
   almaFin?: File | null
   almaRec?: File | null
@@ -87,11 +91,36 @@ export async function criarSessao(form: {
   const fd = new FormData()
   fd.append('nome_condominio', form.nome)
   fd.append('ano_previsao', String(form.ano))
-  fd.append('balanual', form.balanual)
-  fd.append('desbai', form.desbai)
-  fd.append('rec', form.rec)
-  if (form.dessin) fd.append('dessin', form.dessin)
-  if (form.inad && form.origemSistema !== 'misto') fd.append('inad', form.inad)
+  if (form.sistemas) {
+    fd.append('sistemas', JSON.stringify(form.sistemas))
+    if (form.sistemas.includes('condo21')) {
+      for (const [field, file] of [['balanual', form.balanual], ['desbai', form.desbai], ['rec', form.rec], ['dessin', form.dessin]] as const) {
+        if (file) fd.append(field, file)
+      }
+      if (form.sistemas.length === 1 && form.inad) fd.append('inad', form.inad)
+    }
+    if (form.sistemas.includes('group')) {
+      for (const [field, file] of [['group_bal', form.groupBal], ['group_des', form.groupDes], ['group_rec', form.groupRec]] as const) {
+        if (file) fd.append(field, file)
+      }
+    }
+    if (form.sistemas.includes('alma')) {
+      for (const [field, file] of [['alma_bal', form.almaBal], ['alma_fin', form.almaFin], ['alma_rec', form.almaRec], ['alma_inad', form.semInadAlma ? null : form.almaInad]] as const) {
+        if (file) fd.append(field, file)
+      }
+      fd.append('sem_inadimplencia_alma', String(form.semInadAlma ?? false))
+    }
+    if (form.periodoInicio) fd.append('periodo_inicio', form.periodoInicio)
+    if (form.periodoFim) fd.append('periodo_fim', form.periodoFim)
+    const response = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })
+    if (!response.ok) await lancarErroResposta(response)
+    return response.json()
+  }
+  if (form.balanual) fd.append('balanual', form.balanual)
+  if (form.desbai) fd.append('desbai', form.desbai)
+  if (form.rec) fd.append('rec', form.rec)
+  if (form.dessin && form.origemSistema !== 'group') fd.append('dessin', form.dessin)
+  if (form.inad && (!form.origemSistema || form.origemSistema === 'condo21')) fd.append('inad', form.inad)
   fd.append('origem_sistema', form.origemSistema ?? 'condo21')
   if (form.origemSistema === 'misto') {
     for (const [campo, arquivo] of [

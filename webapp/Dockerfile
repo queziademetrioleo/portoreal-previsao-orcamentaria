@@ -34,6 +34,8 @@ COPY webapp/backend/ ./
 COPY previsao.py ./
 COPY ia_parser.py ./
 COPY parsers_alma.py ./
+COPY parsers_group.py ./
+COPY parsers_sistemas.py ./
 COPY data/plano_contas_alma.json ./data/plano_contas_alma.json
 
 # frontend buildado

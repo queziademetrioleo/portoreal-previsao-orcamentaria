@@ -5,11 +5,9 @@ from datetime import date
 
 sys.modules.setdefault('xlrd', types.ModuleType('xlrd'))
 
-jinja = types.ModuleType('jinja2')
-jinja.Template = object
+import jinja2  # Template real também é usado pelos testes integrados de PDF.
 weasyprint = types.ModuleType('weasyprint')
 weasyprint.HTML = object
-sys.modules.setdefault('jinja2', jinja)
 sys.modules.setdefault('weasyprint', weasyprint)
 
 import previsao
@@ -232,6 +230,61 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         ]
         despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}, lancamentos))
         self.assertAlmostEqual(despesas['Contrato de Manutenção'], 100)
+
+    def test_berlin_classes_sem_grupo_entram_nas_categorias_sem_alterar_total(self):
+        linhas = [
+            {'grupo': 'Despesas com Pessoal', 'classe': 'Salário', 'final': 1200},
+            *[{'grupo': '', 'classe': classe, 'final': 120} for classe in (
+                'FGTS', 'FÉRIAS EMPREGADO(S)', 'ADIANTAMENTO DE SALÁRIO',
+                'CONTRIBUIÇÃO SINDICAL -', 'UNIFORMES', 'VALE ALIMENTAÇÃO', 'OUTROS (PESSOAL)')],
+            *[{'grupo': '', 'classe': classe, 'final': 120} for classe in (
+                'OUTRAS MANUTENÇÕES', 'MATERIAL DE CÂMERAS /', 'OUTROS MATERIAIS DE',
+                'LIMPEZA CAIXA DÁGUA /', 'REPARO NO ELEVADOR',
+                'MANUTENÇÃO DO SISTEMA DE GÁS (Aquisição de gás GLP)')],
+            {'grupo': 'Despesas Administrativas', 'classe': 'Correio', 'final': 120},
+        ]
+        subtotal = sum(l['final'] for l in linhas)
+        despesas = relatorio_pdf._consolidar_despesas_relatorio(linhas, {'subtotal': subtotal})
+        self.assertEqual([label for label, _ in despesas], [
+            'Despesas com Pessoal', 'Gastos com conservação', 'Despesas Administrativas'])
+        self.assertAlmostEqual(sum(v for _, v in despesas) * 12, subtotal)
+        self.assertEqual(dict(despesas)['Despesas com Pessoal'], 170)
+        self.assertEqual(dict(despesas)['Gastos com conservação'], 60)
+        self.assertEqual(len(relatorio_pdf._componentes_conservacao(linhas, {})), 6)
+
+    def test_contratos_com_grupo_generico_ficam_juntos_e_nomes_cortados_nao_ficam_soltos(self):
+        linhas = [
+            {'grupo': 'Conservação', 'classe': 'CONTRATO DE ASSINATURA DE INTERNET', 'final': 120},
+            {'grupo': '', 'classe': 'CONTRATO DE ASSINATURA DE', 'final': 240},
+            {'grupo': 'Despesas Administrativas', 'classe': 'CONTRATO PRESTAÇÃO SERVIÇO ADMINISTRAÇÃO', 'final': 360},
+            {'grupo': '', 'classe': 'CONTRATO PRESTAÇÃO', 'final': 480},
+            {'grupo': '', 'classe': 'CONTRATO DE MANUTENÇÃO DO ELEVADOR', 'final': 600},
+            {'grupo': 'Contratos', 'classe': 'CONTRATO DE MANUTENÇÃO DO', 'final': 720},
+            {'grupo': 'Despesas Administrativas', 'classe': 'Correio', 'final': 120},
+        ]
+        despesas = relatorio_pdf._consolidar_despesas_relatorio(linhas, {})
+        self.assertEqual([label for label, _ in despesas], [
+            'Contrato de Manutenção do Elevador', 'Contrato de Assinatura de Internet',
+            'Contrato Prestação Serviço Administração', 'Despesas Administrativas'])
+        self.assertAlmostEqual(sum(v for _, v in despesas) * 12, sum(l['final'] for l in linhas))
+        self.assertEqual(relatorio_pdf._componentes_conservacao(linhas, {}), [])
+        self.assertEqual(relatorio_pdf._componentes_administrativas(linhas), ['Correio'])
+
+    def test_contas_homonimas_sao_somadas_sem_descartar_pagamentos_iguais(self):
+        linhas = [
+            {'grupo': 'Contratos', 'classe': 'Contrato de Assinatura de Internet', 'final': 1200},
+            {'grupo': 'Contratos', 'classe': 'Contrato de Assinatura de Internet', 'final': 1200},
+        ]
+        despesas = relatorio_pdf._consolidar_despesas_relatorio(linhas, {'subtotal': 2400})
+        self.assertEqual(despesas, [('Contrato de Assinatura de Internet', 200)])
+
+    def test_prefixo_de_contrato_ambiguo_nao_escolhe_servico_arbitrariamente(self):
+        linhas = [{'grupo': 'Contratos', 'classe': nome, 'final': 120} for nome in (
+            'Contrato de Manutenção do Elevador', 'Contrato de Manutenção da Piscina',
+            'CONTRATO DE MANUTENÇÃO')]
+        despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}))
+        self.assertEqual(despesas['Contrato de manutenção'], 10)
+        self.assertAlmostEqual(sum(despesas.values()), 30)
 
 
 if __name__ == '__main__':

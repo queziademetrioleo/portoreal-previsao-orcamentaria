@@ -95,11 +95,19 @@ ARQUIVOS_ESPERADOS = {
     'alma_fin': 'alma_fin.xlsx',
     'alma_rec': 'alma_rec.pdf',
     'alma_inad': 'alma_inad.pdf',
+    'group_bal': 'group_bal.xlsx',
+    'group_des': 'group_des.xlsx',
+    'group_rec': 'group_rec.xlsx',
 }
 
 
 def _restaurar_arquivos(row, tmpdir):
-    for campo, filename in ARQUIVOS_ESPERADOS.items():
+    config = json.loads(row.get('config_importacao') or '{}')
+    filenames = dict(ARQUIVOS_ESPERADOS)
+    if config.get('origem_sistema') == 'group' and not config.get('sistemas'):
+        from parsers_group import FILES
+        filenames.update(FILES)
+    for campo, filename in filenames.items():
         content = row.get(db.COLUNAS_ARQUIVOS[campo])
         if content:
             with open(os.path.join(tmpdir, filename), 'wb') as output:
@@ -585,6 +593,8 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'modelo_ia': core._ia_modelo(),
         'ia_ativa': core._ia_disponivel(),
         'origem_sistema': R.get('origem_sistema', 'condo21'),
+        'sistemas': R.get('sistemas', ['condo21', 'alma'] if R.get('origem_sistema') == 'misto' else [R.get('origem_sistema', 'condo21')]),
+        'inadimplencia_apurada': R.get('inadimplencia_apurada', R.get('origem_sistema') != 'group'),
         'avisos_importacao': R.get('divergencias', []),
         'cobertura': R.get('cobertura', {}),
         'resumo': {
@@ -672,9 +682,9 @@ async def criar_sessao(
     # versões anteriores da tela não enviam esse campo e sempre trabalharam
     # com fundo de reserva incluído.
     tem_fundo_reserva: bool = Form(True),
-    balanual: UploadFile = File(...),
-    desbai: UploadFile = File(...),
-    rec: UploadFile = File(...),
+    balanual: UploadFile = File(None),
+    desbai: UploadFile = File(None),
+    rec: UploadFile = File(None),
     dessin: UploadFile = File(None),
     inad: UploadFile = File(None),
     origem_sistema: str = Form('condo21'),
@@ -685,14 +695,55 @@ async def criar_sessao(
     alma_rec: UploadFile = File(None),
     alma_inad: UploadFile = File(None),
     sem_inadimplencia_alma: bool = Form(False),
+    sistemas: str | None = Form(None),
+    group_bal: UploadFile = File(None),
+    group_des: UploadFile = File(None),
+    group_rec: UploadFile = File(None),
 ):
     nome_condominio = nome_condominio.strip()
     if not nome_condominio:
         raise HTTPException(400, 'Nome do condomínio é obrigatório.')
 
-    if origem_sistema not in ('condo21', 'misto'):
-        raise HTTPException(400, 'Selecione Condo21 ou Condo21 + Alma.')
-    if origem_sistema == 'misto':
+    selecionados = None
+    if sistemas is not None:
+        try:
+            selecionados = json.loads(sistemas)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(400, 'Seleção de sistemas inválida.') from exc
+        if (not isinstance(selecionados, list) or not selecionados
+                or any(not isinstance(s, str) or s not in ('condo21', 'alma', 'group') for s in selecionados)
+                or len(set(selecionados)) != len(selecionados)):
+            raise HTTPException(400, 'Selecione um ou mais sistemas: Condo21, Alma e Group.')
+        selecionados = [s for s in ('condo21', 'group', 'alma') if s in selecionados]
+        origem_sistema = selecionados[0] if len(selecionados) == 1 else 'misto'
+        necessarios = {}
+        if 'condo21' in selecionados:
+            necessarios.update(balanual=balanual, desbai=desbai, rec=rec)
+        if 'alma' in selecionados:
+            necessarios.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec)
+            if not alma_inad and not sem_inadimplencia_alma:
+                raise HTTPException(400, 'Envie a inadimplência do Alma ou marque que não há inadimplência nessa fonte.')
+            if alma_inad and sem_inadimplencia_alma:
+                raise HTTPException(400, 'Escolha enviar inadimplência Alma ou declarar ausência de inadimplência.')
+        if 'group' in selecionados:
+            necessarios.update(group_bal=group_bal, group_des=group_des, group_rec=group_rec)
+        faltantes = [campo for campo, upload in necessarios.items() if upload is None]
+        if faltantes:
+            raise HTTPException(400, 'Envie os relatórios obrigatórios dos sistemas selecionados: ' + ', '.join(faltantes))
+        if bool(periodo_inicio) != bool(periodo_fim):
+            raise HTTPException(400, 'Informe início e fim do período, ou deixe ambos em branco.')
+        if periodo_inicio:
+            try:
+                from parsers_alma import months_between
+                months_between(periodo_inicio, periodo_fim)
+            except ValueError as exc:
+                raise HTTPException(400, f'Período inválido: {exc}') from exc
+    elif origem_sistema not in ('condo21', 'misto', 'group'):
+        raise HTTPException(400, 'Selecione Condo21, Condo21 + Alma ou Group.')
+    if not selecionados and origem_sistema == 'group' and any((dessin, inad, alma_bal, alma_fin, alma_rec, alma_inad,
+                                         periodo_inicio, periodo_fim, sem_inadimplencia_alma)):
+        raise HTTPException(400, 'Group: envie somente o balancete anual, despesas detalhadas e receitas por unidade em XLSX.')
+    if not selecionados and origem_sistema == 'misto':
         if not all((alma_bal, alma_fin, alma_rec)):
             raise HTTPException(400, 'No uso conjunto, envie o demonstrativo por período, FIN e contas a receber do Alma.')
         if not alma_inad and not sem_inadimplencia_alma:
@@ -717,14 +768,20 @@ async def criar_sessao(
         'dessin': dessin,
         'inad': inad,
     }
-    if origem_sistema == 'misto':
+    if selecionados:
+        uploads = dict(necessarios)
+        if 'condo21' in selecionados:
+            uploads.update(dessin=dessin, inad=inad if len(selecionados) == 1 else None)
+        if 'alma' in selecionados:
+            uploads['alma_inad'] = alma_inad
+    elif origem_sistema == 'misto':
         uploads.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec,
                        alma_inad=alma_inad)
     file_bytes = {}
     for chave, up in uploads.items():
         if up is None:
             continue
-        extension = os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
+        extension = '.xlsx' if origem_sistema == 'group' and not selecionados else os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
         if not up.filename or not up.filename.lower().endswith(extension):
             raise HTTPException(400, f'Arquivo {up.filename}: use o formato {extension} para esse relatório.')
         # Validar tamanho
@@ -737,16 +794,50 @@ async def criar_sessao(
             raise HTTPException(400, f'Arquivo {up.filename} está vazio.')
         file_bytes[chave] = conteudo
 
-    if 'balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes:
+    if not selecionados and ('balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes):
         raise HTTPException(400, 'Arquivos obrigatorios ausentes (balanual, desbai06 e REC)')
+    if origem_sistema == 'group' and not selecionados:
+        # Validar estrutura e condomínio antes de persistir a sessão ou chamar IA.
+        from parsers_group import FILES, load_group
+        def validar_group():
+            with tempfile.TemporaryDirectory() as folder:
+                for campo, filename in FILES.items():
+                    with open(os.path.join(folder, filename), 'wb') as output:
+                        output.write(file_bytes[campo])
+                return load_group(folder, core)
+        try:
+            await asyncio.to_thread(validar_group)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    if selecionados:
+        from parsers_sistemas import load_selected
+        def validar_selecao():
+            with tempfile.TemporaryDirectory() as folder:
+                for campo, conteudo in file_bytes.items():
+                    with open(os.path.join(folder, ARQUIVOS_ESPERADOS[campo]), 'wb') as output:
+                        output.write(conteudo)
+                with open(os.path.join(folder, 'importacao.json'), 'w', encoding='utf-8') as output:
+                    json.dump({'sistemas': selecionados, 'periodo_inicio': periodo_inicio,
+                               'periodo_fim': periodo_fim, 'sem_inadimplencia_alma': sem_inadimplencia_alma}, output)
+                load_selected(folder, core)
+        try:
+            await asyncio.to_thread(validar_selecao)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            logger.warning('Relatório inválido na seleção %s: %s', selecionados, exc)
+            raise HTTPException(400, 'Não foi possível ler os relatórios dos sistemas selecionados. Confira os formatos e envie as exportações originais.') from exc
     db.criar_sessao(sid, nome_condominio, ano_previsao, tem_fundo_reserva)
     try:
         for chave, conteudo in file_bytes.items():
             db.salvar_arquivo(sid, chave, conteudo)
-        db.salvar_config_importacao(sid, json.dumps({
+        config = {
             'origem_sistema': origem_sistema, 'periodo_inicio': periodo_inicio,
             'periodo_fim': periodo_fim, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
-        }))
+        }
+        if selecionados:
+            config['sistemas'] = selecionados
+        db.salvar_config_importacao(sid, json.dumps(config))
     except Exception:
         db.deletar_sessao(sid)
         raise
@@ -828,7 +919,8 @@ async def analisar_sse(sid: str):
             logger.exception('Erro na analise SSE da sessao %s', sid)
             # A excecao tecnica fica no log; o navegador recebe uma mensagem
             # acionavel e nao transforma ``None.get`` em erro da interface.
-            yield f"data: {json.dumps({'error': 'Não foi possível concluir a análise. Confira os arquivos enviados e tente novamente.'}, ensure_ascii=False)}\n\n"
+            mensagem = str(exc) if isinstance(exc, ValueError) else 'Não foi possível concluir a análise. Confira os arquivos enviados e tente novamente.'
+            yield f"data: {json.dumps({'error': mensagem}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gerar(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})

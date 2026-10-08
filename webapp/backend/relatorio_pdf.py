@@ -236,8 +236,98 @@ def _dividir_contrato_por_servico(linha, lancamentos):
     return [(servico, final * valor / total) for servico, valor in por_servico.items()]
 
 
+def _categoria_despesa(linha):
+    """Categoria de apresentação; não altera classificação nem valores da previsão.
+
+    Contratos explícitos têm prioridade sobre grupos genéricos. Quando o grupo
+    vem vazio ou incompleto, classes inequívocas continuam na categoria correta.
+    A tabela e os textos de composição usam esta mesma decisão.
+    """
+    grupo = _norm(linha.get('grupo'))
+    classe = _norm(linha.get('classe'))
+    texto = re.sub(r'[^a-z0-9]+', ' ', classe).strip()
+    if 'contrato' in grupo or re.search(r'\bcontrato\b', classe):
+        return 'contratos'
+    if any(t in grupo or t in classe for t in ('pro-labore', 'prolabore', 'pro labore')) or (
+            'sindico' in grupo and 'reembolso' in grupo):
+        return 'prolabore'
+    if any(t in grupo for t in ('pessoal', 'funcionario', 'folha de pagamento')):
+        return 'pessoal'
+    if re.match(r'^(?:fgts|inss|ferias|salario|adiantamento de salario|13o? salario|decimo terceiro|'
+                r'contribuicao sindical|uniformes|vale alimentacao|vale transporte|outros pessoal|'
+                r'seguro de vida|rescisao|indenizacao trabalhista)\b', texto):
+        return 'pessoal'
+    if _eh_material_limpeza(linha):
+        return 'limpeza'
+    if 'tarifas publicas' in grupo or re.match(
+            r'^(?:luz|agua|telefone|gas|energia eletrica) (?:do condominio|condominial)\b', texto):
+        for token, categoria in (('luz', 'luz'), ('energia', 'luz'), ('agua', 'agua'),
+                                 ('telefone', 'telefone'), ('gas', 'gas')):
+            if token in texto.split():
+                return categoria
+        return 'tarifas_publicas'
+    if 'tarifas bancarias' in grupo or re.search(r'\b(?:tarifas?|taxas?) bancari', classe):
+        return 'bancarias'
+    if 'seguro' in classe and 'vida' not in classe:
+        return 'seguro'
+    if any(t in grupo for t in ('obras', 'benfeitoria')):
+        return 'obras'
+    if any(t in grupo or t in classe for t in ('cartori', 'honorari')):
+        return 'cartoriais'
+    if 'administrativa' in grupo or re.match(
+            r'^(?:xerox|correios?|material de expediente|impressao boleto|13.*taxa de administracao)\b', texto):
+        return 'administrativas'
+    if any(t in grupo for t in ('conservacao', 'manutencao', 'manutencoes', 'diversas')) or re.match(
+            r'^(?:manutencao|manutencoes|outras manutencoes|reparo|reparos|conserto|pequenas reformas|'
+            r'dedetizacao|descupinizacao|recarga de extintores|limpeza (?:caixa|de caixa|de fossa)|'
+            r'material (?:eletrico|hidraulico|de cameras|de portao)|outros materiais(?: de)?)\b', texto):
+        return 'conservacao'
+    return 'outras'
+
+
+def _rotulo_contrato(linha, linhas):
+    """Completa nomes cortados somente quando há uma correspondência inequívoca."""
+    label = ' '.join(str(linha.get('classe') or 'Contrato de serviços').split()).strip()
+    key = _norm(label)
+    candidatos = {
+        str(l.get('classe')).strip() for l in linhas
+        if _categoria_despesa(l) == 'contratos' and _norm(l.get('classe')).startswith(key + ' ')
+    }
+    if len(candidatos) == 1:
+        label = candidatos.pop()
+    texto = _norm(label)
+    servicos = [
+        ('elevador', 'Contrato de Manutenção do Elevador'),
+        ('jardim', 'Contrato de Jardinagem'),
+        ('jardinagem', 'Contrato de Jardinagem'),
+        ('internet', 'Contrato de Assinatura de Internet'),
+        ('administr', 'Contrato Prestação Serviço Administração'),
+        ('piscina', 'Contrato de Manutenção da Piscina'),
+        ('seguranca', 'Contrato de Segurança Eletrônica'),
+        ('interfone', 'Contrato de Manutenção do Interfone'),
+        ('portao', 'Contrato de Manutenção do Portão'),
+    ]
+    for termo, titulo in servicos:
+        if termo in texto:
+            return titulo
+    # Um nome incompleto não vira uma segunda linha solta no fim da tabela.
+    label = re.sub(r'\s+(?:de|do|da)\s*$', '', label, flags=re.I)
+    return label.capitalize() if label.isupper() else label
+
+
+def _ordem_rotulo_contrato(label):
+    texto = _norm(label)
+    for i, termos in enumerate((('elevador',), ('jardim', 'jardinagem'), ('tv', 'cabo'),
+                                ('eta', 'piscina'), ('hidraul', 'eletric'),
+                                ('interfone', 'camera', 'seguranca', 'portao', 'antena'),
+                                ('vigia',), ('contab',), ('internet',), ('administr',))):
+        if any(t in texto for t in termos):
+            return i, texto
+    return 10, texto
+
+
 def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
-    """Replica o agrupamento da seção Despesas do XLSX antigo no PDF."""
+    """Tabela resumida, em ordem fixa, com cada valor de origem usado uma vez."""
     ativas = [
         (idx, linha) for idx, linha in enumerate(linhas or [])
         if abs(float(linha.get('final') or 0)) > 0.005
@@ -246,10 +336,7 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
     despesas = []
 
     def ng(linha):
-        return _norm(linha.get('grupo'))
-
-    def nc(linha):
-        return _norm(linha.get('classe'))
+        return _categoria_despesa(linha)
 
     def somar(label, predicado):
         valor = 0.0
@@ -261,79 +348,39 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
             despesas.append((label, valor))
 
     categorias = [
-        ('Despesas com Pessoal', lambda l: 'pessoal' in ng(l)),
-        ('Luz do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'luz' in nc(l)),
-        ('Água do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'agua' in nc(l)),
-        ('Telefone do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'telefone' in nc(l)),
-        ('Gás do Condomínio', lambda l: 'tarifas publicas' in ng(l) and 'gas' in nc(l)),
-        ('Material de Limpeza', lambda l: 'limpeza' in nc(l)
-         and any(t in nc(l) for t in ('material', 'produto', 'mat.'))),
-        ('Gastos com conservação', lambda l: 'conservacao' in ng(l)
-         or ('diversas' in ng(l) and 'seguro' not in nc(l))),
-        ('Tarifas Bancárias', lambda l: 'tarifas bancarias' in ng(l)
-         or 'tarifas bancarias' in nc(l)),
-        ('Seguro de Incêndio Obrigatório', lambda l: 'seguro' in nc(l) and 'vida' not in nc(l)),
+        ('Despesas com Pessoal', lambda l: ng(l) == 'pessoal'),
+        ('Luz do Condomínio', lambda l: ng(l) == 'luz'),
+        ('Água do Condomínio', lambda l: ng(l) == 'agua'),
+        ('Telefone do Condomínio', lambda l: ng(l) == 'telefone'),
+        ('Gás do Condomínio', lambda l: ng(l) == 'gas'),
+        ('Tarifas Públicas', lambda l: ng(l) == 'tarifas_publicas'),
+        ('Material de Limpeza', lambda l: ng(l) == 'limpeza'),
+        ('Gastos com conservação', lambda l: ng(l) == 'conservacao'),
+        ('Tarifas Bancárias', lambda l: ng(l) == 'bancarias'),
+        ('Seguro de Incêndio Obrigatório', lambda l: ng(l) == 'seguro'),
     ]
     for label, predicado in categorias:
         somar(label, predicado)
 
-    # Mesma seleção e ordem de contratos/pro-labore de _linhas_contratuais,
-    # usada pelo XLSX antes da retirada da etapa de documento intermediário.
-    def ordem_contrato(item):
-        idx, linha = item
-        classe = nc(linha)
-        tokens = set(re.findall(r'[a-z0-9]+', classe))
-        if 'elevador' in classe:
-            prioridade = 0
-        elif 'jardim' in classe:
-            prioridade = 1
-        elif 'tv' in tokens or 'cabo' in tokens:
-            prioridade = 2
-        elif 'eta' in tokens or 'piscina' in tokens:
-            prioridade = 3
-        elif 'hidraul' in classe or 'eletric' in classe:
-            prioridade = 4
-        elif any(k in classe for k in ('interf', 'camera', 'portao', 'antena')):
-            prioridade = 5
-        elif 'vigia' in classe:
-            prioridade = 6
-        elif 'contab' in classe:
-            prioridade = 7
-        elif 'internet' in classe or tokens & {'net', 'oi', 'vivo', 'claro', 'fibra'}:
-            prioridade = 8
-        elif 'administr' in classe:
-            prioridade = 9
-        elif any(k in classe for k in ('sindico', 'pro-labore', 'prolabore', 'ajuda de custo')):
-            prioridade = 10
-        else:
-            prioridade = 11
-        return prioridade, idx
-
-    contratuais = [
-        item for item in ativas
-        if ('contrato' in ng(item[1]) or 'pro-labore' in ng(item[1])
-            or 'prolabore' in ng(item[1])
-            or ('sindico' in ng(item[1]) and 'reembolso' in ng(item[1])))
-    ]
-    labels_contratos = set()
-    for idx, linha in sorted(contratuais, key=ordem_contrato):
-        if idx in consumidos:
+    contratos = {}
+    for idx, linha in ativas:
+        if ng(linha) != 'contratos':
             continue
-        label = str(linha.get('classe') or '').strip()
-        if _norm(label) in labels_contratos:
-            continue
+        label = _rotulo_contrato(linha, [l for _, l in ativas])
         partes = _dividir_contrato_por_servico(linha, lancamentos) or [
             (label, float(linha.get('final') or 0))]
-        despesas.extend(partes)
-        labels_contratos.add(_norm(label))
+        for titulo, valor in partes:
+            key = _norm(titulo)
+            anterior = contratos.get(key, (titulo, 0))
+            contratos[key] = (anterior[0], anterior[1] + valor)
         consumidos.add(idx)
+    despesas.extend(sorted(contratos.values(), key=lambda item: _ordem_rotulo_contrato(item[0])))
+    somar('Pró-labore do Síndico', lambda l: ng(l) == 'prolabore')
 
     categorias_finais = [
-        ('Despesas Administrativas', lambda l: 'administrativa' in ng(l)),
-        ('Despesas Cartoriais e Honorários', lambda l: any(
-            t in ng(l) or t in nc(l) for t in ('cartori', 'honorari'))),
-        ('Despesas com Obras/Benfeitorias', lambda l: any(
-            t in ng(l) for t in ('obras', 'benfeitoria'))),
+        ('Despesas Administrativas', lambda l: ng(l) == 'administrativas'),
+        ('Despesas Cartoriais e Honorários', lambda l: ng(l) == 'cartoriais'),
+        ('Despesas com Obras/Benfeitorias', lambda l: ng(l) == 'obras'),
     ]
     for label, predicado in categorias_finais:
         somar(label, predicado)
@@ -349,18 +396,15 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
         else:
             despesas.append(('Gastos com conservação', provisoes))
 
-    # O XLSX preservava somente as classes que não pertenciam a nenhuma das
-    # categorias conhecidas, inclusive desambiguando rótulos repetidos.
-    labels_existentes = {_norm(label) for label, _ in despesas}
+    # Contas sem correspondência ficam juntas, com detalhe na revisão,
+    # em vez de despejar cada classe bruta no fim do resumo público.
+    outras = 0.0
     for idx, linha in ativas:
         if idx in consumidos:
             continue
-        label = str(linha.get('classe') or linha.get('grupo')
-                    or 'Despesa sem classificação').strip()
-        if _norm(label) in labels_existentes:
-            label = f"{linha.get('grupo') or 'Outros'} - {label}"
-        despesas.append((label, float(linha.get('final') or 0)))
-        labels_existentes.add(_norm(label))
+        outras += float(linha.get('final') or 0)
+    if abs(outras) > 0.005:
+        despesas.append(('Outras despesas', outras))
 
     # Mantém também a salvaguarda de fechamento usada no documento antigo.
     subtotal_alvo = float(resumo.get('subtotal') or 0)
@@ -521,11 +565,7 @@ def _componentes_conservacao(linhas, resumo):
     for linha in linhas or []:
         if abs(float(linha.get('final') or 0)) <= 0.005 or _eh_material_limpeza(linha):
             continue
-        grupo = _norm(linha.get('grupo'))
-        classe = _norm(linha.get('classe'))
-        pertence = ('conservacao' in grupo
-                     or ('diversas' in grupo and 'seguro' not in classe))
-        if pertence:
+        if _categoria_despesa(linha) == 'conservacao':
             _adicionar_sem_repetir(componentes, _nome_na_composicao(linha.get('classe')))
 
     if abs(float(resumo.get('prov_laudo') or 0)) > 0.005:
@@ -544,18 +584,11 @@ def _componentes_administrativas(linhas):
     for linha in linhas or []:
         if abs(float(linha.get('final') or 0)) <= 0.005:
             continue
-        grupo = _norm(linha.get('grupo'))
         classe = _norm(linha.get('classe'))
         if (re.search(r'(?:taxa|tx\.?)\s+(?:de\s+)?administrac', classe)
                 and re.search(r'\b13(?:[º°ªoa])?(?!\d)|decim[oa] terceir[oa]', classe)):
             continue  # Omitir a menção, preservando os valores consolidados.
-        consumida_em_outra_categoria = (
-            _eh_material_limpeza(linha)
-            or 'tarifas bancarias' in grupo or 'tarifas bancarias' in classe
-            or ('seguro' in classe and 'vida' not in classe)
-            or 'contrato' in grupo or 'pro-labore' in grupo or 'prolabore' in grupo
-        )
-        if 'administrativa' in grupo and not consumida_em_outra_categoria:
+        if _categoria_despesa(linha) == 'administrativas':
             _adicionar_sem_repetir(componentes, linha.get('classe'))
     return componentes
 
@@ -640,12 +673,20 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     else:
         consideracoes.append(
             f'Para o cálculo desta previsão, levamos em consideração a média aritmética dos últimos '
-            f'{n_meses_balanco} meses — período disponível, já que o condomínio iniciou a administração '
-            'com a Porto Real recentemente.'
+            f'{n_meses_balanco} meses - período disponível nos relatórios enviados.'
         )
 
     unidades_inad = len(set(i.get('unidade') for i in (estado.get('inadimplencia') or [])
                              if i.get('decisao') == 'abater'))
+    if estado.get('inadimplencia_apurada') is False or estado.get('origem_sistema') == 'group':
+        consideracoes.append(
+            'A inadimplência não foi apurada com os documentos disponíveis. Esta previsão não inclui '
+            'abatimento da receita por débitos; isso não comprova ausência de inadimplência.'
+        )
+    for aviso in estado.get('avisos_importacao') or []:
+        if any(termo in _norm(aviso) for termo in ('nao fechado', 'sem movimentacao', 'receita fixa baseada', 'diferencas entre')):
+            texto = aviso.removeprefix('Group: ')
+            consideracoes.append(texto[:1].upper() + texto[1:])
     if unidades_inad > 0:
         plural = 'da' if unidades_inad == 1 else 'das'
         consideracoes.append(
@@ -734,7 +775,11 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         }[status_quadro],
         'conclusao_texto': (
             f'A previsão usa a média dos últimos {n_meses_balanco} meses, separa eventos pontuais da '
-            'rotina e trata a inadimplência como redução de receita disponível. '
+            'rotina. '
+            + ('A inadimplência não foi apurada. Confirme a cobertura dos meses e a vigência '
+               'da receita antes de adotar os valores desta previsão. '
+               if estado.get('inadimplencia_apurada') is False or estado.get('origem_sistema') == 'group' else
+               'A inadimplência é tratada como redução de receita disponível. ')
             + (
                 f'O resultado mensal é de {_money(resultado_quadro / 12)} — '
                 'positivo, mas abaixo dos R$ 2.000 por mês (R$ 24.000 no ano) considerados margem de '

@@ -350,6 +350,12 @@ export default function TelaRevisao({
         </section>
 
         {erro && <div className="alert-error">{erro}</div>}
+        {!!sessao.avisos_importacao?.length && (
+          <Card padding="md">
+            <h2 className="section-title">Conferência dos relatórios</h2>
+            <ul>{sessao.avisos_importacao.map((aviso, i) => <li key={i}>{aviso}</li>)}</ul>
+          </Card>
+        )}
         {/* KPIs */}
         <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <NumberBlock
@@ -533,7 +539,9 @@ export default function TelaRevisao({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
                   <div>
                     <h2 className="section-title">Inadimplência</h2>
-                    <p className="section-desc">{sessao.origem_sistema === 'misto'
+                    <p className="section-desc">{sessao.inadimplencia_apurada === false || sessao.origem_sistema === 'group'
+                      ? 'A inadimplência não foi apurada com os documentos disponíveis. Confira os avisos de importação.'
+                      : sessao.sistemas?.includes('alma') || sessao.origem_sistema === 'misto'
                       ? 'Somente os dois últimos meses do relatório de inadimplência do Alma. Para cada unidade, entra somente a última taxa condominial vencida; débitos antigos do Condo21 não entram.'
                       : 'Apenas unidades com três ou mais meses consecutivos em atraso. Para cada unidade, entra somente a última taxa condominial vencida.'}</p>
                   </div>
@@ -548,9 +556,11 @@ export default function TelaRevisao({
                 </div>
                 {inad.length === 0 ? (
                   <div className="empty">
-                    <p>✅ Nenhuma inadimplência registrada.</p>
+                    <p>{sessao.inadimplencia_apurada === false || sessao.origem_sistema === 'group' ? 'Inadimplência não apurada.' : '✅ Nenhuma inadimplência registrada.'}</p>
                     <p style={{fontSize:14, color:'var(--text-secondary)', marginTop:4}}>
-                      O condomínio está em dia. Esta aba pode ser ignorada.
+                      {sessao.inadimplencia_apurada === false || sessao.origem_sistema === 'group'
+                        ? 'A ausência desta informação não comprova que o condomínio está em dia. Consulte as limitações dos relatórios enviados.'
+                        : 'O condomínio está em dia. Esta aba pode ser ignorada.'}
                     </p>
                   </div>
                 ) : (

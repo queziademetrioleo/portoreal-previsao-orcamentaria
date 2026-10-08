@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { BASE, criarSessao, mensagemErroApi } from '../api'
 import FileZone from './FileZone'
-import type { Sessao } from '../types'
+import type { Sessao, Sistema } from '../types'
 import Header from './ui/Header'
 import Card from './ui/Card'
 import Button from './ui/Button'
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function TelaUpload({ onCriada, onVoltar }: Props) {
-  const [origemRelatorios, setOrigemRelatorios] = useState<'condo21' | 'misto'>('condo21')
+  const [sistemas, setSistemas] = useState<Sistema[]>(['condo21'])
   const [nome, setNome] = useState('')
   const [ano, setAno] = useState(new Date().getFullYear())
   const [balanual, setBalanual] = useState<File | null>(null)
@@ -22,6 +22,9 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [rec, setRec] = useState<File | null>(null)
   const [dessin, setDessin] = useState<File | null>(null)
   const [inad, setInad] = useState<File | null>(null)
+  const [groupBal, setGroupBal] = useState<File | null>(null)
+  const [groupDes, setGroupDes] = useState<File | null>(null)
+  const [groupRec, setGroupRec] = useState<File | null>(null)
   const [almaBal, setAlmaBal] = useState<File | null>(null)
   const [almaFin, setAlmaFin] = useState<File | null>(null)
   const [almaRec, setAlmaRec] = useState<File | null>(null)
@@ -29,7 +32,14 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [semInadAlma, setSemInadAlma] = useState(false)
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim] = useState('')
-  const misto = origemRelatorios === 'misto'
+  const condo = sistemas.includes('condo21')
+  const alma = sistemas.includes('alma')
+  const group = sistemas.includes('group')
+  const multiplos = sistemas.length > 1
+  const escolherSistema = (sistema: Sistema) => {
+    setSistemas((prev) => prev.includes(sistema) ? prev.filter((s) => s !== sistema) : [...prev, sistema])
+    setErro('')
+  }
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [progresso, setProgresso] = useState({
@@ -62,19 +72,27 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       setErro('Informe um ano válido (2020–2035).')
       return
     }
-    if (!balanual || !desbai || !rec) {
-      setErro('Os arquivos balanual.xls, desbai06.xls e rec02.xls são obrigatórios.')
+    if (!sistemas.length) {
+      setErro('Selecione pelo menos um sistema.')
       return
     }
-    if (misto && (!almaBal || !almaFin || !almaRec)) {
+    if (condo && (!balanual || !desbai || !rec)) {
+      setErro('Envie balanual.xls, desbai06.xls e rec02.xls do Condo21.')
+      return
+    }
+    if (group && (!groupBal || !groupDes || !groupRec)) {
+      setErro('Envie o balancete anual, as despesas detalhadas e as receitas por unidade da Group em XLSX.')
+      return
+    }
+    if (alma && (!almaBal || !almaFin || !almaRec)) {
       setErro('Envie também o demonstrativo por período, FIN e contas a receber do Alma.')
       return
     }
-    if (misto && !almaInad && !semInadAlma) {
+    if (alma && !almaInad && !semInadAlma) {
       setErro('Envie o relatório de inadimplência do Alma ou marque que não há inadimplência.')
       return
     }
-    if (misto && (Boolean(periodoInicio) !== Boolean(periodoFim) || (periodoInicio && periodoInicio > periodoFim))) {
+    if ((alma || multiplos) && (Boolean(periodoInicio) !== Boolean(periodoFim) || (periodoInicio && periodoInicio > periodoFim))) {
       setErro('Informe início e fim do período em ordem, ou deixe ambos em branco.')
       return
     }
@@ -87,16 +105,11 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       const { sessao_id } = await criarSessao({
         nome: nome.trim(),
         ano,
-        balanual,
-        desbai,
-        rec,
-        dessin,
-        inad: misto ? null : inad,
-        origemSistema: origemRelatorios,
-        ...(misto ? {
-          almaBal, almaFin, almaRec, almaInad,
-          semInadAlma, periodoInicio, periodoFim,
-        } : {}),
+        sistemas,
+        ...(condo ? { balanual, desbai, rec, dessin, inad: multiplos ? null : inad } : {}),
+        ...(group ? { groupBal, groupDes, groupRec } : {}),
+        ...(alma ? { almaBal, almaFin, almaRec, almaInad, semInadAlma } : {}),
+        ...((alma || multiplos) ? { periodoInicio, periodoFim } : {}),
       })
       if (!mountedRef.current) return
 
@@ -192,42 +205,48 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
             <p className="section-label">Nova Análise</p>
             <h1 className="page-title">Enviar relatórios</h1>
             <p className="page-subtitle">
-              Selecione a origem e anexe os relatórios do condomínio.
+              Selecione um ou mais sistemas e anexe os relatórios do condomínio.
             </p>
 
             {erro && <div className="alert-error" role="alert">{erro}</div>}
 
             <form onSubmit={handleSubmit}>
               <fieldset className="form-group report-source">
-                <legend className="form-label">Origem dos relatórios</legend>
+                <legend className="form-label">Sistemas dos relatórios</legend>
                 <div className="report-source-options">
-                  <label className={`report-source-option${origemRelatorios === 'condo21' ? ' is-selected' : ''}`}>
+                  <label className={`report-source-option${condo ? ' is-selected' : ''}`}>
                     <input
-                      type="radio"
+                      type="checkbox"
                       name="origem-relatorios"
                       value="condo21"
-                      checked={origemRelatorios === 'condo21'}
-                      onChange={() => setOrigemRelatorios('condo21')}
+                      checked={condo}
+                      onChange={() => escolherSistema('condo21')}
                     />
                     <span>
                       <strong>Condo21</strong>
-                      <small>Padrão atual</small>
+                      <small>Relatórios em XLS</small>
                     </span>
                   </label>
-                  <label className={`report-source-option${misto ? ' is-selected' : ''}`}>
+                  <label className={`report-source-option${alma ? ' is-selected' : ''}`}>
                     <input
-                      type="radio"
+                      type="checkbox"
                       name="origem-relatorios"
-                      value="misto"
-                      checked={misto}
-                      onChange={() => setOrigemRelatorios('misto')}
+                      value="alma"
+                      checked={alma}
+                      onChange={() => escolherSistema('alma')}
                     />
                     <span>
-                      <strong>Condo21 + Alma</strong>
-                      <small>Meses dos dois sistemas</small>
+                      <strong>Alma</strong>
+                      <small>Relatórios em PDF e XLSX</small>
                     </span>
                   </label>
+                  <label className={`report-source-option${group ? ' is-selected' : ''}`}>
+                    <input type="checkbox" name="origem-relatorios" value="group" checked={group}
+                      onChange={() => escolherSistema('group')} />
+                    <span><strong>Group</strong><small>Relatórios em XLSX</small></span>
+                  </label>
                 </div>
+                <p className="form-hint">Marque todos os sistemas usados no período. Cada seleção abre seus próprios campos abaixo.</p>
               </fieldset>
 
               <div className="form-group">
@@ -253,7 +272,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                 />
               </div>
 
-              <div className="form-group">
+              {condo && <div className="form-group">
                 <h2 className="form-label">Relatórios do Condo21</h2>
                 <div className="file-grid">
                   <FileZone
@@ -279,21 +298,30 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     file={dessin}
                     setFile={setDessin}
                   />
-                  {!misto && <FileZone
+                  {!multiplos && <FileZone
                     label="inad01.xls (opcional)"
                     file={inad}
                     setFile={setInad}
                   />}
                 </div>
                 <p className="form-hint">
-                  {misto
-                    ? 'Envie os relatórios do período que ficou no Condo21. A inadimplência será consultada somente no Alma.'
+                  {multiplos
+                    ? 'Envie os relatórios do período que ficou no Condo21. Os meses não podem sobrepor os dos outros sistemas.'
                     : '* balanual.xls, desbai06.xls e rec02.xls são obrigatórios. inad01.xls é opcional — só anexe se houver inadimplência.'}
                 </p>
-              </div>
+              </div>}
 
-              {misto && (
-                <>
+              {group && <div className="form-group">
+                <h2 className="form-label">Relatórios da Group</h2>
+                <div className="file-grid">
+                  <FileZone label="Balancete anual (XLSX)" file={groupBal} setFile={setGroupBal} accept=".xlsx" required />
+                  <FileZone label="Despesas detalhadas por classe de conta (XLSX)" file={groupDes} setFile={setGroupDes} accept=".xlsx" required />
+                  <FileZone label="Receitas detalhadas por unidade/cliente (XLSX)" file={groupRec} setFile={setGroupRec} accept=".xlsx" required />
+                </div>
+                <p className="form-hint">Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.</p>
+              </div>}
+
+              {alma && (
                   <div className="form-group">
                     <h2 className="form-label">Relatórios do Alma</h2>
                     <div className="file-grid">
@@ -311,6 +339,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     </label>
                     <p className="form-hint">Consideramos apenas os dois últimos meses da referência do relatório de inadimplência do Alma.</p>
                   </div>
+              )}
+              {(multiplos || alma) && (
                   <div className="form-group">
                     <h2 className="form-label">Período das receitas e despesas</h2>
                     <div className="file-grid">
@@ -321,9 +351,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                         <input className="form-input" type="month" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} />
                       </label>
                     </div>
-                    <p className="form-hint">Deixe em branco para usar o período completo dos documentos. Os pagamentos do FIN são selecionados pela Data Pagto.</p>
+                    <p className="form-hint">Deixe em branco para usar o período completo dos documentos. Cada mês deve pertencer a um único sistema, sem lacunas ou sobreposição.</p>
                   </div>
-                </>
               )}
 
               <Button

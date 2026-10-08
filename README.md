@@ -24,9 +24,59 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 
 ---
 
+## Seleção de sistemas
+
+Na tela **Nova previsão**, marque **Condo21**, **Alma** e/ou **Group**. Pode
+selecionar somente um ou combinar os sistemas usados pelo condomínio. Cada
+seleção abre seus próprios campos de upload; arquivos de sistemas desmarcados
+não são enviados. As seleções e os arquivos ficam preservados para reanálise.
+
+Na combinação, cada mês deve ser coberto por uma única fonte. Sobreposições e
+lacunas são recusadas antes de salvar a sessão. A receita fixa usa o relatório
+de competência mais recente entre as fontes. O período pode ser escolhido na
+tela; meses futuros zerados de Condo21/Group não completam cobertura no uso
+conjunto. O leitor de cada plataforma extrai os valores antes da classificação
+por IA, preservando a estrutura das contas.
+
+No Alma isolado, o PDF de inadimplência pode agregar taxa, fundo e consumo. Se
+não houver uma fonte legível de taxa por unidade, o sistema informa que o
+abatimento não foi apurado, sem presumir inexistência de débitos. No uso
+conjunto, as receitas por unidade Condo21/Group fornecem a taxa para a regra dos
+dois últimos meses Alma. O fluxo Condo21 + Alma existente mantém suas regras.
+
+## Upload Group
+
+Na tela **Nova previsão**, selecione **Group** e envie os três XLSX exportados:
+
+- **Balancete anual**: 12 meses consecutivos, com classes de conta e totais.
+- **Despesas detalhadas por classe de conta**: pagamentos do mesmo período.
+- **Receitas detalhadas por unidade/cliente**: competência mais recente disponível.
+
+O leitor identifica as colunas pelos cabeçalhos e concilia pagamentos com o
+balancete por código de conta e mês de pagamento. Usa o valor cobrado da taxa
+condominial e do fundo de reserva, excluindo cobranças marcadas como
+**Excluída**. O resumo do relatório pode incluir essas cobranças; por isso a
+projeção lê os lançamentos das unidades e não soma novamente os subtotais.
+Receitas de fornecedores não entram na cobrança fixa das unidades.
+
+Meses não fechados, meses zerados, diferenças na conciliação e competência da
+receita anterior ao fim do balancete aparecem na revisão. As limitações de
+cobertura e da referência da receita também aparecem nas considerações do PDF.
+Sem relatório específico de inadimplência Group, **não há abatimento calculado
+por débitos**, nem declaração de ausência de inadimplência.
+
+As sessões preservam os XLSX e a origem Group para reanálise, com colunas
+dedicadas no banco adicionadas automaticamente pelo bootstrap. Sessões Group
+criadas pelo formulário anterior continuam compatíveis. Os formatos exclusivos Condo21 e misto
+Condo21 + Alma continuam com seus leitores próprios.
+
+Testes locais com os exemplos privados: defina `GROUP_SAMPLE_DIR` para a pasta
+dos arquivos Berlin e execute os testes `test_group_import` e `test_group_upload`
+com a raiz e `webapp/backend` em `PYTHONPATH`. Os XLSX privados não são versionados.
+
 ## Upload conjunto Condo21 + Alma
 
-Na tela **Nova previsão**, selecione **Condo21 + Alma**. Além dos relatórios Condo21, envie:
+Na tela **Nova previsão**, marque **Condo21** e **Alma**. Além dos relatórios Condo21, envie:
 
 - Demonstrativo por período agrupado por contas do Alma: PDF.
 - FIN00601 de despesas detalhadas: XLSX.
@@ -42,6 +92,13 @@ O plano de contas fornecido pela Porto Real é contexto interno do sistema, vers
 Os arquivos de ambas as fontes e a seleção do período ficam salvos na sessão, inclusive para reanálise. O banco recebe as colunas necessárias automaticamente na inicialização do backend. O fluxo exclusivo Condo21 mantém sua regra de inadimplência existente.
 
 ## 🧠 Regras de cálculo (R1–R8)
+
+A seção **Despesas** do PDF usa categorias consolidadas em ordem fixa. Classes
+de pessoal e manutenção não aparecem soltas no fim da tabela; contratos
+identificados pelo nome ficam juntos, mesmo que o grupo original seja genérico.
+Nomes cortados só são completados quando há correspondência inequívoca; valores
+homônimos são somados sem excluir pagamentos apenas porque têm o mesmo valor.
+Tabela, gráfico e textos de composição usam a mesma classificação de apresentação.
 
 Regra permanente de apresentação: nunca citar a **13ª taxa de administração** no texto de composição de **Despesas Administrativas** do relatório entregue ao condomínio. Seu valor permanece no cálculo e no total da categoria; a omissão é somente da menção textual.
 

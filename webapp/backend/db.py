@@ -16,6 +16,8 @@ COLUNAS_ARQUIVOS = {
     'rec': 'arquivo_rec', 'xlsx': 'arquivo_xlsx',
     'alma_bal': 'arquivo_alma_bal', 'alma_fin': 'arquivo_alma_fin',
     'alma_rec': 'arquivo_alma_rec', 'alma_inad': 'arquivo_alma_inad',
+    'group_bal': 'arquivo_group_bal', 'group_des': 'arquivo_group_des',
+    'group_rec': 'arquivo_group_rec',
 }
 
 
@@ -109,7 +111,7 @@ def _init_schema():
         # tela de upload. NULL = sessao criada antes desse campo existir.
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'tem_fundo_reserva', 'TINYINT(1) DEFAULT NULL')
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'config_importacao', 'LONGTEXT')
-        for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad'):
+        for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad', 'group_bal', 'group_des', 'group_rec'):
             _adicionar_coluna_se_ausente(cursor, 'sessoes', COLUNAS_ARQUIVOS[campo], 'LONGBLOB')
         conn.commit()
         cursor.close()
