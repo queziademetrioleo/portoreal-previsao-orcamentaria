@@ -26,6 +26,13 @@ Relatórios .xls  →  IA lê e entende  →  Aplica regras R1–R8  →  Humano
 
 ## Seleção de sistemas
 
+Na combinação Group + Alma, a mudança é detectada pelo primeiro mês com
+movimentação no Alma. A Group fornece os meses anteriores; o Alma fornece os
+meses a partir da mudança. Meses iniciais zerados no Alma não são cobertura.
+É possível informar o mês da mudança para substituir a detecção. Movimentos
+fora do período atribuído são excluídos da consolidação e seus totais são
+mostrados na conferência. As fontes e os arquivos originais são preservados.
+
 Na tela **Nova previsão**, marque **Condo21**, **Alma** e/ou **Group**. Pode
 selecionar somente um ou combinar os sistemas usados pelo condomínio. Cada
 seleção abre seus próprios campos de upload; arquivos de sistemas desmarcados

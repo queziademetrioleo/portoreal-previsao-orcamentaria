@@ -19,16 +19,37 @@ def canonical(value):
     return ALIASES.get(alma.norm(value), alma.norm(value))
 
 
-def consolidate(sources, start=None, end=None):
+def migration_start(sources, requested=None):
+    if requested or not {'group', 'alma'} <= sources.keys():
+        return requested
+    balance = sources['alma']['bal']
+    active = [alma.month_key(label) for index, label in enumerate(balance['meses']) if any(
+        abs(row['monthly'][index]) > 0.005
+        for kind in ('receitas', 'despesas') for row in balance[kind])]
+    return min(active) if active else None
+
+
+def consolidate(sources, start=None, end=None, alma_start=None):
     """Meses zerados de legados não são cobertura no uso de várias fontes."""
     coverage = {}
     indices = {}
+    alma_start = migration_start(sources, alma_start)
+    if alma_start:
+        alma.months_between(alma_start, alma_start)
+        if not {'group', 'alma'} <= sources.keys():
+            raise ValueError('O mês de mudança para Alma exige Group e Alma selecionados.')
     for name, data in sources.items():
         bal = data['bal']
         keys = [alma.month_key(m) for m in bal['meses']]
         indices[name] = keys
+        active = [key for index, key in enumerate(keys) if any(
+            abs(row['monthly'][index]) > 0.005
+            for kind in ('receitas', 'despesas') for row in bal[kind])]
         for index, key in enumerate(keys):
-            covered = name == 'alma' or len(sources) == 1 or any(
+            if alma_start and ((name == 'group' and key >= alma_start) or (name == 'alma' and key < alma_start)):
+                continue
+            covered = len(sources) == 1 or (name == 'alma' and (
+                key >= alma_start if alma_start else bool(active) and active[0] <= key <= active[-1])) or any(
                 abs(row['monthly'][index]) > 0.005
                 for kind in ('receitas', 'despesas') for row in bal[kind])
             if covered:
@@ -44,7 +65,7 @@ def consolidate(sources, start=None, end=None):
                for key in keys if len(coverage[key]) > 1]
     if overlap:
         raise ValueError('Há meses com movimentação em mais de um sistema: ' +
-                         ', '.join(overlap) + '. Envie exportações sem sobreposição.')
+                         ', '.join(overlap) + '. Informe o mês de mudança para Alma ou envie exportações sem sobreposição.')
     result = {'meses': [alma.month_label(key) for key in keys], 'n_meses': len(keys),
               'saldo_inicial': None, 'saldo_final': None}
     names = {}
@@ -110,8 +131,21 @@ def load_selected(folder, core):
                     inad=core.parse_inad(str(root / 'inad01.xls')) if (root / 'inad01.xls').exists() else None,
                     origem_sistema='condo21', sistemas=systems, divergencias=[], cobertura={}, inadimplencia_apurada=True)
         return data
-    bal, keys, coverage = consolidate(sources, config.get('periodo_inicio'), config.get('periodo_fim'))
+    alma_start = migration_start(sources, config.get('alma_inicio'))
+    bal, keys, coverage = consolidate(sources, config.get('periodo_inicio'), config.get('periodo_fim'), alma_start)
     warnings = []
+    if alma_start:
+        method = 'informada' if config.get('alma_inicio') else 'detectada pelo primeiro mês com movimentação no Alma'
+        warnings.append(f'Divisão {method}: Group antes de {alma.month_label(alma_start)} e Alma a partir desse mês.')
+        for source in ('group', 'alma'):
+            balance = sources[source]['bal']
+            excluded = [i for i, label in enumerate(balance['meses'])
+                        if (source == 'group' and alma.month_key(label) >= alma_start)
+                        or (source == 'alma' and alma.month_key(label) < alma_start)]
+            amounts = {kind: round(sum(row['monthly'][i] for row in balance[kind] for i in excluded), 2)
+                       for kind in ('receitas', 'despesas')}
+            if any(abs(value) > 0.005 for value in amounts.values()):
+                warnings.append(f'{source.title()}: movimentos fora do período atribuído não entram na previsão: receitas R$ {amounts["receitas"]:.2f}; despesas R$ {amounts["despesas"]:.2f}. Confira a divisão entre os sistemas.')
     for data in sources.values():
         # Cobertura e receita precisam refletir a consolidação, não o Group isolado.
         warnings.extend(w for w in data.get('divergencias', []) if not any(
@@ -127,6 +161,8 @@ def load_selected(folder, core):
             if key not in keys:
                 continue
             if coverage[key] != source:
+                if alma_start and ((source == 'group' and key >= alma_start) or (source == 'alma' and key < alma_start)):
+                    continue
                 if abs(item['valor_pago']) > 0.005:
                     raise ValueError(f'Pagamento {source} em {alma.month_label(key)} sem cobertura dessa fonte no balancete.')
                 continue

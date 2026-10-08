@@ -40,12 +40,44 @@ class SystemsConsolidationTest(unittest.TestCase):
 
     def test_overlap_gaps_and_requested_period_are_checked(self):
         with self.assertRaisesRegex(ValueError, 'mais de um sistema'):
-            selected.consolidate({'group': source('2026-01'), 'alma': source('2026-01')})
+            selected.consolidate({'condo21': source('2026-01'), 'alma': source('2026-01')})
         with self.assertRaisesRegex(ValueError, 'Faltam dados'):
             selected.consolidate({'group': source('2026-01'), 'alma': source('2026-03')})
         balance, _, coverage = selected.consolidate({'group': source('2026-01'), 'alma': source('2026-02')}, '2026-02', '2026-02')
         self.assertEqual(balance['total_despesas'], 60)
         self.assertEqual(coverage, {'2026-02': 'alma'})
+
+    def test_group_alma_migration_ignores_leading_zero_months_and_legacy_tail(self):
+        legacy, current = source('2026-01'), source('2026-01')
+        for data, values in ((legacy, [60, 10, 5]), (current, [0, 70, 80])):
+            data['bal']['meses'] = ['01/2026', '02/2026', '03/2026']
+            data['bal']['receitas'][0]['monthly'] = values
+            data['bal']['despesas'][0]['monthly'] = values
+        result, _, coverage = selected.consolidate({'group': legacy, 'alma': current})
+        self.assertEqual(coverage, {'2026-01': 'group', '2026-02': 'alma', '2026-03': 'alma'})
+        self.assertEqual(result['total_despesas'], 210)
+        result, _, coverage = selected.consolidate({'group': legacy, 'alma': current}, alma_start='2026-03')
+        self.assertEqual(result['total_despesas'], 150)
+        self.assertEqual(coverage['2026-02'], 'group')
+
+    @unittest.skipUnless(Path('tmp/berlin-db-audit/balanual.xls').exists(), 'Documentos privados de Berlin indisponíveis')
+    def test_real_berlin_group_alma_migration_preserves_selected_totals(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as folder:
+            mapping = {'balanual.xls': 'group_bal.xlsx', 'desbai06.xls': 'group_des.xlsx',
+                       'rec02.xls': 'group_rec.xlsx', 'alma_bal.pdf': 'alma_bal.pdf',
+                       'alma_fin.xlsx': 'alma_fin.xlsx', 'alma_rec.pdf': 'alma_rec.pdf'}
+            for name, target in mapping.items():
+                shutil.copyfile(Path('tmp/berlin-db-audit') / name, Path(folder) / target)
+            (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': ['group', 'alma'],
+                'sem_inadimplencia_alma': True, 'periodo_inicio': '2025-10', 'periodo_fim': '2026-09'}))
+            result = selected.load_selected(folder, main.core)
+        self.assertEqual(list(result['cobertura'].values()), ['group'] * 9 + ['alma'] * 3)
+        self.assertAlmostEqual(result['bal']['total_despesas'], 399264.11, places=2)
+        self.assertFalse(any(row.get('somente_detalhe') for row in result['bal']['despesas']))
+        self.assertTrue(all(i['sistema'] == ('alma' if i['data'].month in (7, 8, 9) else 'group')
+                            for i in result['des']['itens']))
+        self.assertTrue(any('3659.00' in warning for warning in result['divergencias']))
 
     def test_group_and_alma_and_alma_alone_use_latest_receipt_and_keep_details(self):
         for systems in (['alma'], ['group', 'alma'], ['condo21', 'group', 'alma'], ['condo21', 'group']):

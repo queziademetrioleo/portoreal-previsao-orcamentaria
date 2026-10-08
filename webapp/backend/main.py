@@ -690,6 +690,7 @@ async def criar_sessao(
     origem_sistema: str = Form('condo21'),
     periodo_inicio: str | None = Form(None),
     periodo_fim: str | None = Form(None),
+    alma_inicio: str | None = Form(None),
     alma_bal: UploadFile = File(None),
     alma_fin: UploadFile = File(None),
     alma_rec: UploadFile = File(None),
@@ -759,6 +760,15 @@ async def criar_sessao(
             except ValueError as exc:
                 raise HTTPException(400, f'Período inválido: {exc}')
 
+    if alma_inicio:
+        if not selecionados or not {'group', 'alma'} <= set(selecionados):
+            raise HTTPException(400, 'O mês de mudança para Alma exige Group e Alma selecionados.')
+        try:
+            from parsers_alma import months_between
+            months_between(alma_inicio, alma_inicio)
+        except ValueError as exc:
+            raise HTTPException(400, 'Mês de mudança para Alma inválido.') from exc
+
     sid = uuid.uuid4().hex[:12]
 
     uploads = {
@@ -824,7 +834,7 @@ async def criar_sessao(
                         output.write(conteudo)
                 with open(os.path.join(folder, 'importacao.json'), 'w', encoding='utf-8') as output:
                     json.dump({'sistemas': selecionados, 'periodo_inicio': periodo_inicio,
-                               'periodo_fim': periodo_fim, 'sem_inadimplencia_alma': sem_inadimplencia_alma}, output)
+                               'periodo_fim': periodo_fim, 'alma_inicio': alma_inicio, 'sem_inadimplencia_alma': sem_inadimplencia_alma}, output)
                 load_selected(folder, core)
         try:
             await asyncio.to_thread(validar_selecao)
@@ -839,7 +849,7 @@ async def criar_sessao(
             db.salvar_arquivo(sid, chave, conteudo)
         config = {
             'origem_sistema': origem_sistema, 'periodo_inicio': periodo_inicio,
-            'periodo_fim': periodo_fim, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
+            'periodo_fim': periodo_fim, 'alma_inicio': alma_inicio, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
         }
         if selecionados:
             config['sistemas'] = selecionados

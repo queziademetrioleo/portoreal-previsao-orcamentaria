@@ -85,6 +85,7 @@ export async function criarSessao(form: {
   almaRec?: File | null
   almaInad?: File | null
   semInadAlma?: boolean
+  almaInicio?: string
   periodoInicio?: string
   periodoFim?: string
 }): Promise<Sessao> {
@@ -110,6 +111,7 @@ export async function criarSessao(form: {
       }
       fd.append('sem_inadimplencia_alma', String(form.semInadAlma ?? false))
     }
+    if (form.almaInicio) fd.append('alma_inicio', form.almaInicio)
     if (form.periodoInicio) fd.append('periodo_inicio', form.periodoInicio)
     if (form.periodoFim) fd.append('periodo_fim', form.periodoFim)
     const response = await fetch(`${BASE}/api/sessao`, { method: 'POST', body: fd })
@@ -130,6 +132,7 @@ export async function criarSessao(form: {
       if (arquivo) fd.append(campo, arquivo)
     }
     fd.append('sem_inadimplencia_alma', String(form.semInadAlma ?? false))
+    if (form.almaInicio) fd.append('alma_inicio', form.almaInicio)
     if (form.periodoInicio) fd.append('periodo_inicio', form.periodoInicio)
     if (form.periodoFim) fd.append('periodo_fim', form.periodoFim)
   }
