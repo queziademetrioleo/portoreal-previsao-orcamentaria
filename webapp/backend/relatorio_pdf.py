@@ -686,7 +686,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     for aviso in estado.get('avisos_importacao') or []:
         if any(termo in _norm(aviso) for termo in ('nao fechado', 'sem movimentacao', 'receita fixa baseada', 'diferencas entre')):
             texto = aviso.removeprefix('Group: ')
-            consideracoes.append(texto[:1].upper() + texto[1:])
+            consideracoes.append(texto)
     if unidades_inad > 0:
         plural = 'da' if unidades_inad == 1 else 'das'
         consideracoes.append(
@@ -731,7 +731,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         'extintores, dedetização das áreas comuns e compra de uniforme para o(s) empregado(s), '
         'conforme determina a Convenção Coletiva de Trabalho da Categoria.'
     )
-    consideracoes = [f'{i + 1}) {texto}' for i, texto in enumerate(consideracoes)]
+    consideracoes = [f'{i + 1}) {texto.lower()}' for i, texto in enumerate(consideracoes)]
 
     subtotal_mensal = sum(v for _, v in despesas)
     aumento_mensal = subtotal_mensal * inflacao if inflacao > 0 else 0

@@ -130,7 +130,7 @@ def _adicionar_consideracoes(ws, ano, R=None):
 
     nota_row = start + 2
     ws.cell(nota_row, 1).value = (
-        '1) Para o cálculo desta previsão, levamos em consideração a média '
+        '1) para o cálculo desta previsão, levamos em consideração a média '
         'aritmética dos últimos 12 meses'
     )
     ws.cell(nota_row, 1).font = Font(bold=True, size=9)
@@ -147,7 +147,7 @@ def _adicionar_consideracoes(ws, ano, R=None):
     if cenario and cenario.get('status_resultado') == 'superavit_insuficiente':
         aviso_row = nota_row + 1
         valor_fmt = f"{cenario['resultado']:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.')
-        ws.cell(aviso_row, 1).value = MSG_SUPERAVIT_INSUFICIENTE.format(valor=f"R$ {valor_fmt}")
+        ws.cell(aviso_row, 1).value = MSG_SUPERAVIT_INSUFICIENTE.format(valor=f"R$ {valor_fmt}").lower()
         ws.cell(aviso_row, 1).font = Font(bold=True, size=9, color='7A5B00')
         ws.cell(aviso_row, 1).fill = PatternFill('solid', fgColor='FFF3CD')
         try:
