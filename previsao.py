@@ -929,6 +929,42 @@ ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
 INFLACAO = 0.10
 
 
+def _projecao_ultima_taxa(linha, itens, parcelas_seguro=None):
+    """Regras específicas: pagamento mais recente da mesma conta, por data."""
+    nc = _norm(linha['classe'])
+    seguro = 'seguro' in nc and any(k in nc for k in ('obrigat', 'condomin', 'incendio'))
+    administracao = 'administrac' in nc and '13' not in nc and ('contrato' in nc or 'taxa' in nc)
+    if not (seguro or administracao):
+        return None
+    def mesma_conta(item):
+        ci = _norm(item.get('classe'))
+        if seguro:
+            return 'seguro' in ci and any(k in ci for k in ('obrigat', 'condomin', 'incendio'))
+        return ci == nc and _norm(item.get('grupo')) == _norm(linha.get('grupo'))
+    pagos = [i for i in itens if mesma_conta(i) and float(i.get('valor_pago') or 0) > 0]
+    if not pagos:
+        return None
+    ultimo = max(pagos, key=lambda i: str(i.get('data') or ''))
+    n = 12
+    if seguro:
+        # Na migração, o mesmo seguro aparece com nomes diferentes. A conta
+        # do pagamento vigente concentra a projeção; o legado não soma outra apólice.
+        if (_norm(ultimo.get('classe')) != nc
+                or _norm(ultimo.get('grupo')) != _norm(linha.get('grupo'))):
+            return 0.0, 'Seguro projetado na conta do pagamento mais recente'
+
+        texto = str(ultimo.get('parcela') or '') + ' ' + str(ultimo.get('descricao') or '')
+        match = re.search(r'(?<![\d/])(\d{1,2})\s*/\s*(\d{1,2})(?![\d/])', texto)
+        if parcelas_seguro is not None:
+            n = int(parcelas_seguro)
+        elif match and 1 <= int(match[1]) <= int(match[2]) <= 60:
+            n = int(match[2])
+        else:
+            return None
+    valor = float(ultimo['valor_pago'])
+    return round(valor * n, 2), f'Última parcela paga R$ {valor:.2f} × {n}'
+
+
 def _eh_fundo_reserva(classe):
     nc = _norm(classe)
     return 'fundo' in nc and 'reserva' in nc
@@ -1166,6 +1202,12 @@ def receitas_ordinarias(bal, rec_doc):
     devolve [] e o relatorio usa a receita total numa linha so."""
     if not rec_doc:
         return []
+    if rec_doc.get('sistema') == 'alma':
+        # A composição inteira do documento atual prevalece, inclusive ajustes.
+        return [{'classe': ('Taxas de Condomínio' if _norm(classe) == 'taxa de condominio' else classe),
+                 'mensal': round(float(valores['lancado']), 2)}
+                for classe, valores in rec_doc['por_classe'].items()
+                if not ('fundo' in _norm(classe) and 'reserva' in _norm(classe))]
     linhas = [{'classe': 'Taxas de Condomínio',
                'mensal': round(float(rec_doc.get('tx_condominio_mensal') or 0), 2)}]
     for l in (bal or {}).get('receitas') or []:
@@ -1472,12 +1514,20 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         utilidades_anual = round(sum(
             float(l.get('total') or 0) for l in bal.get('receitas', [])
             if _eh_utilidade_repasse(l.get('classe'))), 2)
-        receita_anual = round(rec_doc['fixo_anual'] + utilidades_anual, 2)
+        if rec_doc.get('sistema') == 'alma':
+            # José: sempre o total lançado do PDF atual, sem adicionar o legado.
+            utilidades_anual = 0
+            receita_anual = round(rec_doc['total_lancado_mes'] * 12, 2)
+        else:
+            receita_anual = round(rec_doc['fixo_anual'] + utilidades_anual, 2)
         fundo_reserva_anual = rec_doc['fundo_reserva_anual']
-        logger.info('REC: %s, mes %s | fixo (Tx.Condominio+Fundo) R$ %.2f + '
-                    'utilidades (media balanual) R$ %.2f = receita anual R$ %.2f',
-                    rec_doc.get('nome_condominio'), rec_doc.get('mes_ref'),
-                    rec_doc['fixo_anual'], utilidades_anual, receita_anual)
+        if rec_doc.get('sistema') == 'alma':
+            logger.info('Alma: total lançado do documento %s R$ %.2f × 12 = R$ %.2f',
+                        rec_doc.get('mes_ref'), rec_doc['total_lancado_mes'], receita_anual)
+        else:
+            logger.info('REC: %s, mês %s | fixo R$ %.2f + utilidades R$ %.2f = R$ %.2f',
+                        rec_doc.get('nome_condominio'), rec_doc.get('mes_ref'),
+                        rec_doc['fixo_anual'], utilidades_anual, receita_anual)
     else:
         receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(bal)
         logger.warning('REC nao encontrado — usando receita do balanual (fallback): R$ %.2f',
@@ -1625,6 +1675,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         ded = 0.0
         regra = ''
         final = base
+        ultima_taxa = _projecao_ultima_taxa(l, des['itens'])
         # R1 obras
         if 'obras' in ng or 'benfeitoria' in ng:
             desconsider += base
@@ -1635,6 +1686,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
         elif any(k in nc for k in SEMPRE_RECORRENTE):
             regra = 'Recorrente obrigatória: Recarga de Extintores mantida integral'
+        elif ultima_taxa is not None:
+            final, regra = ultima_taxa
+            ded = base - final
         # R4 diversas (exceto seguro e manutenções)
         elif 'diversas' in ng and 'seguro' not in nc:
             # Itens de manutenção/reparo no grupo Diversas NÃO são "diversas" —
@@ -1842,7 +1896,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'rec': rec_doc, 'receita_anual': receita_anual,
             'fundo_reserva_anual': fundo_reserva_anual,
             'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
-                                  receitas_nao_ordinarias(bal),
+                                  [] if (rec_doc or {}).get('sistema') == 'alma' else receitas_nao_ordinarias(bal),
                                   receitas_ordinarias(bal, rec_doc)),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
@@ -1890,6 +1944,7 @@ def recalcular(R, inflacao_pct=None):
         ng, nc = _norm(g), _norm(c)
         base = l['total']
         ded, regra, final = 0.0, '', base
+        ultima_taxa = _projecao_ultima_taxa(l, R['des']['itens'], R.get('parcelas_seguro'))
         if 'obras' in ng or 'benfeitoria' in ng:
             # R1: capital, sempre fora — mesmo que a revisão tenha marcado
             # "manter" (feedback José Henrique 09/2026: "despesas com
@@ -1902,6 +1957,9 @@ def recalcular(R, inflacao_pct=None):
             regra = 'Pontual: Sistema de Combate a Incêndio fora da previsão'
         elif any(k in nc for k in SEMPRE_RECORRENTE):
             regra = 'Recorrente obrigatória: Recarga de Extintores mantida integral'
+        elif ultima_taxa is not None:
+            final, regra = ultima_taxa
+            ded = base - final
         elif 'diversas' in ng and 'seguro' not in nc:
             # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
             # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
@@ -1976,6 +2034,10 @@ def recalcular(R, inflacao_pct=None):
     # afetam despesas, entao reaproveitamos o mesmo valor de receita aqui.
     receita_anual = R.get('receita_anual')
     fundo_reserva_anual = R.get('fundo_reserva_anual')
+    if (R.get('rec') or {}).get('sistema') == 'alma':
+        receita_anual = round(R['rec']['total_lancado_mes'] * 12, 2)
+        fundo_reserva_anual = R['rec']['fundo_reserva_anual']
+        R.update(receita_anual=receita_anual, fundo_reserva_anual=fundo_reserva_anual)
     if receita_anual is None:
         receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(R.get('bal'))
 
@@ -1985,7 +2047,7 @@ def recalcular(R, inflacao_pct=None):
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,
               'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
-                                            receitas_nao_ordinarias(bal),
+                                            [] if (R.get('rec') or {}).get('sistema') == 'alma' else receitas_nao_ordinarias(bal),
                                             receitas_ordinarias(bal, R.get('rec')))})
     return R
 

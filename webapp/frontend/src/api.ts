@@ -58,6 +58,8 @@ export interface DecisaoEditavel {
 }
 
 export interface PayloadDecisoes {
+  parcelas_seguro?: number | null
+  itens_manuais?: import('./types').ItemManual[]
   extraordinarias: Record<string, DecisaoEditavel>
   revisar: Record<string, DecisaoEditavel>
   inadimplencia: Record<string, DecisaoEditavel>
@@ -157,7 +159,7 @@ export async function gerarRelatorioPdf(
 export async function previewDocumento(
   sid: string,
   decisoes: PayloadDecisoes,
-): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number; inflacao?: number }> {
+): Promise<{ subtotal: number; total_previsto: number; impacto_receita_mensal: number; inflacao?: number; cenarios?: import('./types').Cenarios }> {
   const r = await fetch(`${BASE}/api/sessao/${sid}/preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

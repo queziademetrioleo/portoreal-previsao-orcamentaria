@@ -1,3 +1,4 @@
+import ItensManuais from './ItensManuais'
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
@@ -193,6 +194,10 @@ export default function TelaRevisao({
   onVoltar: () => void
 }) {
   const {
+    parcelasSeguro,
+    setParcelasSeguro,
+    itensManuais,
+    salvarItensManuais,
     extra,
     setExtra,
     revisar,
@@ -219,7 +224,7 @@ export default function TelaRevisao({
   const [modalGerarAberto, setModalGerarAberto] = useState(false)
 
   // Cenários com/sem fundo de reserva
-  const cenarios = sessao.resumo.cenarios
+  const cenarios = vivo.cenarios ?? sessao.resumo.cenarios
   const cenarioAtivo = cenarios ? (comFundo ? cenarios.com_fundo : cenarios.sem_fundo) : null
   const receitaAtual = cenarioAtivo ? cenarioAtivo.receita_anual : sessao.resumo.receita_anual
 
@@ -374,6 +379,15 @@ export default function TelaRevisao({
             variant={saldo < 0 ? 'negative' : 'positive'}
           />
         </div>
+
+        {lancamentos.some(l => l.classe.toLowerCase().includes('seguro')) && <Card className="manual-items">
+          <h2>Seguro obrigatório</h2>
+          <p>Última parcela paga × total de parcelas. Se o documento não informar a quantidade, preencha abaixo.</p>
+          <label>Total de parcelas <input type="number" min={1} max={60} step={1}
+            value={parcelasSeguro ?? ''} placeholder="Usar o documento"
+            onChange={e => { const n = Number(e.target.value); if (e.target.value === '') setParcelasSeguro(null); else if (Number.isInteger(n) && n >= 1 && n <= 60) setParcelasSeguro(n) }} /></label>
+        </Card>}
+        <ItensManuais itens={itensManuais} salvar={salvarItensManuais} />
 
         {/* layout: sidebar + conteúdo */}
         <div className="review-layout">

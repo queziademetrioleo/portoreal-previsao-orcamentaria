@@ -109,6 +109,8 @@ export interface Resumo {
 export type Sistema = 'condo21' | 'alma' | 'group'
 
 export interface Sessao {
+  parcelas_seguro?: number | null
+  itens_manuais?: ItemManual[]
   origem_sistema?: Sistema | 'misto'
   sistemas?: Sistema[]
   inadimplencia_apurada?: boolean
@@ -130,4 +132,11 @@ export interface Sessao {
   previsao_final?: LinhaPrevisaoFinal[]
   fluxo_mensal?: FluxoMensal[]
   status: 'em_revisao' | 'gerado'
+}
+
+export interface ItemManual {
+  id: string
+  tipo: 'receita' | 'despesa'
+  nome: string
+  valor: number
 }

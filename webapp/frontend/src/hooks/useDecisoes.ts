@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BASE, previewDocumento, reanalisarSessao, salvarDecisoes, type PayloadDecisoes } from '../api'
-import type { ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
+import type { Cenarios, ItemManual, ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
 
 export interface UseDecisoesReturn {
+  parcelasSeguro: number | null
+  setParcelasSeguro: (valor: number | null) => void
+  itensManuais: ItemManual[]
+  salvarItensManuais: (itens: ItemManual[]) => Promise<void>
   extra: ItemRevisao[]
   setExtra: React.Dispatch<React.SetStateAction<ItemRevisao[]>>
   revisar: ItemRevisao[]
@@ -12,7 +16,7 @@ export interface UseDecisoesReturn {
   lancamentos: LancamentoConta[]
   decisoesLancamentos: Map<number, 'deduzir' | 'manter' | 'pendente'>
   decidirLancamento: (id: number, decisao: 'deduzir' | 'manter') => void
-  vivo: { subtotal: number; total: number; impacto: number }
+  vivo: { subtotal: number; total: number; impacto: number; cenarios?: Cenarios }
   calculando: boolean
   aoVivo: { dedExtra: number; dedRev: number; dedLancamentos: number; impacto: number }
   buildPayload: () => PayloadDecisoes
@@ -48,6 +52,8 @@ function payloadInad(items: ItemInad[]) {
 }
 
 export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
+  const [parcelasSeguro, setParcelasSeguro] = useState<number | null>(sessao.parcelas_seguro ?? null)
+  const [itensManuais, setItensManuais] = useState<ItemManual[]>(sessao.itens_manuais ?? [])
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
   const [inad, setInad] = useState<ItemInad[]>(sessao.inadimplencia)
@@ -55,7 +61,8 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   const [inflacao, setInflacao] = useState<number>(0.10)  // aumento previsto fixo em 10%
   const [ultimoReajuste, setUltimoReajuste] = useState<string>(sessao.resumo.ultimo_reajuste ?? '')
 
-  const [vivo, setVivo] = useState({
+  const [vivo, setVivo] = useState<UseDecisoesReturn['vivo']>({
+    cenarios: sessao.resumo.cenarios,
     subtotal: sessao.resumo.subtotal,
     total: sessao.resumo.total_previsto,
     impacto: sessao.resumo.impacto_receita_mensal ?? 0,
@@ -115,6 +122,8 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
 
   const buildPayload = useCallback((): PayloadDecisoes => {
     return {
+      parcelas_seguro: parcelasSeguro,
+      itens_manuais: itensManuais,
       extraordinarias: payloadRevisao(extra),
       revisar: payloadRevisao(revisar),
       inadimplencia: payloadInad(inad),
@@ -124,7 +133,20 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       inflacao_pct: inflacao,
       ultimo_reajuste: ultimoReajuste || null,
     }
-  }, [extra, revisar, inad, decisoesLancamentos, inflacao, ultimoReajuste])
+  }, [extra, revisar, inad, decisoesLancamentos, inflacao, ultimoReajuste, itensManuais, parcelasSeguro])
+
+  const filaSalvamento = useRef<Promise<unknown>>(Promise.resolve())
+  const persistirDecisoes = useCallback((payload: PayloadDecisoes) => {
+    const proximo = filaSalvamento.current.catch(() => {}).then(() => salvarDecisoes(sessao.sessao_id, payload))
+    filaSalvamento.current = proximo
+    return proximo
+  }, [sessao.sessao_id])
+
+  const salvarItensManuais = useCallback(async (itens: ItemManual[]) => {
+    const payload = { ...buildPayload(), itens_manuais: itens }
+    await persistirDecisoes(payload)
+    setItensManuais(itens)
+  }, [buildPayload, persistirDecisoes])
 
   // Preview debounced (backend recalcula subtotal/total)
   const primeiraRender = useRef(true)
@@ -144,11 +166,16 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
         // So aplica se esta for a requisicao mais recente
         if (seq !== previewSeq.current) return
         setVivo({
+          cenarios: r.cenarios,
           subtotal: r.subtotal,
           total: r.total_previsto,
           impacto: r.impacto_receita_mensal,
         })
-        await salvarDecisoes(sessao.sessao_id, payload)
+        // A lista manual é persistida pelo botão Salvar; autosaves antigos
+        // não podem sobrescrever uma inclusão/remoção mais recente.
+        const automatico = { ...payload }
+        delete automatico.itens_manuais
+        await persistirDecisoes(automatico)
       } catch {
         /* mantem ultimo valor */
       } finally {
@@ -158,7 +185,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       }
     }, 350)
     return () => clearTimeout(t)
-  }, [extra, revisar, inad, lancamentos, inflacao, ultimoReajuste, sessao.sessao_id, buildPayload])
+  }, [extra, revisar, inad, lancamentos, inflacao, ultimoReajuste, sessao.sessao_id, buildPayload, persistirDecisoes])
 
   // Salvar decisoes ao fechar/recarregar (beforeunload)
   useEffect(() => {
@@ -181,11 +208,14 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     try {
       const nova = await reanalisarSessao(sessao.sessao_id)
       // Reseta todo o estado interno com os resultados frescos da reanalise
+      setParcelasSeguro(nova.parcelas_seguro ?? null)
+      setItensManuais(nova.itens_manuais ?? [])
       setExtra(nova.extraordinarias)
       setRevisar(nova.revisar)
       setInad(nova.inadimplencia)
       setLancamentos(nova.lancamentos_contas ?? [])
       setVivo({
+        cenarios: nova.resumo.cenarios,
         subtotal: nova.resumo.subtotal,
         total: nova.resumo.total_previsto,
         impacto: nova.resumo.impacto_receita_mensal ?? 0,
@@ -203,6 +233,10 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   }, [sessao.sessao_id])
 
   return {
+    parcelasSeguro,
+    setParcelasSeguro,
+    itensManuais,
+    salvarItensManuais,
     extra,
     setExtra,
     revisar,

@@ -332,7 +332,7 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
         (idx, linha) for idx, linha in enumerate(linhas or [])
         if abs(float(linha.get('final') or 0)) > 0.005
     ]
-    consumidos = set()
+    consumidos = {idx for idx, l in ativas if l.get('manual')}
     despesas = []
 
     def ng(linha):
@@ -364,7 +364,7 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
 
     contratos = {}
     for idx, linha in ativas:
-        if ng(linha) != 'contratos':
+        if idx in consumidos or ng(linha) != 'contratos':
             continue
         label = _rotulo_contrato(linha, [l for _, l in ativas])
         partes = _dividir_contrato_por_servico(linha, lancamentos) or [
@@ -395,6 +395,8 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
                 break
         else:
             despesas.append(('Gastos com conservação', provisoes))
+
+    despesas.extend((l['classe'], float(l['final'])) for _, l in ativas if l.get('manual'))
 
     # Contas sem correspondência ficam juntas, com detalhe na revisão,
     # em vez de despejar cada classe bruta no fim do resumo público.
@@ -618,6 +620,8 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
 
     previsao_final = estado.get('previsao_final') or []
     receitas, _ = _extrair_receitas_despesas(previsao_final)
+    if estado.get('itens_manuais') or 'alma' in (estado.get('sistemas') or []):
+        receitas = []
     receitas = [
         ('Taxas de Condomínio', valor)
         if _norm(label) == 'receita media do periodo' else (label, valor)

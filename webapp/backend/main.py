@@ -23,13 +23,14 @@ import tempfile
 import datetime
 import logging
 import time
+from typing import Literal
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import db
 import aprendizado
@@ -399,6 +400,10 @@ def _fluxo_mensal_balanco(bal):
 
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
+    if 'parcelas_seguro' in dec.model_fields_set:
+        estado['parcelas_seguro'] = dec.parcelas_seguro
+    if dec.itens_manuais is not None:
+        estado['itens_manuais'] = [i.model_dump() for i in dec.itens_manuais]
     # Aumento previsto é fixo (core.INFLACAO); o valor do payload é ignorado.
     estado['resumo']['inflacao'] = core.INFLACAO
     if getattr(dec, 'ultimo_reajuste', None) is not None:
@@ -430,6 +435,7 @@ def _recalcular_com_decisoes(sid, estado):
 
     R = copy.deepcopy(_obter_R(sid))
     R['inflacao_pct'] = core.INFLACAO
+    R['parcelas_seguro'] = estado.get('parcelas_seguro')
     valores_editados = {
         i['id']: _valor_revisado(i)
         for i in (estado['extraordinarias'] + estado['revisar'])
@@ -442,6 +448,7 @@ def _recalcular_com_decisoes(sid, estado):
         it['cat'] = 'Extraordinaria' if idx in ids_remover else (
             'Recorrente' if it['cat'] in ('Extraordinaria', 'Revisar') else it['cat'])
     R2 = core.recalcular(R)
+    _incluir_itens_manuais(R2, estado.get('itens_manuais') or [])
 
     unidades = {}
     for item in estado['inadimplencia']:
@@ -449,6 +456,42 @@ def _recalcular_com_decisoes(sid, estado):
             unidades.setdefault(item['unidade'], []).append(_valor_revisado(item))
     impacto = sum(sum(v) / len(v) for v in unidades.values())
     return R2, impacto
+
+
+def _incluir_itens_manuais(R, itens):
+    """R vem do cache original recalculado; nunca acumula adições de previews."""
+    receitas = 0.0
+    receita_base = (R.get('cenarios') or {}).get('com_fundo', {}).get('receita_anual', R.get('receita_anual') or 0)
+    fundo = (R.get('cenarios') or {}).get('fundo_reserva_anual', R.get('fundo_reserva_anual') or 0)
+    ordinarias = list((R.get('cenarios') or {}).get('receitas_ordinarias') or [])
+    if itens and not ordinarias:
+        ordinarias = [{'classe': 'Taxas de Condomínio', 'mensal': round(
+            (receita_base - fundo) / 12, 2)}]
+    for item in itens:
+        mensal = float(item['valor'])
+        anual = round(mensal * 12, 2)
+        if item['tipo'] == 'receita':
+            receitas += anual
+            ordinarias.append({'classe': item['nome'], 'mensal': mensal})
+        else:
+            R['linhas'].append({'grupo': 'Despesas adicionadas', 'classe': item['nome'],
+                'base': 0.0, 'deducao': -anual, 'final': anual, 'manual': True,
+                'regra': 'Adicionada manualmente: valor mensal × 12', 'n_meses': 12})
+            R['subtotal'] += anual
+    R['total_previsto'] = R['subtotal'] * (1 + R['inflacao_pct'])
+    R['receita_anual'] = receita_base + receitas
+    R['cenarios'] = core.calcular_cenarios(R['receita_anual'], fundo,
+        R['total_previsto'], (R.get('cenarios') or {}).get('receitas_nao_ordinarias') or [], ordinarias)
+
+
+def _atualizar_resumo_calculado(estado, R, impacto):
+    for campo in ('subtotal', 'total_previsto', 'desconsideracoes', 'prov_laudo',
+                  'prov_incendio', 'receita_anual'):
+        estado['resumo'][campo] = round(R.get(campo) or 0, 2)
+    estado['resumo'].update(receita_mensal=round((R.get('receita_anual') or 0) / 12, 2),
+        impacto_receita_mensal=round(impacto, 2), cenarios=R.get('cenarios'), inflacao=R.get('inflacao_pct', core.INFLACAO))
+    estado['linhas_contas'] = [{**l, 'monthly': []} for l in R['linhas']]
+    estado['previsao_final'] = []
 
 
 def _montar_lancamentos_contas(des):
@@ -567,6 +610,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             'periodo': [str((des.get('periodo') or ('', ''))[0]),
                         str((des.get('periodo') or ('', ''))[1])],
         },
+        'itens_manuais': [],
         'extraordinarias': extraordinarias,
         'revisar': revisar,
         'inadimplencia': inad_itens,
@@ -587,7 +631,21 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
 # ---------------------------------------------------------------------------
 # Modelo de decisoes
 # ---------------------------------------------------------------------------
+class ItemManual(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    tipo: Literal['receita', 'despesa']
+    nome: str = Field(min_length=1, max_length=120, pattern=r'\S')
+    valor: float = Field(gt=0, le=1000000000, allow_inf_nan=False, multiple_of=0.01)
+
+    @field_validator('nome', mode='before')
+    @classmethod
+    def limpar_nome(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
 class Decisoes(BaseModel):
+    parcelas_seguro: int | None = Field(default=None, ge=1, le=60)
+    itens_manuais: list[ItemManual] | None = Field(default=None, max_length=200)
     extraordinarias: dict = Field(default_factory=dict)
     revisar: dict = Field(default_factory=dict)
     inadimplencia: dict = Field(default_factory=dict)
@@ -598,6 +656,13 @@ class Decisoes(BaseModel):
     # condominial, usado no item 6 do relatorio PDF. None = nao informado.
     ultimo_reajuste: str | None = Field(default=None, max_length=7)
     com_fundo: bool = Field(default=True)  # True = incluir Fundo de Reserva nas receitas
+
+    @field_validator('itens_manuais')
+    @classmethod
+    def ids_unicos(cls, itens):
+        if itens and len({i.id for i in itens}) != len(itens):
+            raise ValueError('Lançamentos manuais com identificadores repetidos.')
+        return itens
 
 
 # ---------------------------------------------------------------------------
@@ -917,6 +982,11 @@ async def reanalisar_sincrono(sid: str):
             ano = row['ano_previsao']
 
             estado = _montar_estado(sid, nome, ano, R, row.get('tem_fundo_reserva'))
+            anterior = json.loads(row.get('estado_json') or '{}')
+            estado['itens_manuais'] = anterior.get('itens_manuais') or []
+            estado['parcelas_seguro'] = anterior.get('parcelas_seguro')
+            R2, impacto = _recalcular_com_decisoes(sid, estado)
+            _atualizar_resumo_calculado(estado, R2, impacto)
             _salvar_estado_sync(sid, estado)
 
             return estado
@@ -1018,20 +1088,13 @@ def relatorio_pdf(sid: str, dec: Decisoes):
         )
     _preparar_explicacoes(estado)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
+    for linha in (R2.get('bal') or {}).get('despesas') or []:
+        nc = core._norm(linha['classe'])
+        if (float(linha.get('total') or 0) > 0 and 'seguro' in nc and any(k in nc for k in ('obrigat', 'condomin', 'incendio'))
+                and core._projecao_ultima_taxa(linha, R2['des']['itens'], estado.get('parcelas_seguro')) is None):
+            raise HTTPException(400, 'Informe o total de parcelas do seguro obrigatório antes de gerar o PDF.')
     recalculado = time.perf_counter()
-    estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
-    estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
-    estado['resumo']['desconsideracoes'] = round(R2['desconsideracoes'], 2)
-    estado['resumo']['prov_laudo'] = round(R2['prov_laudo'], 2)
-    estado['resumo']['prov_incendio'] = round(R2['prov_incendio'], 2)
-    estado['resumo']['impacto_receita_mensal'] = round(impacto_receita, 2)
-    estado['resumo']['cenarios'] = R2.get('cenarios')
-    estado['resumo']['inflacao'] = R2.get('inflacao_pct', estado['resumo'].get('inflacao'))
-    estado['linhas_contas'] = [{
-        'grupo': l['grupo'], 'classe': l['classe'],
-        'base': round(l['base'], 2), 'deducao': round(l['deducao'], 2),
-        'final': round(l['final'], 2), 'regra': l['regra'], 'n_meses': l['n_meses'],
-    } for l in R2['linhas']]
+    _atualizar_resumo_calculado(estado, R2, impacto_receita)
     estado['com_fundo'] = dec.com_fundo
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
@@ -1058,6 +1121,8 @@ def salvar_decisoes(sid: str, decisoes: Decisoes):
     estado = _carregar_estado(sid)
     _registrar_aprendizado_decisoes(sid, estado, decisoes)
     _aplicar_decisoes(estado, decisoes)
+    R2, impacto = _recalcular_com_decisoes(sid, estado)
+    _atualizar_resumo_calculado(estado, R2, impacto)
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     return {'ok': True, 'sessao_id': sid}
 
