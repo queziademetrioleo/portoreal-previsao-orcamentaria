@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { ItemManual } from '../types'
 import { money } from '../utils/format'
-import { parseValorMensal } from '../utils/valorMensal'
+import { formatarValorMensal, parseValorMensal } from '../utils/valorMensal'
 import Card from './ui/Card'
 import Button from './ui/Button'
 import './ItensManuais.css'
@@ -48,7 +48,7 @@ export default function ItensManuais({ itens, salvar }: {
         </div>
         <div className="manual-fields">
           <label>Nome<input value={nome} onChange={e => setNome(e.target.value)} required maxLength={120} placeholder="Ex.: locação do salão" /></label>
-          <label>Valor mensal (R$)<input value={valor} onChange={e => setValor(e.target.value)} required inputMode="decimal" placeholder="0,00" /></label>
+          <label>Valor mensal (R$)<input value={valor} onChange={e => setValor(formatarValorMensal(e.target.value))} required inputMode="decimal" placeholder="0,00" /></label>
           <Button type="submit" variant="primary">{ocupado ? 'Salvando…' : editando ? 'Salvar alteração' : 'Salvar lançamento'}</Button>
           {editando && <Button type="button" onClick={limpar}>Cancelar</Button>}
         </div>
@@ -58,7 +58,7 @@ export default function ItensManuais({ itens, salvar }: {
     <p role="status">{status}</p>
     {itens.length > 0 && <ul className="manual-list">{itens.map(i => <li key={i.id}>
       <div><strong>{i.nome}</strong><span>{i.tipo === 'receita' ? 'Receita' : 'Despesa'} · {money(i.valor)} por mês</span></div>
-      <div><Button size="sm" disabled={ocupado} onClick={() => { setEditando(i.id); setTipo(i.tipo); setNome(i.nome); setValor(i.valor.toFixed(2).replace('.', ',')); setErro(''); setStatus('') }}>Editar</Button>
+      <div><Button size="sm" disabled={ocupado} onClick={() => { setEditando(i.id); setTipo(i.tipo); setNome(i.nome); setValor(formatarValorMensal(i.valor.toFixed(2))); setErro(''); setStatus('') }}>Editar</Button>
       <Button size="sm" variant="danger" disabled={ocupado} onClick={() => persistir(itens.filter(x => x.id !== i.id), 'Lançamento removido.')}>Remover</Button></div>
     </li>)}</ul>}
       </div>

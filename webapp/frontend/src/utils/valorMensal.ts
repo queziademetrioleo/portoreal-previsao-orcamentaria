@@ -7,3 +7,12 @@ export function parseValorMensal(texto: string): number | null {
     ? limpo.replace(/\./g, '').replace(',', '.') : limpo)
   return Number.isFinite(numero) && numero > 0 && numero <= 1e9 ? Math.round(numero * 100) / 100 : null
 }
+
+/** Máscara monetária: os dígitos entram pelos centavos, com separadores pt-BR. */
+export function formatarValorMensal(texto: string): string {
+  const digitos = texto.replace(/\D/g, '')
+  if (!digitos) return ''
+  const valor = (digitos.replace(/^0+/, '') || '0').padStart(3, '0')
+  const inteiro = valor.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${inteiro},${valor.slice(-2)}`
+}

@@ -9,7 +9,7 @@ async function load(path) {
   }).outputText
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 }
-const { parseValorMensal } = await load('../src/utils/valorMensal.ts')
+const { formatarValorMensal, parseValorMensal } = await load('../src/utils/valorMensal.ts')
 const { salvarDecisoes, previewDocumento } = await load('../src/api.ts')
 test('valor mensal aceita formato brasileiro sem confundir milhares com centavos', () => {
   for (const [texto, valor] of [['1.234,56',1234.56],['R$ 150,00',150],['1.000',1000],['100.25',100.25],['100',100]]) {
@@ -31,4 +31,15 @@ test('API preserva valores mensais e remoção', async t => {
   assert.equal(r.cenarios.com_fundo.receita_anual,1200)
   await salvarDecisoes('teste',{...payload,itens_manuais:[]})
   assert.deepEqual(requests[2].body.itens_manuais,[])
+})
+
+test('máscara insere centavos e milhares e mantém o valor ao editar ou colar', () => {
+  for (const [entrada, esperado] of [['1','0,01'],['12','0,12'],['123','1,23'],
+    ['123456','1.234,56'],['R$ 1.234,56','1.234,56'],['1000.00','1.000,00'],
+    ['000123456','1.234,56'],['',''],['0','0,00']]) {
+    assert.equal(formatarValorMensal(entrada), esperado)
+  }
+  for (const valor of [0.01, 100, 1234.56, 1000000000]) {
+    assert.equal(parseValorMensal(formatarValorMensal(valor.toFixed(2))), valor)
+  }
 })
