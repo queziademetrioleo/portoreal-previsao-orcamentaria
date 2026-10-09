@@ -274,8 +274,8 @@ def parse_receipts(path, core):
         raise ValueError('Group: taxa condominial vigente não identificada nas receitas por unidade.')
     return {'nome_condominio': name, 'mes_ref': reference,
             'por_classe': {k: {f: float(v) for f, v in values.items()} for k, values in classes.items()},
-            'total_lancado_mes': float(sum(v['lancado'] for k, v in classes.items() if core._rec_classe_entra(k))),
-            'total_liquidado_mes': float(sum(v['liquidado'] for k, v in classes.items() if core._rec_classe_entra(k))),
+            'total_lancado_mes': float(sum(v['lancado'] for v in classes.values())),
+            'total_liquidado_mes': float(sum(v['liquidado'] for v in classes.values())),
             'tx_condominio_mensal': float(taxes), 'fundo_reserva_mensal': float(fund),
             'tx_condominio_anual': float(taxes * 12), 'fundo_reserva_anual': float(fund * 12),
             'fixo_anual': float((taxes + fund) * 12), 'itens': items, 'excluidas': excluded}

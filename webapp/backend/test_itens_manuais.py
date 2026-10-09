@@ -120,6 +120,24 @@ class ItensManuaisTest(unittest.TestCase):
             main.Decisoes(itens_manuais=[{'id': '1', 'nome': 'T', 'tipo': 'receita', 'valor': 1}] * 2)
 
 
+class ReceitaCondo21Test(unittest.TestCase):
+    def test_parser_total_inclui_todas_contas_do_documento(self):
+        from types import SimpleNamespace
+        rows = [['COND. TESTE'], ['Contas de 10/2026'],
+                ['Classe de conta', '', '', '', '', '', 'Total lançado', 'Total liquidado'],
+                ['Tx. Condomínio', '', '', '', '', '', 100, 90],
+                ['Fundo Reserva', '', '', '', '', '', 10, 10],
+                ['Juros', '', '', '', '', '', 5, 4],
+                ['Desconto', '', '', '', '', '', -2, -2], []]
+        rows = [r + [''] * (8-len(r)) for r in rows]
+        sh = SimpleNamespace(nrows=len(rows), ncols=8, cell_value=lambda r,c: rows[r][c])
+        wb = SimpleNamespace(sheet_by_index=lambda _: sh)
+        with patch.object(previsao.xlrd, 'open_workbook', return_value=wb):
+            rec = previsao.parse_rec('rec02.xls')
+        self.assertEqual(rec['total_lancado_mes'], 113)
+        self.assertEqual(rec['total_liquidado_mes'], 102)
+
+
 class ReceitasPdfTest(unittest.TestCase):
     def test_desconto_embutido_na_taxa_preserva_total_e_normaliza_rotulos(self):
         receitas = [('COMPLEMENTO TX. CONDOMÍNIO', 1676.55), ('Fundo de Reserva', 1529.27),
@@ -193,6 +211,25 @@ class UltimoPagamentoTest(unittest.TestCase):
     def test_seguro_vida_nao_muda_regra(self):
         r = self.projetar('Seguro de Vida', [{'data': '2026-09-10', 'valor_pago': 200, 'parcela': '2/8'}])
         self.assertEqual(r['subtotal'], 1200)
+
+    def test_receita_documento_prevalece_tambem_condo21_e_group(self):
+        for sistema in ('condo21', 'group'):
+            with self.subTest(sistema=sistema):
+                r = resultado()
+                r['rec'] = {'sistema': sistema, 'total_lancado_mes': 100,
+                            'fundo_reserva_anual': 120, 'por_classe': {
+                                'Tx. Condomínio': {'lancado': 100},
+                                'Fundo Reserva': {'lancado': 10},
+                                'Gás': {'lancado': 20}, 'Juros': {'lancado': 5},
+                                'Desconto': {'lancado': -2}}}
+                r['bal']['receitas'] = [{'classe': 'Gás', 'total': 12000},
+                                       {'classe': 'Aluguel', 'monthly': [1000]*12}]
+                r = previsao.recalcular(r)
+                self.assertEqual(r['receita_anual'], 1596)
+                self.assertEqual(r['cenarios']['com_fundo']['receita_mensal'], 133)
+                self.assertEqual(r['cenarios']['sem_fundo']['receita_mensal'], 123)
+                self.assertEqual(r['cenarios']['receitas_nao_ordinarias'], [])
+                self.assertIn({'classe': 'Gás', 'mensal': 20}, r['cenarios']['receitas_ordinarias'])
 
     def test_alma_total_inclui_todas_contas_sem_somar_legado(self):
         r = resultado()

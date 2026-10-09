@@ -61,6 +61,14 @@ class GroupImportTest(unittest.TestCase):
         self.assertFalse(any('diferenças entre' in v for v in data['divergencias']))
         self.assertTrue(any('inadimplência não fornecido' in v for v in data['divergencias']))
 
+    def test_total_documento_inclui_juros_e_nao_so_taxa_e_fundo(self):
+        self.receipts.insert(5, ['101', '456', '1.1.4 - Juros', '06/2026', '10/06/2026', 5, 5])
+        self.receipts[6][5] += 5
+        self.receipts[6][6] += 5
+        rec = self.load()['rec']
+        self.assertEqual(rec['total_lancado_mes'], 110)
+        self.assertEqual(rec['total_liquidado_mes'], 110)
+
     def test_reordered_columns_are_read_by_header(self):
         self.expenses = [[r[i] for i in reversed(range(len(r)))] if len(r) == 8 else r for r in self.expenses]
         # Group heading must follow its header column too.
@@ -142,7 +150,8 @@ class BerlinGroupTest(unittest.TestCase):
             self.assertAlmostEqual(result['base_total'], 292073.03, places=2)
             self.assertEqual(result['rec']['tx_condominio_mensal'], 31816.28)
             self.assertEqual(result['rec']['fundo_reserva_mensal'], 1479.13)
-            self.assertEqual(result['receita_anual'], 399544.92)
+            self.assertEqual(result['rec']['total_lancado_mes'], 37660.26)
+            self.assertEqual(result['receita_anual'], 451923.12)
             self.assertIsNone(result['inad'])
             self.assertFalse(any('diferenças entre' in w for w in result['divergencias']))
             self.assertTrue(any('não fechado' in w for w in result['divergencias']))
