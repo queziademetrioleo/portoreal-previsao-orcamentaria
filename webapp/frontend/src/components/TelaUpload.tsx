@@ -30,9 +30,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [almaRec, setAlmaRec] = useState<File | null>(null)
   const [almaInad, setAlmaInad] = useState<File | null>(null)
   const [semInadAlma, setSemInadAlma] = useState(false)
-  const [almaInicio, setAlmaInicio] = useState('')
-  const [periodoInicio, setPeriodoInicio] = useState('')
-  const [periodoFim, setPeriodoFim] = useState('')
   const condo = sistemas.includes('condo21')
   const alma = sistemas.includes('alma')
   const group = sistemas.includes('group')
@@ -93,10 +90,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       setErro('Envie o relatório de inadimplência do Alma ou marque que não há inadimplência.')
       return
     }
-    if ((alma || multiplos) && (Boolean(periodoInicio) !== Boolean(periodoFim) || (periodoInicio && periodoInicio > periodoFim))) {
-      setErro('Informe início e fim do período em ordem, ou deixe ambos em branco.')
-      return
-    }
     setErro('')
     envioEmCursoRef.current = true
     setProgresso({ fase: 'Enviando documentos...', passo: 0, total: 6, detalhe: '' })
@@ -110,8 +103,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         ...(condo ? { balanual, desbai, rec, dessin, inad: multiplos ? null : inad } : {}),
         ...(group ? { groupBal, groupDes, groupRec } : {}),
         ...(alma ? { almaBal, almaFin, almaRec, almaInad, semInadAlma } : {}),
-        ...((alma || multiplos) ? { periodoInicio, periodoFim } : {}),
-        ...(group && alma ? { almaInicio } : {}),
       })
       if (!mountedRef.current) return
 
@@ -355,29 +346,6 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     <p className="form-hint">Consideramos apenas os dois últimos meses da referência do relatório de inadimplência do Alma.</p>
                   </section>
               )}
-              {group && alma && (
-                <section className="upload-identity" aria-labelledby="migracao-heading">
-                  <h2 id="migracao-heading" className="upload-section-title">Mudança da Group para Alma</h2>
-                  <label className="form-label" htmlFor="alma-inicio">Primeiro mês que deve usar os dados do Alma (opcional)</label>
-                  <input id="alma-inicio" className="form-input" type="month" value={almaInicio} onChange={(e) => setAlmaInicio(e.target.value)} />
-                  <p className="upload-section-description">A Group será usada antes desse mês e o Alma a partir dele. Movimentos da Group após a mudança ficarão fora da previsão e serão indicados na conferência. Deixe vazio para detectar a mudança pelo primeiro mês com movimentação no Alma.</p>
-                </section>
-              )}
-              {(multiplos || alma) && (
-                  <div className="form-group">
-                    <h2 className="form-label">Período das receitas e despesas</h2>
-                    <div className="file-grid">
-                      <label className="form-hint">Mês inicial
-                        <input className="form-input" type="month" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
-                      </label>
-                      <label className="form-hint">Mês final
-                        <input className="form-input" type="month" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} />
-                      </label>
-                    </div>
-                    <p className="form-hint">Deixe em branco para usar o período completo dos documentos. Cada mês deve pertencer a um único sistema, sem lacunas. Na mudança da Group para Alma, usamos a divisão detectada ou informada acima.</p>
-                  </div>
-              )}
-
               <Button
                 type="submit"
                 variant="primary"
