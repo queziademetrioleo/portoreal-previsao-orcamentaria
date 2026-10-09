@@ -375,7 +375,7 @@ export default function TelaRevisao({
                 </div>
                 <div className="calculation-periods">
                   <div><span>Base anual</span><strong>{money(sessao.resumo.base_total)}</strong></div>
-                  <div><span>Média mensal</span><strong>{money(sessao.resumo.base_total / 12)}</strong></div>
+                  <div><span>Base mensal</span><strong>{money(sessao.resumo.base_total / 12)}</strong></div>
                 </div>
                 <div className="calculation-deduction">
                   <div><span>Extraordinários retirados</span><small>{removidos} lançamento{removidos === 1 ? '' : 's'}</small></div>
@@ -562,14 +562,14 @@ export default function TelaRevisao({
                         <details className="audit-group" key={grupo} open={index === 0}>
                           <summary>
                             <span><strong>{grupo}</strong><small>{classes.length} classe{classes.length === 1 ? '' : 's'}</small></span>
-                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido <small>Média mensal deduzida: {money(deduzidoGrupo / 12)}</small></span>
+                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido <small>Dedução mensal equivalente: {money(deduzidoGrupo / 12)}</small></span>
                           </summary>
                           <div className="audit-classes">
                             {classes.map(({ classe, itens, pago, deduzido }) => (
                               <section className="audit-class" key={classe}>
                                 <div className="audit-class-header">
                                   <div><strong>{classe}</strong><small>{itens.length} lançamento{itens.length === 1 ? '' : 's'}</small></div>
-                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span><span>Média mensal deduzida: {money(deduzido / 12)}</span></div>
+                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span><span>Dedução mensal equivalente: {money(deduzido / 12)}</span></div>
                                 </div>
                                 <div className="audit-table-wrap">
                                   <table className="audit-table">

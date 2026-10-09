@@ -879,7 +879,7 @@ _HTML_TEMPLATE = r"""
   <div class="secao">
     <h2>Receitas</h2>
     <table>
-      <thead><tr><th>Conta</th><th class="num">Valor médio mensal</th></tr></thead>
+      <thead><tr><th>Conta</th><th class="num">Valor mensal previsto</th></tr></thead>
       <tbody>
         {% for label, valor in receitas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
         <tr class="total"><td>Total mensal</td><td class="num">{{ total_receitas }}</td></tr>
@@ -890,7 +890,7 @@ _HTML_TEMPLATE = r"""
   <div class="secao">
     <h2>Despesas</h2>
     <table>
-      <thead><tr><th>Conta</th><th class="num">Valor médio mensal</th></tr></thead>
+      <thead><tr><th>Conta</th><th class="num">Valor mensal previsto</th></tr></thead>
       <tbody>
         {% for label, valor in despesas %}<tr><td>{{ label }}</td><td class="num">{{ valor }}</td></tr>{% endfor %}
         <tr class="subtotal"><td>SUBTOTAL</td><td class="num">{{ subtotal_mensal }}</td></tr>
