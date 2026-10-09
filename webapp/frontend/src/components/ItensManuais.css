@@ -14,3 +14,8 @@
 .manual-list span { display: block; margin-top: 4px; color: #657084; }
 .manual-list button + button { margin-left: 8px; }
 .manual-items .manual-error { color: #a92828; }
+
+.manual-toggle { cursor: pointer; font-size: 1.1rem; font-weight: 600; color: #203e63; padding: 4px 0; }
+.manual-toggle:focus-visible { outline: 2px solid #203e63; outline-offset: 6px; border-radius: 4px; }
+.manual-count { display: inline-block; font-size: .85rem; font-weight: 400; color: #657084; margin-left: 12px; }
+.manual-content { margin-top: 16px; }

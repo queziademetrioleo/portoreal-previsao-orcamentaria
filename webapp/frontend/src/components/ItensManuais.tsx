@@ -33,7 +33,11 @@ export default function ItensManuais({ itens, salvar }: {
     await persistir(editando ? itens.map(i => i.id === editando ? item : i) : [...itens, item], 'Lançamento salvo na previsão.')
   }
   return <Card className="manual-items">
-    <h2>Adicionar receita ou despesa</h2>
+    <details>
+      <summary className="manual-toggle">Adicionar receita ou despesa
+        {itens.length > 0 && <span className="manual-count">{itens.length} {itens.length === 1 ? 'lançamento salvo' : 'lançamentos salvos'}</span>}
+      </summary>
+      <div className="manual-content">
     <p>Informe o valor mensal. Ele será multiplicado por 12 na previsão e incluído no PDF. As despesas recebem o aumento previsto de 10%.</p>
     <form onSubmit={adicionar}>
       <fieldset disabled={ocupado}>
@@ -57,5 +61,7 @@ export default function ItensManuais({ itens, salvar }: {
       <div><Button size="sm" disabled={ocupado} onClick={() => { setEditando(i.id); setTipo(i.tipo); setNome(i.nome); setValor(i.valor.toFixed(2).replace('.', ',')); setErro(''); setStatus('') }}>Editar</Button>
       <Button size="sm" variant="danger" disabled={ocupado} onClick={() => persistir(itens.filter(x => x.id !== i.id), 'Lançamento removido.')}>Remover</Button></div>
     </li>)}</ul>}
+      </div>
+    </details>
   </Card>
 }

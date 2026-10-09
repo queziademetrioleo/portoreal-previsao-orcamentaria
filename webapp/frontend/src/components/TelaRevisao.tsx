@@ -233,7 +233,6 @@ export default function TelaRevisao({
 
   const removidos = [...decisoesLancamentos.values()].filter((decisao) => decisao === 'deduzir').length
   const removidoTotal = aoVivo.dedExtra + aoVivo.dedRev + aoVivo.dedLancamentos
-  const saldo = receitaAtual - vivo.total
 
   const updateExtra = (id: number, patch: Partial<ItemRevisao>) =>
     setExtra((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
@@ -353,31 +352,6 @@ export default function TelaRevisao({
         </section>
 
         {erro && <div className="alert-error">{erro}</div>}
-        {/* KPIs */}
-        <div className="number-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <NumberBlock
-            label="Valor transportado (anual)"
-            value={money(sessao.resumo.base_total)}
-            detail={`${money(sessao.resumo.base_total / 12)} por mês`}
-          />
-          <NumberBlock
-            label="Removido na revisão (anual)"
-            value={money(removidoTotal)}
-            detail={`${money(removidoTotal / 12)} por mês`}
-          />
-          <NumberBlock
-            label="Total previsto (anual)"
-            value={calculando ? '...' : money(vivo.total)}
-            detail={calculando ? undefined : `${money(vivo.total / 12)} por mês`}
-          />
-          <NumberBlock
-            label="Saldo estimado (anual)"
-            value={money(saldo)}
-            detail={`${money(saldo / 12)} por mês`}
-            variant={saldo < 0 ? 'negative' : 'positive'}
-          />
-        </div>
-
         <ItensManuais itens={itensManuais} salvar={salvarItensManuais} />
 
         {/* layout: sidebar + conteúdo */}
