@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import main
 import previsao
-from relatorio_pdf import _consolidar_despesas_relatorio
+from relatorio_pdf import _consolidar_despesas_relatorio, _normalizar_receitas_pdf
 
 
 def resultado():
@@ -118,6 +118,19 @@ class ItensManuaisTest(unittest.TestCase):
                 main.ItemManual(**{**{'id': '1', 'nome': 'Teste', 'tipo': 'receita', 'valor': 10}, campo: valor})
         with self.assertRaises(ValidationError):
             main.Decisoes(itens_manuais=[{'id': '1', 'nome': 'T', 'tipo': 'receita', 'valor': 1}] * 2)
+
+
+class ReceitasPdfTest(unittest.TestCase):
+    def test_desconto_embutido_na_taxa_preserva_total_e_normaliza_rotulos(self):
+        receitas = [('COMPLEMENTO TX. CONDOMÍNIO', 1676.55), ('Fundo de Reserva', 1529.27),
+                    ('DESCONTO', -46.55), ('JUROS', 626.09), ('MULTA', 35.13),
+                    ('Taxas de Condomínio', 31410.78), ('TAXA EXTRA', 1697.11)]
+        linhas = _normalizar_receitas_pdf(receitas)
+        self.assertNotIn('Desconto', dict(linhas))
+        self.assertEqual(dict(linhas)['Taxas de condomínio'], 31364.23)
+        self.assertIn(('Complemento tx. condomínio', 1676.55), linhas)
+        self.assertIn(('Taxa extra', 1697.11), linhas)
+        self.assertAlmostEqual(sum(v for _, v in linhas), 36928.38)
 
 
 class UltimoPagamentoTest(unittest.TestCase):

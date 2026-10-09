@@ -169,6 +169,21 @@ def _linha_e_nota_final(label):
     return 'consideracoes importantes' in n or n.startswith('1) para o calculo')
 
 
+def _normalizar_receitas_pdf(receitas):
+    """Exibe receitas líquidas, sem repetir o desconto em linha separada."""
+    descontos = sum(valor for label, valor in receitas if 'desconto' in _norm(label))
+    linhas = [(label, valor) for label, valor in receitas if 'desconto' not in _norm(label)]
+    if abs(descontos) > 0.005:
+        pos = next((i for i, (label, _) in enumerate(linhas)
+                    if _norm(label) in ('taxas de condominio', 'taxa de condominio')), None)
+        if pos is None:
+            linhas.append(('Receita líquida', descontos))
+        else:
+            label, valor = linhas[pos]
+            linhas[pos] = (label, valor + descontos)
+    return [(label.strip().capitalize(), valor) for label, valor in linhas]
+
+
 def _extrair_receitas_despesas(previsao_final):
     receitas, despesas = [], []
     for row in (previsao_final or []):
@@ -650,6 +665,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
                          if _norm(l) == _norm('Taxas de Condomínio')), 0)
         label_taxa, valor_taxa = receitas[pos_taxa]
         receitas[pos_taxa] = (label_taxa, valor_taxa - impacto_inad_mensal)
+    receitas = _normalizar_receitas_pdf(receitas)
     despesas = _consolidar_despesas_relatorio(
         linhas, resumo, estado.get('lancamentos_contas'))
 
