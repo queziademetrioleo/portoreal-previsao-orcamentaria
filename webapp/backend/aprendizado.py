@@ -52,6 +52,14 @@ def _similaridade(descricao_a, descricao_b):
     return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
 
 
+def salario_recorrente(item):
+    """Salário de rotina não pode ser excluído por memória de outro pagamento."""
+    return normalizar(item.get('classe')) in {
+        'salario', 'salarios', 'salario empregado s', 'salario empregados',
+        'salarios empregados', 'salario funcionario s', 'salario funcionarios',
+    }
+
+
 def encontrar_decisao(item, memorias):
     """Retorna a decisão humana mais compatível ou None.
 
@@ -70,6 +78,7 @@ def encontrar_decisao(item, memorias):
         if memoria.get('grupo_norm') == grupo
         and memoria.get('classe_norm') == classe
         and memoria.get('descricao_norm')
+        and not (salario_recorrente(item) and memoria.get('decisao') == 'deduzir')
     ]
     for memoria in candidatas:
         if memoria['descricao_norm'] == descricao:
@@ -88,6 +97,13 @@ def encontrar_decisao(item, memorias):
 def aplicar_memorias(itens, memorias):
     aplicados = 0
     for item in itens or []:
+        if salario_recorrente(item):
+            if item.get('cat') != 'Recorrente':
+                aplicados += 1
+            item['cat'] = 'Recorrente'
+            item['motivo'] = 'Salário recorrente: mantido na base; exclusões antigas não são reaplicadas automaticamente.'
+            item.pop('aprendizado_aplicado', None)
+            continue
         decisao = encontrar_decisao(item, memorias)
         if decisao not in ('deduzir', 'manter'):
             continue

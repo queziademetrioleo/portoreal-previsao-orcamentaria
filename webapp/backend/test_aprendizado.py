@@ -51,6 +51,30 @@ class AprendizadoTest(unittest.TestCase):
             'manter',
         )
 
+    def test_salary_is_not_excluded_by_old_or_conflicting_memories(self):
+        item = {'grupo': 'Despesas com Pessoal', 'classe': 'Salário Empregado(s)',
+                'descricao': 'JONATAS ALVES DE ANDRADE DE SÁ', 'cat': 'Recorrente'}
+        old = aprendizado.criar_registro('antiga', 1, item, 'deduzir')
+        self.assertIsNone(aprendizado.encontrar_decisao(item, [old]))
+        aprendizado.aplicar_memorias([item], [old])
+        self.assertEqual(item['cat'], 'Recorrente')
+        self.assertNotIn('aprendizado_aplicado', item)
+
+    def test_cached_salary_misclassification_is_repaired(self):
+        item = {'classe': 'Salário Empregado(s)', 'descricao': 'Jonatas',
+                'cat': 'Extraordinaria', 'aprendizado_aplicado': True}
+        aprendizado.aplicar_memorias([item], [])
+        self.assertEqual(item['cat'], 'Recorrente')
+        self.assertNotIn('aprendizado_aplicado', item)
+
+    def test_salary_guard_does_not_apply_to_severance_or_repairs(self):
+        for classe in ('Rescisão Trabalhista', 'Reparo no Elevador'):
+            item = {'grupo': 'Despesas com Pessoal', 'classe': classe,
+                    'descricao': 'Jonatas', 'cat': 'Recorrente'}
+            memory = aprendizado.criar_registro('antiga', 1, item, 'deduzir')
+            aprendizado.aplicar_memorias([item], [memory])
+            self.assertEqual(item['cat'], 'Extraordinaria')
+
 
 if __name__ == '__main__':
     unittest.main()
