@@ -162,5 +162,13 @@ class SantoriniIntegrationTest(unittest.TestCase):
         self.assertIsNone(result['inad'])
         self.assertEqual(result['des']['periodo'], (dt.date(2026, 7, 1), dt.date(2026, 8, 31)))
 
+    def test_mixed_receipt_is_alma_even_if_condo_receipt_is_newer(self):
+        (self.folder / 'alma_inad.pdf').unlink()
+        expected = alma.read_receivables(self.folder / 'alma_rec.pdf')
+        with patch.object(previsao, 'parse_rec', return_value={'mes_ref': '12/2030', 'fixo_anual': 999999}):
+            result = alma.load_mixed(self.folder, previsao)
+        self.assertEqual(result['rec']['sistema'], 'alma')
+        self.assertEqual(result['rec']['fixo_anual'], expected['fixo_anual'])
+
 if __name__ == '__main__':
     unittest.main()

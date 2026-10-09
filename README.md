@@ -51,6 +51,11 @@ abatimento não foi apurado, sem presumir inexistência de débitos. No uso
 conjunto, as receitas por unidade Condo21/Group fornecem a taxa para a regra dos
 dois últimos meses Alma. O fluxo Condo21 + Alma existente mantém suas regras.
 
+Quando o Alma está selecionado junto a outro sistema, o PDF **Contas a
+receber agrupado por conta do Alma** prevalece como fonte da cobrança vigente,
+mesmo se um REC legado tiver data posterior. Os relatórios antigos continuam
+como fontes do histórico de despesas; não substituem essa cobrança.
+
 ## Upload Group
 
 Na tela **Nova previsão**, selecione **Group** e envie os três relatórios exportados em XLS ou XLSX:

@@ -198,7 +198,12 @@ def load_selected(folder, core):
     recs = [(name, data['rec']) for name, data in sources.items() if data.get('rec') and data['rec'].get('mes_ref')]
     if not recs:
         raise ValueError('Receita vigente não identificada nos sistemas selecionados.')
-    rec_source, rec = max(recs, key=lambda pair: (alma.month_key(pair[1]['mes_ref']), pair[0] == 'alma'))
+    if 'alma' in systems:
+        rec_source, rec = 'alma', sources['alma']['rec']
+        if not rec.get('mes_ref'):
+            raise ValueError('Receita vigente não identificada no relatório de contas a receber do Alma.')
+    else:
+        rec_source, rec = max(recs, key=lambda pair: alma.month_key(pair[1]['mes_ref']))
     rec = dict(rec, sistema=rec_source)
     if rec.get('mes_ref') != bal['meses'][-1]:
         warnings.append(f'Receita fixa baseada em {rec["mes_ref"]}; o período termina em {bal["meses"][-1]}. Confirme a vigência da cobrança.')

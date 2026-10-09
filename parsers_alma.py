@@ -447,14 +447,8 @@ def load_mixed(folder, core):
         delta = round(row['total'] - detail, 2)
         if abs(delta) > 0.02:
             warnings.append(f"{row['classe']}: demonstrativo R$ {row['total']:.2f}, pagamentos detalhados R$ {detail:.2f}, diferença R$ {delta:.2f}.")
-    rec = read_receivables(root / 'alma_rec.pdf')
-    if (root / 'rec02.xls').exists():
-        condo_rec = core.parse_rec(str(root / 'rec02.xls'))
-        # Alguns REC antigos existem no upload, mas não têm estrutura legível
-        # pelo parser. Nesse caso, mantenha o REC do Alma como fonte válida.
-        if (condo_rec and condo_rec.get('mes_ref')
-                and month_key(condo_rec['mes_ref']) > month_key(rec['mes_ref'])):
-            rec = condo_rec
+    # Na combinação com Alma, a cobrança vigente é sempre a desse PDF.
+    rec = dict(read_receivables(root / 'alma_rec.pdf'), sistema='alma')
     if (root / 'alma_inad.pdf').exists():
         unit_taxes = read_unit_taxes(root / 'rec02.xls')
         ina = read_arrears(root / 'alma_inad.pdf', unit_taxes)

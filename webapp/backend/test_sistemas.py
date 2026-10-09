@@ -114,6 +114,28 @@ class SystemsConsolidationTest(unittest.TestCase):
         self.assertIsNone(result['inad'])
         self.assertTrue(any('individual por unidade' in warning for warning in result['divergencias']))
 
+    def test_alma_receipt_always_wins_even_when_legacy_receipt_is_newer(self):
+        for systems in (['group', 'alma'], ['condo21', 'group', 'alma']):
+            with self.subTest(systems=systems), tempfile.TemporaryDirectory() as folder:
+                (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': systems, 'sem_inadimplencia_alma': True}))
+                data = {name: source(f'2026-{i:02}') for i, name in enumerate(systems, 1)}
+                for name in systems:
+                    data[name]['rec']['mes_ref'] = '01/2027' if name != 'alma' else '09/2026'
+                    data[name]['rec']['fixo_anual'] = 99999 if name != 'alma' else 24000
+                fallback = source('2026-01')
+                with patch.object(selected.group, 'load_group', return_value=data['group']), \
+                     patch.object(main.core, 'parse_balanual', return_value=data.get('condo21', fallback)['bal']), \
+                     patch.object(main.core, 'parse_desbai', return_value=data.get('condo21', fallback)['des']), \
+                     patch.object(main.core, 'parse_rec', return_value=data.get('condo21', fallback)['rec']), \
+                     patch.object(selected.alma, 'read_balance', return_value=data['alma']['bal']), \
+                     patch.object(selected.alma, 'read_fin', return_value=data['alma']['des']['itens']), \
+                     patch.object(selected.alma, 'read_receivables', return_value=data['alma']['rec']), \
+                     patch.object(selected.alma, 'read_internal_plan', return_value={}):
+                    result = selected.load_selected(folder, main.core)
+                self.assertEqual(result['rec']['sistema'], 'alma')
+                self.assertEqual(result['rec']['fixo_anual'], 24000)
+                self.assertEqual(result['rec']['mes_ref'], '09/2026')
+
     def test_group_receipts_supply_individual_tax_for_alma_arrears(self):
         legacy, current = source('2026-01'), source('2026-02')
         legacy['rec']['itens'] = [{'unidade': '101', 'classe': 'Tx. Condomínio',
