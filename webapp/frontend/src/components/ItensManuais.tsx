@@ -38,7 +38,6 @@ export default function ItensManuais({ itens, salvar }: {
         {itens.length > 0 && <span className="manual-count">{itens.length} {itens.length === 1 ? 'lançamento salvo' : 'lançamentos salvos'}</span>}
       </summary>
       <div className="manual-content">
-    <p>Informe o valor mensal. Ele será multiplicado por 12 na previsão e incluído no PDF. As despesas recebem o aumento previsto de 10%.</p>
     <form onSubmit={adicionar}>
       <fieldset disabled={ocupado}>
         <legend>Tipo de lançamento</legend>
