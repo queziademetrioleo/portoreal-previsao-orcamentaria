@@ -194,8 +194,6 @@ export default function TelaRevisao({
   onVoltar: () => void
 }) {
   const {
-    parcelasSeguro,
-    setParcelasSeguro,
     itensManuais,
     salvarItensManuais,
     extra,
@@ -380,13 +378,6 @@ export default function TelaRevisao({
           />
         </div>
 
-        {lancamentos.some(l => l.classe.toLowerCase().includes('seguro')) && <Card className="manual-items">
-          <h2>Seguro obrigatório</h2>
-          <p>Última parcela paga × total de parcelas. Se o documento não informar a quantidade, preencha abaixo.</p>
-          <label>Total de parcelas <input type="number" min={1} max={60} step={1}
-            value={parcelasSeguro ?? ''} placeholder="Usar o documento"
-            onChange={e => { const n = Number(e.target.value); if (e.target.value === '') setParcelasSeguro(null); else if (Number.isInteger(n) && n >= 1 && n <= 60) setParcelasSeguro(n) }} /></label>
-        </Card>}
         <ItensManuais itens={itensManuais} salvar={salvarItensManuais} />
 
         {/* layout: sidebar + conteúdo */}

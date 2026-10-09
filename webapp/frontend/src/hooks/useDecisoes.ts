@@ -3,8 +3,6 @@ import { BASE, previewDocumento, reanalisarSessao, salvarDecisoes, type PayloadD
 import type { Cenarios, ItemManual, ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
 
 export interface UseDecisoesReturn {
-  parcelasSeguro: number | null
-  setParcelasSeguro: (valor: number | null) => void
   itensManuais: ItemManual[]
   salvarItensManuais: (itens: ItemManual[]) => Promise<void>
   extra: ItemRevisao[]
@@ -52,7 +50,6 @@ function payloadInad(items: ItemInad[]) {
 }
 
 export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
-  const [parcelasSeguro, setParcelasSeguro] = useState<number | null>(sessao.parcelas_seguro ?? null)
   const [itensManuais, setItensManuais] = useState<ItemManual[]>(sessao.itens_manuais ?? [])
   const [extra, setExtra] = useState<ItemRevisao[]>(sessao.extraordinarias)
   const [revisar, setRevisar] = useState<ItemRevisao[]>(sessao.revisar)
@@ -122,7 +119,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
 
   const buildPayload = useCallback((): PayloadDecisoes => {
     return {
-      parcelas_seguro: parcelasSeguro,
       itens_manuais: itensManuais,
       extraordinarias: payloadRevisao(extra),
       revisar: payloadRevisao(revisar),
@@ -133,7 +129,7 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
       inflacao_pct: inflacao,
       ultimo_reajuste: ultimoReajuste || null,
     }
-  }, [extra, revisar, inad, decisoesLancamentos, inflacao, ultimoReajuste, itensManuais, parcelasSeguro])
+  }, [extra, revisar, inad, decisoesLancamentos, inflacao, ultimoReajuste, itensManuais])
 
   const filaSalvamento = useRef<Promise<unknown>>(Promise.resolve())
   const persistirDecisoes = useCallback((payload: PayloadDecisoes) => {
@@ -208,7 +204,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
     try {
       const nova = await reanalisarSessao(sessao.sessao_id)
       // Reseta todo o estado interno com os resultados frescos da reanalise
-      setParcelasSeguro(nova.parcelas_seguro ?? null)
       setItensManuais(nova.itens_manuais ?? [])
       setExtra(nova.extraordinarias)
       setRevisar(nova.revisar)
@@ -233,8 +228,6 @@ export function useDecisoes(sessao: Sessao): UseDecisoesReturn {
   }, [sessao.sessao_id])
 
   return {
-    parcelasSeguro,
-    setParcelasSeguro,
     itensManuais,
     salvarItensManuais,
     extra,

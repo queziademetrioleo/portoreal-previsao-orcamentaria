@@ -58,7 +58,6 @@ export interface DecisaoEditavel {
 }
 
 export interface PayloadDecisoes {
-  parcelas_seguro?: number | null
   itens_manuais?: import('./types').ItemManual[]
   extraordinarias: Record<string, DecisaoEditavel>
   revisar: Record<string, DecisaoEditavel>

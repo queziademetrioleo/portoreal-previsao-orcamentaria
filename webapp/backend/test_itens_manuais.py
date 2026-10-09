@@ -77,7 +77,7 @@ class ItensManuaisTest(unittest.TestCase):
         self.assertAlmostEqual(sum(v for _, v in despesas), 200)
         self.assertIn({'classe': 'Receita extra', 'mensal': 50}, enviado['resumo']['cenarios']['receitas_ordinarias'])
 
-    def test_reanalise_preserva_itens_e_parcelas_informadas(self):
+    def test_reanalise_preserva_itens(self):
         import asyncio
         manual = [{'id': 'r', 'tipo': 'receita', 'nome': 'Locação', 'valor': 50}]
         row = {'nome_condominio': 'Teste', 'ano_previsao': 2027,
@@ -92,10 +92,9 @@ class ItensManuaisTest(unittest.TestCase):
              patch.object(main, '_salvar_estado_sync'):
             s = asyncio.run(main.reanalisar_sincrono('manual'))
         self.assertEqual(s['itens_manuais'], manual)
-        self.assertEqual(s['parcelas_seguro'], 6)
         self.assertEqual(s['resumo']['receita_anual'], 24600)
 
-    def test_pdf_pede_parcelas_quando_documento_nao_informa(self):
+    def test_pdf_usa_ultima_parcela_sem_exigir_quantidade(self):
         R = resultado()
         R['bal']['despesas'][0].update(grupo='Diversas', classe='Seguro Incêndio')
         R['des']['itens'] = [{'grupo': 'Diversas', 'classe': 'Seguro Incêndio',
@@ -108,11 +107,9 @@ class ItensManuaisTest(unittest.TestCase):
              patch.object(main, 'gerar_relatorio_pdf', return_value=b'%PDF-test') as render:
             client = TestClient(main.app)
             response = client.post('/api/sessao/manual/relatorio-pdf', json={})
-            self.assertEqual(response.status_code, 400)
-            render.assert_not_called()
-            response = client.post('/api/sessao/manual/relatorio-pdf', json={'parcelas_seguro': 6})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(s['resumo']['subtotal'], 1200)
+            self.assertEqual(s['resumo']['subtotal'], 2400)
+            render.assert_called_once()
 
     def test_validacao_servidor(self):
         for campo, valor in [('nome', '  '), ('valor', 0), ('valor', -1),
@@ -139,12 +136,13 @@ class UltimoPagamentoTest(unittest.TestCase):
         self.assertEqual(r['subtotal'], 1800)
         self.assertAlmostEqual(r['total_previsto'], 1980)
 
-    def test_seguro_ultima_parcela_multiplica_total_nao_numero_pago(self):
+    def test_seguro_ultima_parcela_e_valor_mensal(self):
         r = self.projetar('SEGURO CONDOMINIAL OBRIGATÓRIO', [
             {'data': '2026-09-10', 'valor_pago': 846.62, 'parcela': '02/06'},
             {'data': '2025-10-10', 'valor_pago': 700, 'parcela': '06/06'}])
-        self.assertEqual(r['subtotal'], 5079.72)
-        self.assertAlmostEqual(r['total_previsto'], 5587.692)
+        self.assertEqual(r['subtotal'], 10159.44)
+        self.assertEqual(r['subtotal'] / 12, 846.62)
+        self.assertAlmostEqual(r['total_previsto'], 11175.384)
 
     def test_seguro_legado_e_atual_nao_duplicam_projecao(self):
         r = resultado()
@@ -155,9 +153,9 @@ class UltimoPagamentoTest(unittest.TestCase):
             {'grupo': 'Diversas', 'classe': antigo['classe'], 'data': '2026-05-01', 'valor_pago': 100, 'cat': 'Recorrente'},
             {'grupo': 'Diversas', 'classe': atual['classe'], 'data': '2026-09-01', 'valor_pago': 200, 'parcela': '02/06', 'cat': 'Recorrente'}]
         r = previsao.recalcular(r)
-        self.assertEqual(r['subtotal'], 1200)
+        self.assertEqual(r['subtotal'], 2400)
         self.assertEqual(r['linhas'][0]['final'], 0)
-        self.assertEqual(r['linhas'][1]['final'], 1200)
+        self.assertEqual(r['linhas'][1]['final'], 2400)
 
     def test_decimo_terceiro_nao_multiplica_por_doze(self):
         r = self.projetar('13º Taxa de Administração', [{'data': '2026-09-10', 'valor_pago': 200}])
@@ -168,16 +166,16 @@ class UltimoPagamentoTest(unittest.TestCase):
             {'data': '2026-02-12', 'valor_pago': 544.31, 'descricao': 'Parcela 6/6'},
             {'data': '2026-09-18', 'valor_pago': 652.90, 'descricao': 'Parcela 02/06'},
             {'data': '2026-08-20', 'valor_pago': 652.90, 'descricao': 'Parcela 01/06'}])
-        self.assertEqual(r['subtotal'], 3917.40)
-        self.assertEqual(r['subtotal'] / 12, 326.45)
+        self.assertEqual(r['subtotal'], 7834.80)
+        self.assertAlmostEqual(r['subtotal'] / 12, 652.90)
 
-    def test_seguro_quantidade_informada(self):
+    def test_seguro_ignora_quantidade_salva_antiga(self):
         r = self.projetar('Seguro Obrigatório', [{'data': '2026-09-10', 'valor_pago': 200}], parcelas=5)
-        self.assertEqual(r['subtotal'], 1000)
+        self.assertEqual(r['subtotal'], 2400)
 
     def test_seguro_parcela_na_descricao(self):
         r = self.projetar('Seguro Incêndio', [{'data': '2026-09-10', 'valor_pago': 200, 'descricao': 'Parcela 2/8'}])
-        self.assertEqual(r['subtotal'], 1600)
+        self.assertEqual(r['subtotal'], 2400)
 
     def test_seguro_vida_nao_muda_regra(self):
         r = self.projetar('Seguro de Vida', [{'data': '2026-09-10', 'valor_pago': 200, 'parcela': '2/8'}])

@@ -17,18 +17,17 @@ test('valor mensal aceita formato brasileiro sem confundir milhares com centavos
   }
   for (const texto of ['', '0', '-10', 'NaN', '0,001', '1,2,3', '1.234.56', '1e3']) assert.equal(parseValorMensal(texto),null)
 })
-test('API preserva valores mensais, remoção e quantidade de parcelas do seguro', async t => {
+test('API preserva valores mensais e remoção', async t => {
   const requests=[]
   t.mock.method(globalThis,'fetch',async (url,options) => {
     requests.push({url,body:JSON.parse(options.body)})
     return new Response(JSON.stringify({ok:true,cenarios:{com_fundo:{receita_anual:1200}}}))
   })
   const payload={extraordinarias:{},revisar:{},inadimplencia:{},lancamentos:{},
-    itens_manuais:[{id:'r',tipo:'receita',nome:'Locação',valor:1234.56}],parcelas_seguro:6}
+    itens_manuais:[{id:'r',tipo:'receita',nome:'Locação',valor:1234.56}]}
   await salvarDecisoes('teste',payload)
   const r=await previewDocumento('teste',payload)
   assert.equal(requests[0].body.itens_manuais[0].valor,1234.56)
-  assert.equal(requests[0].body.parcelas_seguro,6)
   assert.equal(r.cenarios.com_fundo.receita_anual,1200)
   await salvarDecisoes('teste',{...payload,itens_manuais:[]})
   assert.deepEqual(requests[2].body.itens_manuais,[])

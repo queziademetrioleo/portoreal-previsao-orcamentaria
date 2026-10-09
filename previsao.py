@@ -929,7 +929,7 @@ ANUALIZAR = ['contrato', 'pro-labore', 'pro labore', 'taxa de administrac',
 INFLACAO = 0.10
 
 
-def _projecao_ultima_taxa(linha, itens, parcelas_seguro=None):
+def _projecao_ultima_taxa(linha, itens):
     """Regras específicas: pagamento mais recente da mesma conta, por data."""
     nc = _norm(linha['classe'])
     seguro = 'seguro' in nc and any(k in nc for k in ('obrigat', 'condomin', 'incendio'))
@@ -953,14 +953,6 @@ def _projecao_ultima_taxa(linha, itens, parcelas_seguro=None):
                 or _norm(ultimo.get('grupo')) != _norm(linha.get('grupo'))):
             return 0.0, 'Seguro projetado na conta do pagamento mais recente'
 
-        texto = str(ultimo.get('parcela') or '') + ' ' + str(ultimo.get('descricao') or '')
-        match = re.search(r'(?<![\d/])(\d{1,2})\s*/\s*(\d{1,2})(?![\d/])', texto)
-        if parcelas_seguro is not None:
-            n = int(parcelas_seguro)
-        elif match and 1 <= int(match[1]) <= int(match[2]) <= 60:
-            n = int(match[2])
-        else:
-            return None
     valor = float(ultimo['valor_pago'])
     return round(valor * n, 2), f'Última parcela paga R$ {valor:.2f} × {n}'
 
@@ -1944,7 +1936,7 @@ def recalcular(R, inflacao_pct=None):
         ng, nc = _norm(g), _norm(c)
         base = l['total']
         ded, regra, final = 0.0, '', base
-        ultima_taxa = _projecao_ultima_taxa(l, R['des']['itens'], R.get('parcelas_seguro'))
+        ultima_taxa = _projecao_ultima_taxa(l, R['des']['itens'])
         if 'obras' in ng or 'benfeitoria' in ng:
             # R1: capital, sempre fora — mesmo que a revisão tenha marcado
             # "manter" (feedback José Henrique 09/2026: "despesas com

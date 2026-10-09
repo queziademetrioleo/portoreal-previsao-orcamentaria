@@ -400,8 +400,6 @@ def _fluxo_mensal_balanco(bal):
 
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
-    if 'parcelas_seguro' in dec.model_fields_set:
-        estado['parcelas_seguro'] = dec.parcelas_seguro
     if dec.itens_manuais is not None:
         estado['itens_manuais'] = [i.model_dump() for i in dec.itens_manuais]
     # Aumento previsto é fixo (core.INFLACAO); o valor do payload é ignorado.
@@ -435,7 +433,6 @@ def _recalcular_com_decisoes(sid, estado):
 
     R = copy.deepcopy(_obter_R(sid))
     R['inflacao_pct'] = core.INFLACAO
-    R['parcelas_seguro'] = estado.get('parcelas_seguro')
     valores_editados = {
         i['id']: _valor_revisado(i)
         for i in (estado['extraordinarias'] + estado['revisar'])
@@ -644,7 +641,6 @@ class ItemManual(BaseModel):
 
 
 class Decisoes(BaseModel):
-    parcelas_seguro: int | None = Field(default=None, ge=1, le=60)
     itens_manuais: list[ItemManual] | None = Field(default=None, max_length=200)
     extraordinarias: dict = Field(default_factory=dict)
     revisar: dict = Field(default_factory=dict)
@@ -984,7 +980,6 @@ async def reanalisar_sincrono(sid: str):
             estado = _montar_estado(sid, nome, ano, R, row.get('tem_fundo_reserva'))
             anterior = json.loads(row.get('estado_json') or '{}')
             estado['itens_manuais'] = anterior.get('itens_manuais') or []
-            estado['parcelas_seguro'] = anterior.get('parcelas_seguro')
             R2, impacto = _recalcular_com_decisoes(sid, estado)
             _atualizar_resumo_calculado(estado, R2, impacto)
             _salvar_estado_sync(sid, estado)
@@ -1088,11 +1083,6 @@ def relatorio_pdf(sid: str, dec: Decisoes):
         )
     _preparar_explicacoes(estado)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
-    for linha in (R2.get('bal') or {}).get('despesas') or []:
-        nc = core._norm(linha['classe'])
-        if (float(linha.get('total') or 0) > 0 and 'seguro' in nc and any(k in nc for k in ('obrigat', 'condomin', 'incendio'))
-                and core._projecao_ultima_taxa(linha, R2['des']['itens'], estado.get('parcelas_seguro')) is None):
-            raise HTTPException(400, 'Informe o total de parcelas do seguro obrigatório antes de gerar o PDF.')
     recalculado = time.perf_counter()
     _atualizar_resumo_calculado(estado, R2, impacto_receita)
     estado['com_fundo'] = dec.com_fundo

@@ -109,7 +109,6 @@ export interface Resumo {
 export type Sistema = 'condo21' | 'alma' | 'group'
 
 export interface Sessao {
-  parcelas_seguro?: number | null
   itens_manuais?: ItemManual[]
   origem_sistema?: Sistema | 'misto'
   sistemas?: Sistema[]
