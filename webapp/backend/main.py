@@ -22,6 +22,7 @@ import threading
 import tempfile
 import datetime
 import logging
+import time
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from fastapi.exceptions import RequestValidationError
@@ -356,11 +357,10 @@ def _explicacao_deterministica_inad(item):
     return {'resumo': resumo, 'evidencias': evidencias}
 
 
-def _enriquecer_explicacoes_ia(estado):
-    """Gera explicacoes curtas e humanas para o relatório final.
+def _preparar_explicacoes(estado):
+    """Prepara explicações locais a partir da análise e das decisões já revistas.
 
-    A IA é opcional: se não houver chave/resposta válida, mantemos explicações
-    determinísticas para não bloquear a geração.
+    A exportação não deve esperar uma nova chamada externa de IA.
     """
     despesas = [
         item for item in (estado.get('extraordinarias', []) + estado.get('revisar', []))
@@ -371,53 +371,6 @@ def _enriquecer_explicacoes_ia(estado):
         item['explicacao'] = _explicacao_deterministica_despesa(item)
     for item in inad:
         item['explicacao'] = _explicacao_deterministica_inad(item)
-
-    if not core._ia_disponivel() or not despesas:
-        return
-
-    payload = []
-    for item in despesas[:80]:
-        payload.append({
-            'id': item['id'],
-            'decisao': 'removido' if item.get('decisao') == 'aprovada' else 'mantido',
-            'grupo': item.get('grupo'),
-            'classe': item.get('classe'),
-            'descricao': item.get('descricao'),
-            'valor': _valor_revisado(item),
-            'frequencia_12m': item.get('n_meses'),
-            'motivo_tecnico': item.get('motivo'),
-            'nota_humana': item.get('nota'),
-            'origem': item.get('origem'),
-        })
-    sistema = (
-        'Você é um analista financeiro de condomínios. Explique decisões de revisão '
-        'orçamentária para um síndico idoso, com linguagem simples, respeitosa e direta. '
-        'Não invente fatos. Use apenas os dados recebidos.'
-    )
-    user = (
-        'Para cada item, retorne JSON no formato '
-        '{"itens":[{"id":1,"resumo":"frase curta","evidencias":["ponto 1","ponto 2"]}]}. '
-        'Explique por que foi removido ou mantido, destacando pontualidade, frequência, '
-        'parcelas, regra/IA e nota humana quando houver.\n\n'
-        f'Itens: {json.dumps(payload, ensure_ascii=False)}'
-    )
-    try:
-        resp = core._claude_chat(sistema, user, max_tokens=5000, temperature=0)
-        if not resp:
-            return
-        data = core._extrai_json(resp)
-        por_id = {int(i.get('id')): i for i in data.get('itens', []) if i.get('id') is not None}
-        for item in despesas:
-            exp = por_id.get(int(item['id']))
-            if not exp:
-                continue
-            resumo = str(exp.get('resumo') or '').strip()
-            evidencias = exp.get('evidencias') if isinstance(exp.get('evidencias'), list) else []
-            evidencias = [str(e).strip() for e in evidencias if str(e).strip()][:5]
-            if resumo:
-                item['explicacao'] = {'resumo': resumo[:500], 'evidencias': evidencias}
-    except Exception as exc:
-        logger.warning('Falha ao gerar explicacoes IA: %s', exc)
 
 
 def _fluxo_mensal_balanco(bal):
@@ -1048,6 +1001,7 @@ def preview(sid: str, dec: Decisoes):
 @app.post('/api/sessao/{sid}/relatorio-pdf')
 def relatorio_pdf(sid: str, dec: Decisoes):
     """Aplica as decisões e devolve o PDF, sem criar documento XLSX intermediário."""
+    inicio = time.perf_counter()
     estado = _carregar_estado(sid)
 
     _registrar_aprendizado_decisoes(sid, estado, dec)
@@ -1062,8 +1016,9 @@ def relatorio_pdf(sid: str, dec: Decisoes):
             f'Existem {len(pendentes)} itens pendentes de revisão. '
             'Decida se cada item deve ser removido ou mantido antes de gerar o relatório.'
         )
-    _enriquecer_explicacoes_ia(estado)
+    _preparar_explicacoes(estado)
     R2, impacto_receita = _recalcular_com_decisoes(sid, estado)
+    recalculado = time.perf_counter()
     estado['resumo']['subtotal'] = round(R2['subtotal'], 2)
     estado['resumo']['total_previsto'] = round(R2['total_previsto'], 2)
     estado['resumo']['desconsideracoes'] = round(R2['desconsideracoes'], 2)
@@ -1080,7 +1035,11 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     estado['com_fundo'] = dec.com_fundo
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
+    inicio_render = time.perf_counter()
     pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None)
+    fim = time.perf_counter()
+    logger.info('PDF sessão %s: preparação/cálculo %.2fs; persistência %.2fs; renderização %.2fs; total %.2fs',
+                sid, recalculado - inicio, inicio_render - recalculado, fim - inicio_render, fim - inicio)
     filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.pdf"
     return Response(
         content=pdf_bytes,
