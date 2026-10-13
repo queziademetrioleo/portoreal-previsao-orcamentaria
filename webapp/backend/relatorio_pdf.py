@@ -635,7 +635,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
 
     previsao_final = estado.get('previsao_final') or []
     receitas, _ = _extrair_receitas_despesas(previsao_final)
-    if estado.get('itens_manuais') or 'alma' in (estado.get('sistemas') or []):
+    if cenarios or estado.get('itens_manuais') or 'alma' in (estado.get('sistemas') or []):
         receitas = []
     receitas = [
         ('Taxas de Condomínio', valor)
@@ -643,13 +643,13 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         for label, valor in receitas
     ]
     ordinarias = cenarios.get('receitas_ordinarias') or []
-    if not receitas and ordinarias:
-        # Uma linha por receita (Taxas, Gás, Água...), como a previsão manual;
+    if not receitas and cenarios:
+        # Usa a composição filtrada pelo motor, também em sessões antigas;
         # o Fundo de Reserva aparece separado, nunca somado às Taxas.
         receitas = [(i['classe'], float(i['mensal'])) for i in ordinarias]
-        if fundo_reserva_anual > 0.005:
+        if abs(fundo_reserva_anual) > 0.005:
             receitas.insert(1, ('Fundo de Reserva', fundo_reserva_anual / 12))
-    if not receitas:
+    if not receitas and not cenarios:
         receitas = [('Taxas de Condomínio', resumo.get('receita_mensal') or 0)]
     # Receitas não ordinárias (aluguel de espaço) aparecem na tabela, mas só
     # entram nas opções de cálculo — nunca na receita ordinária.

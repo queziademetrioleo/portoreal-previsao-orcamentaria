@@ -958,14 +958,12 @@ def _projecao_ultima_taxa(linha, itens):
 
 
 def _eh_fundo_reserva(classe):
-    nc = _norm(classe)
-    return 'fundo' in nc and 'reserva' in nc
+    nc = re.sub(r'[^a-z0-9]+', ' ', _norm(classe)).strip()
+    return bool(re.fullmatch(r'fundo (?:de )?reserva', nc))
 
 
-# Receita que nao e taxa nem repasse de consumo: aluguel/cessao de espaco
-# (ex.: "Aluguel de Espaço p/ Antena de Telefonia"). Fica FORA da receita
-# ordinaria e entra so nas opcoes de calculo do relatorio (feedback José
-# Henrique 09/2026: só receita / + fundo / + aluguel / + fundo + aluguel).
+# Compatibilidade com relatórios antigos que separavam aluguel em cenários.
+# A previsão atual inclui locações ordinárias identificadas no total.
 _RECEITA_NAO_ORDINARIA = ('aluguel', 'cessao', 'locacao')
 
 
@@ -990,21 +988,52 @@ def receitas_nao_ordinarias(bal):
     return itens
 
 
-# Filtro legado para identificação de repasses/geradores antigos.
-# O total vigente da previsão web inclui todas as contas do documento de receita.
+# O parser conserva todas as contas para conferência; a projeção usa somente
+# taxa condominial, reserva e receitas ordinárias identificadas.
 _REC_CLASSES_EXCLUIDAS = ('credito', 'debito', 'debitos', 'rendimento',
                           'outros', 'multa', 'juros', 'acrescimo')
 
 
 def _rec_classe_entra(nome_classe):
-    nc = _norm(nome_classe)
-    return not any(t in nc for t in _REC_CLASSES_EXCLUIDAS)
+    return (_eh_tx_condominio(nome_classe) or _eh_fundo_reserva(nome_classe)
+            or _eh_receita_recorrente(nome_classe))
+
+
+def _eh_tx_condominio(classe):
+    nc = re.sub(r'[^a-z0-9]+', ' ', _norm(classe)).strip()
+    return bool(re.fullmatch(r'(?:tx|taxa|taxas|cota|cotas) (?:de )?(?:condomin(?:io|ial|iais)|cond)', nc))
+
+
+def _eh_receita_recorrente(classe):
+    nc = _norm(classe)
+    # Aluguel de salão, multas e outras entradas eventuais não são recorrentes
+    # só por estarem no relatório. Antena e locações explicitamente mensais
+    # são reconhecidas; outras receitas confirmadas podem ser incluídas à mão.
+    return (not any(t in nc for t in (*_REC_CLASSES_EXCLUIDAS, 'extra', 'complement', 'desconto'))
+            and any(t in nc for t in ('aluguel', 'locacao', 'cessao', 'arrendamento'))
+            and any(t in nc for t in ('antena', 'telefonia', 'mensal', 'recorrente')))
+
+
+def _receitas_previstas_documento(rec_doc):
+    """Contas projetáveis do mês vigente, com taxa líquida de descontos."""
+    contas = (rec_doc or {}).get('por_classe') or {}
+    linhas = [{'classe': 'Taxas de Condomínio' if _eh_tx_condominio(classe) else classe,
+               'mensal': round(float(valores['lancado']), 2)}
+              for classe, valores in contas.items() if _rec_classe_entra(classe)]
+    descontos = sum(min(0, float(valores['lancado'])) for classe, valores in contas.items()
+                    if _norm(classe) == 'desconto' or
+                    (_norm(classe).startswith('desconto') and 'condomin' in _norm(classe)))
+    taxa = next((l for l in linhas if _eh_tx_condominio(l['classe'])), None)
+    if taxa is not None:
+        taxa['mensal'] = round(taxa['mensal'] + descontos, 2)
+    return linhas
 
 
 def parse_rec(path):
     """Parse do REC — Demonstrativo de Receitas por Unidade (Condominio21).
-    Fonte principal da receita anual (feedback CEO 07/2026): usa o total
-    LANCADO (cobrado) do mes mais recente x 12, mais precisa que a media
+    Fonte principal da receita anual: conserva o valor LANCADO (cobrado)
+    por conta do mês vigente. O motor filtra as contas ordinárias antes de
+    multiplicar por 12, sem usar a média
     de 12 meses do balanual (que dilui reajustes de taxa feitos no meio
     do ano). A inadimplencia continua tratada separadamente pela regra R8
     — por isso usamos Lancado (cobranca), nao Liquidado (pago).
@@ -1097,15 +1126,9 @@ def parse_rec(path):
     total_liquidado_mes = sum(v['liquidado'] for v in por_classe.values())
     fundo_lancado_mes = sum(v['lancado'] for k, v in por_classe.items() if _eh_fundo_reserva(k))
 
-    # Taxa de condominio: classe cujo nome contem "condominio" ou comeca com
-    # "tx" (mesma convencao usada em gerador_previsao.py:_receita_entra).
-    def _eh_tx_condominio(nome_classe):
-        nc = _norm(nome_classe)
-        return 'condominio' in nc or nc.startswith('tx')
-
     tx_condominio_lancado_mes = sum(v['lancado'] for k, v in por_classe.items()
                                      if _eh_tx_condominio(k))
-    # Subtotal mantido para compatibilidade; a previsão usa o total do documento.
+    # Subtotal bruto das cobranças fixas, mantido para compatibilidade.
     fixo_lancado_mes = tx_condominio_lancado_mes + fundo_lancado_mes
 
     return {
@@ -1165,39 +1188,45 @@ def _status_resultado(resultado):
     return 'deficit'
 
 
+def _receitas_previstas_balanco(bal):
+    """Aplica o mesmo filtro às contas anuais, quando não há REC."""
+    contas = defaultdict(lambda: {'lancado': 0.0})
+    for linha in (bal or {}).get('receitas') or []:
+        contas[linha.get('classe') or '']['lancado'] += float(linha.get('total') or 0)
+    # O filtro é independente da unidade do valor; aqui os valores são anuais.
+    return _receitas_previstas_documento({'por_classe': contas})
+
+
 def _receita_fundo_do_balanual(bal):
     """Fallback: deriva receita anual e fundo de reserva do balanual, como
     era feito antes do REC. Usado so quando o REC nao foi enviado (nao
     deveria acontecer no fluxo normal do webapp, onde o REC e obrigatorio;
     existe para manter o motor utilizavel em scripts/analise avulsa)."""
-    receitas = (bal or {}).get('receitas') or []
-    fundo = sum(float(l.get('total') or 0) for l in receitas
-                if _eh_fundo_reserva(l.get('classe')))
-    receita_total = float((bal or {}).get('total_receitas') or 0)
-    if receita_total <= 0:
-        receita_total = sum(float(l.get('total') or 0) for l in receitas)
-    receita_total -= sum(float(l.get('total') or 0) for l in receitas
-                         if _eh_receita_nao_ordinaria(l.get('classe')))
+    receitas = _receitas_previstas_balanco(bal)
+    fundo = sum(l['mensal'] for l in receitas if _eh_fundo_reserva(l['classe']))
+    receita_total = sum(l['mensal'] for l in receitas)
     return receita_total, fundo
 
 
 def _total_receita_documento(rec_doc):
-    """Recompõe também caches antigos que filtravam algumas contas do REC."""
-    contas = rec_doc.get('por_classe') or {}
-    if contas:
-        return round(sum(float(v['lancado']) for v in contas.values()), 2)
-    return round(float(rec_doc['total_lancado_mes']), 2)
+    """Recompõe a receita ordinária, inclusive em sessões com cache antigo."""
+    if not rec_doc.get('por_classe'):
+        raise ValueError('Documento de receita sem contas discriminadas: reimporte o relatório para apurar a receita ordinária.')
+    return round(sum(l['mensal'] for l in _receitas_previstas_documento(rec_doc)), 2)
+
+
+def _fundo_reserva_documento(rec_doc):
+    return round(sum(l['mensal'] for l in _receitas_previstas_documento(rec_doc)
+                     if _eh_fundo_reserva(l['classe'])) * 12, 2)
 
 
 def receitas_ordinarias(bal, rec_doc):
     """Composição mensal do documento de receita vigente, sem médias do balanual."""
     if not rec_doc:
-        return []
-    return [{'classe': ('Taxas de Condomínio' if _norm(classe) in (
-                'taxa de condominio', 'taxas de condominio', 'tx. condominio', 'tx condominio') else classe),
-             'mensal': round(float(valores['lancado']), 2)}
-            for classe, valores in rec_doc['por_classe'].items()
-            if not _eh_fundo_reserva(classe)]
+        return [{'classe': l['classe'], 'mensal': round(l['mensal'] / 12, 2)}
+                for l in _receitas_previstas_balanco(bal) if not _eh_fundo_reserva(l['classe'])]
+    return [l for l in _receitas_previstas_documento(rec_doc)
+            if not _eh_fundo_reserva(l['classe'])]
 
 
 def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
@@ -1487,8 +1516,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     if rec_doc:
         receita_mensal_documento = _total_receita_documento(rec_doc)
         receita_anual = round(receita_mensal_documento * 12, 2)
-        fundo_reserva_anual = rec_doc['fundo_reserva_anual']
-        logger.info('Receita: total lançado do documento %s R$ %.2f × 12 = R$ %.2f',
+        fundo_reserva_anual = _fundo_reserva_documento(rec_doc)
+        logger.info('Receita ordinária do documento %s R$ %.2f × 12 = R$ %.2f',
                     rec_doc.get('mes_ref'), receita_mensal_documento, receita_anual)
     else:
         receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(bal)
@@ -1858,7 +1887,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'rec': rec_doc, 'receita_anual': receita_anual,
             'fundo_reserva_anual': fundo_reserva_anual,
             'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
-                                  [] if rec_doc else receitas_nao_ordinarias(bal),
+                                  [],
                                   receitas_ordinarias(bal, rec_doc)),
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
@@ -1996,7 +2025,7 @@ def recalcular(R, inflacao_pct=None):
     fundo_reserva_anual = R.get('fundo_reserva_anual')
     if R.get('rec'):
         receita_anual = round(_total_receita_documento(R['rec']) * 12, 2)
-        fundo_reserva_anual = R['rec']['fundo_reserva_anual']
+        fundo_reserva_anual = _fundo_reserva_documento(R['rec'])
         R.update(receita_anual=receita_anual, fundo_reserva_anual=fundo_reserva_anual)
     if receita_anual is None:
         receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(R.get('bal'))
@@ -2007,7 +2036,7 @@ def recalcular(R, inflacao_pct=None):
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,
               'cenarios': calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
-                                            [] if R.get('rec') else receitas_nao_ordinarias(bal),
+                                            [],
                                             receitas_ordinarias(bal, R.get('rec')))})
     return R
 

@@ -139,6 +139,22 @@ class ReceitaCondo21Test(unittest.TestCase):
 
 
 class ReceitasPdfTest(unittest.TestCase):
+    def test_pdf_prefere_composicao_filtrada_a_tabela_antiga(self):
+        import relatorio_pdf
+        s = estado()
+        s.update(nome_condominio='Berlin', ano_previsao=2026, sistemas=['group'])
+        s['previsao_final'] = [{'row': 10, 'label': 'Juros', 'mensal': 999}]
+        s['resumo'] = {'receita_mensal': 110, 'total_previsto': 1200,
+                       'cenarios': previsao.calcular_cenarios(1320, 120, 1200,
+                           ordinarias=[{'classe': 'Taxas de Condomínio', 'mensal': 100}])}
+        with patch.object(relatorio_pdf, 'HTML') as html:
+            html.return_value.write_pdf.return_value = b'%PDF-test'
+            relatorio_pdf.gerar_relatorio_pdf(s)
+        rendered = html.call_args.kwargs['string']
+        self.assertNotIn('<td>Juros</td>', rendered)
+        self.assertIn('<td>Taxas de condomínio</td>', rendered)
+        self.assertIn('110,00', rendered)
+
     def test_desconto_embutido_na_taxa_preserva_total_e_normaliza_rotulos(self):
         receitas = [('COMPLEMENTO TX. CONDOMÍNIO', 1676.55), ('Fundo de Reserva', 1529.27),
                     ('DESCONTO', -46.55), ('JUROS', 626.09), ('MULTA', 35.13),
@@ -212,8 +228,8 @@ class UltimoPagamentoTest(unittest.TestCase):
         r = self.projetar('Seguro de Vida', [{'data': '2026-09-10', 'valor_pago': 200, 'parcela': '2/8'}])
         self.assertEqual(r['subtotal'], 1200)
 
-    def test_receita_documento_prevalece_tambem_condo21_e_group(self):
-        for sistema in ('condo21', 'group'):
+    def test_receita_ordinaria_filtrada_em_todos_sistemas(self):
+        for sistema in ('condo21', 'group', 'alma'):
             with self.subTest(sistema=sistema):
                 r = resultado()
                 r['rec'] = {'sistema': sistema, 'total_lancado_mes': 100,
@@ -225,13 +241,14 @@ class UltimoPagamentoTest(unittest.TestCase):
                 r['bal']['receitas'] = [{'classe': 'Gás', 'total': 12000},
                                        {'classe': 'Aluguel', 'monthly': [1000]*12}]
                 r = previsao.recalcular(r)
-                self.assertEqual(r['receita_anual'], 1596)
-                self.assertEqual(r['cenarios']['com_fundo']['receita_mensal'], 133)
-                self.assertEqual(r['cenarios']['sem_fundo']['receita_mensal'], 123)
+                self.assertEqual(r['receita_anual'], 1296)
+                self.assertEqual(r['cenarios']['com_fundo']['receita_mensal'], 108)
+                self.assertEqual(r['cenarios']['sem_fundo']['receita_mensal'], 98)
                 self.assertEqual(r['cenarios']['receitas_nao_ordinarias'], [])
-                self.assertIn({'classe': 'Gás', 'mensal': 20}, r['cenarios']['receitas_ordinarias'])
+                self.assertEqual(r['cenarios']['receitas_ordinarias'],
+                                 [{'classe': 'Taxas de Condomínio', 'mensal': 98}])
 
-    def test_alma_total_inclui_todas_contas_sem_somar_legado(self):
+    def test_exemplo_reportado_exclui_complemento_juros_multa_taxa_extra(self):
         r = resultado()
         r['rec'] = {'sistema': 'alma', 'total_lancado_mes': 36928.38,
                     'fundo_reserva_anual': 18351.24, 'por_classe': {
@@ -239,12 +256,46 @@ class UltimoPagamentoTest(unittest.TestCase):
                         'FUNDO DE RESERVA': {'lancado': 1529.27},
                         'DESCONTO': {'lancado': -46.55},
                         'JUROS': {'lancado': 626.09},
-                        'OUTRAS': {'lancado': 3408.79}}}
+                        'MULTA': {'lancado': 35.13},
+                        'COMPLEMENTO TX. CONDOMÍNIO': {'lancado': 1676.55},
+                        'TAXA EXTRA': {'lancado': 1697.11}}}
         r['bal']['receitas'] = [{'classe': 'Gás', 'total': 12000}, {'classe': 'Aluguel', 'total': 12000, 'monthly': [1000]*12}]
         r = previsao.recalcular(r)
-        self.assertEqual(r['receita_anual'], 443140.56)
+        self.assertEqual(r['receita_anual'], 394722)
+        self.assertEqual(r['cenarios']['com_fundo']['receita_mensal'], 32893.50)
+        self.assertEqual(r['cenarios']['sem_fundo']['receita_mensal'], 31364.23)
         self.assertEqual(r['cenarios']['receitas_nao_ordinarias'], [])
-        self.assertAlmostEqual(sum(i['mensal'] for i in r['cenarios']['receitas_ordinarias']) + 1529.27, 36928.38)
+        self.assertEqual(r['cenarios']['receitas_ordinarias'],
+                         [{'classe': 'Taxas de Condomínio', 'mensal': 31364.23}])
+
+    def test_aluguel_antena_entra_e_locacao_eventual_nao(self):
+        for sistema in ('condo21', 'group', 'alma'):
+            with self.subTest(sistema=sistema):
+                r = resultado()
+                r['rec'] = {'sistema': sistema, 'fundo_reserva_anual': 120,
+                            'por_classe': {nome: {'lancado': valor} for nome, valor in [
+                                ('Tx. Condomínio', 100), ('Fundo Reserva', 10),
+                                ('Aluguel de Espaço p/ Antena de Telefonia', 50),
+                                ('Locação mensal de espaço', 20), ('Aluguel salão de festas', 30),
+                                ('Juros fundo de reserva', 2), ('Complemento fundo de reserva', 5),
+                                ('Juros aluguel antena', 5), ('Fundo de obras', 100),
+                                ('Outras receitas', 70), ('Rendimento', 2)]}}
+                r = previsao.recalcular(r)
+                self.assertEqual(r['receita_anual'], 2160)
+                self.assertEqual(r['cenarios']['sem_fundo']['receita_mensal'], 170)
+                self.assertEqual(len(r['cenarios']['receitas_ordinarias']), 3)
+
+    def test_rec_sem_discriminacao_nao_reutiliza_total_bruto(self):
+        with self.assertRaisesRegex(ValueError, 'reimporte'):
+            previsao._total_receita_documento({'total_lancado_mes': 999})
+
+    def test_fallback_balanco_nao_soma_receitas_eventuais(self):
+        bal = {'total_receitas': 999999, 'receitas': [
+            {'classe': nome, 'total': valor} for nome, valor in [
+                ('Taxa de Condomínio', 1200), ('Fundo de reserva', 120),
+                ('Aluguel antena', 600), ('Juros', 60), ('Taxa extra', 300),
+                ('Complemento tx. condomínio', 100), ('Gás', 240)]]}
+        self.assertEqual(previsao._receita_fundo_do_balanual(bal), (1920, 120))
 
 
 if __name__ == '__main__':
