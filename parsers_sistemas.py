@@ -111,12 +111,17 @@ def load_selected(folder, core):
         data.update(origem_sistema='group', sistemas=systems, inadimplencia_apurada=False)
         return data
     sources = {}
+    # Com o Alma no conjunto, os demais sistemas só fornecem despesas detalhadas.
     if 'condo21' in systems:
-        sources['condo21'] = {'bal': core.parse_balanual(str(root / 'balanual.xls')),
-                              'des': core.parse_desbai(str(root / 'desbai06.xls')),
-                              'rec': core.parse_rec(str(root / 'rec02.xls'))}
+        if 'alma' in systems:
+            items = core.parse_desbai(str(root / 'desbai06.xls'))
+            sources['condo21'] = {'bal': alma.balance_from_payments(items['itens']), 'des': items}
+        else:
+            sources['condo21'] = {'bal': core.parse_balanual(str(root / 'balanual.xls')),
+                                  'des': core.parse_desbai(str(root / 'desbai06.xls')),
+                                  'rec': core.parse_rec(str(root / 'rec02.xls'))}
     if 'group' in systems:
-        sources['group'] = group.load_group(folder, core)
+        sources['group'] = group.load_group_expenses(folder) if 'alma' in systems else group.load_group(folder, core)
     if 'alma' in systems:
         if not (root / 'alma_inad.pdf').exists() and not config.get('sem_inadimplencia_alma'):
             raise ValueError('Envie o relatório de inadimplência Alma ou declare sua ausência.')
@@ -211,30 +216,8 @@ def load_selected(folder, core):
     arrears_known = False
     if 'alma' in systems:
         if (root / 'alma_inad.pdf').exists():
-            tax_sources = []
-            if 'condo21' in systems:
-                tax_sources.append((sources['condo21']['rec']['mes_ref'],
-                                    alma.read_unit_taxes(root / 'rec02.xls')))
-            if 'group' in systems:
-                group_rec = sources['group']['rec']
-                unit_taxes = defaultdict(float)
-                for item in group_rec['itens']:
-                    if item['mes_ref'] == group_rec['mes_ref'] and 'condominio' in alma.norm(item['classe']):
-                        unit = str(int(item['unidade'])) if item['unidade'].isdigit() else item['unidade']
-                        unit_taxes[unit] += item['lancado']
-                tax_sources.append((group_rec['mes_ref'], dict(unit_taxes)))
-            usable = [(ref, taxes) for ref, taxes in tax_sources if ref and taxes]
-            taxes = max(usable, key=lambda pair: alma.month_key(pair[0]))[1] if usable else {}
-            try:
-                ina = alma.read_arrears(root / 'alma_inad.pdf', taxes)
-                arrears_known = True
-                if ina['itens'] and abs(sum(taxes.values()) - rec['tx_condominio_mensal']) > 0.02:
-                    warnings.append('A taxa individual usada na inadimplência difere da cobrança agregada atual; confira os valores por unidade na revisão.')
-            except ValueError as exc:
-                if not taxes and 'identificar a taxa condominial da unidade' in str(exc):
-                    warnings.append('Alma: o relatório agrega taxa, fundo e consumo. Sem taxa condominial individual por unidade, o abatimento por inadimplência não foi apurado.')
-                else:
-                    raise
+            ina = alma.read_arrears(root / 'alma_inad.pdf')
+            arrears_known = True
         else:
             arrears_known = True  # ausência declarada, validada no upload
     else:

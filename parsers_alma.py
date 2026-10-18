@@ -98,8 +98,13 @@ def group_name(name):
     return aliases.get(norm(name), name)
 
 
-def read_arrears(path, unit_taxes):
-    """No fluxo misto, apura somente os dois meses da data-base Almah."""
+def read_arrears(path):
+    """No fluxo misto, apura somente os dois meses da data-base Almah.
+
+    Abate o boleto inteiro da unidade (taxa, fundo de reserva e água): são as
+    taxas que ela deixa de pagar (José Henrique, 10/2026). Assim não depende
+    do REC do sistema anterior para a taxa individual.
+    """
     lines = pdf_lines(path)
     text = '\n'.join(line for _, line in lines)
     match = re.search(r'Boletos em\s+(\d{2}/\d{2}/\d{4})', text)
@@ -127,14 +132,9 @@ def read_arrears(path, unit_taxes):
         if month not in window or due > base or original - paid <= 0.005:
             continue
         unit = row[1].strip()
-        unit_number = str(int(re.search(r'\d+', unit)[0])) if re.search(r'\d+', unit) else unit
-        if unit_number not in unit_taxes:
-            raise ValueError(f'Não foi possível identificar a taxa condominial da unidade {unit}. Envie um REC Condo21 com essa unidade.')
-        # Relatório agregado não separa taxa/fundo/água. Usar a taxa mensal vigente
-        # identificada no REC, mantendo o valor original apenas para auditoria.
-        item = {'unidade': unit, 'classe': 'Tx. Condomínio', 'mes_ref': month_label(month),
-                'vencimento': due, 'valor': unit_taxes[unit_number], 'valor_original_titulo': original,
-                'proj_rec': unit_taxes[unit_number], 'meses_atraso': 1 if month == end else 2,
+        item = {'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'mes_ref': month_label(month),
+                'vencimento': due, 'valor': original, 'valor_original_titulo': original,
+                'proj_rec': original, 'meses_atraso': 1 if month == end else 2,
                 'critica': True, 'regra_inad': 'misto_ultimos_2_meses_alma',
                 'sistema': 'alma', 'arquivo': Path(path).name, 'pagina': page}
         if unit not in latest or month_key(latest[unit]['mes_ref']) < month:
@@ -149,22 +149,6 @@ def read_arrears(path, unit_taxes):
                 'tx_mensal_media': i['valor'], 'meses_consecutivos': i['meses_atraso']} for i in items},
             'impacto_mensal_receita': total, 'meses_considerados': [month_label(prev), month_label(end)],
             'regra': 'misto_ultimos_2_meses_alma'}
-
-
-def read_unit_taxes(path):
-    import xlrd
-    sheet = xlrd.open_workbook(str(path)).sheet_by_index(0)
-    current, taxes = None, {}
-    for index in range(sheet.nrows):
-        label = str(sheet.cell_value(index, 0)).strip()
-        unit = re.match(r'(?:CS|UNICO|UNIDADE)\s*0*(\d+)(?:\s|$)', label, re.I)
-        if unit:
-            current = str(int(unit[1]))
-        if current and 'condominio' in norm(label) and sheet.ncols > 7:
-            value = sheet.cell_value(index, 7)
-            if isinstance(value, (float, int)) and value > 0:
-                taxes[current] = float(value)
-    return taxes
 
 
 def read_plan(path):
@@ -388,10 +372,39 @@ def consolidate_balances(condo, alma, start=None, end=None):
     return result, keys, {key: 'alma' if key in alma_keys else 'condo21' for key in keys}
 
 
+def balance_from_payments(items):
+    """Demonstrativo de despesas (conta × mês) somado dos pagamentos detalhados.
+
+    Com o Alma no conjunto, o sistema anterior só contribui com despesas; receita
+    e inadimplência atuais vêm do Alma. O balanual/balancete repetia os mesmos
+    valores (conferido centavo a centavo no Santorini e no Berlin, 10/2026).
+    """
+    if not items:
+        raise ValueError('Despesas detalhadas do sistema anterior sem pagamentos no período.')
+    keys = months_between(*(f(i['data'].strftime('%Y-%m') for i in items) for f in (min, max)))
+    rows = {}
+    for item in items:
+        row = rows.setdefault((item['grupo'], item['classe']), {
+            'grupo': item['grupo'], 'classe': item['classe'], 'monthly': [0.0] * len(keys)})
+        row['monthly'][keys.index(item['data'].strftime('%Y-%m'))] += float(item['valor_pago'])
+    despesas = []
+    for row in rows.values():
+        row['monthly'] = [round(v, 2) for v in row['monthly']]
+        row['total'] = round(sum(row['monthly']), 2)
+        row['media'] = row['total'] / len(keys)
+        row['n_meses'] = sum(abs(v) > 0.005 for v in row['monthly'])
+        despesas.append(row)
+    return {'meses': [month_label(k) for k in keys], 'n_meses': len(keys), 'receitas': [],
+            'despesas': despesas, 'total_receitas': 0.0,
+            'total_despesas': round(sum(r['total'] for r in despesas), 2),
+            'saldo_inicial': None, 'saldo_final': None}
+
+
 def load_mixed(folder, core):
     root = Path(folder)
     config = json.loads((root / 'importacao.json').read_text()) if (root / 'importacao.json').exists() else {}
-    condo = core.parse_balanual(str(root / 'balanual.xls'))
+    condo_items = core.parse_desbai(str(root / 'desbai06.xls'))['itens']
+    condo = balance_from_payments(condo_items)
     alma = read_balance(root / 'alma_bal.pdf')
     bal, keys, coverage = consolidate_balances(condo, alma, config.get('periodo_inicio'), config.get('periodo_fim'))
     plan = read_internal_plan()
@@ -404,7 +417,7 @@ def load_mixed(folder, core):
                'manutencao do sistema de gas (aquisicao de gas glp)': 'manutencao do sistema de gas'}
     names = {norm(r['classe']): r['classe'] for r in bal['despesas']}
     items = []
-    for source, source_items in (('condo21', core.parse_desbai(str(root / 'desbai06.xls'))['itens']), ('alma', alma_items)):
+    for source, source_items in (('condo21', condo_items), ('alma', alma_items)):
         for item in source_items:
             key = item['data'].strftime('%Y-%m')
             if key not in keys:
@@ -450,10 +463,7 @@ def load_mixed(folder, core):
     # Na combinação com Alma, a cobrança vigente é sempre a desse PDF.
     rec = dict(read_receivables(root / 'alma_rec.pdf'), sistema='alma')
     if (root / 'alma_inad.pdf').exists():
-        unit_taxes = read_unit_taxes(root / 'rec02.xls')
-        ina = read_arrears(root / 'alma_inad.pdf', unit_taxes)
-        if ina['itens'] and abs(sum(unit_taxes.values()) - rec['tx_condominio_mensal']) > 0.02:
-            warnings.append('A taxa por unidade para inadimplência usa o REC Condo21 e difere da cobrança agregada atual Almah; confira os valores na revisão.')
+        ina = read_arrears(root / 'alma_inad.pdf')
     else:
         # Ausência declarada no upload misto: não recuperar inad01 do Condo21.
         ina = None

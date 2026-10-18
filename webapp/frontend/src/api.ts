@@ -95,14 +95,20 @@ export async function criarSessao(form: {
   fd.append('ano_previsao', String(form.ano))
   if (form.sistemas) {
     fd.append('sistemas', JSON.stringify(form.sistemas))
+    // Com o Alma, os demais sistemas só enviam as despesas detalhadas.
+    const comAlma = form.sistemas.includes('alma')
     if (form.sistemas.includes('condo21')) {
-      for (const [field, file] of [['balanual', form.balanual], ['desbai', form.desbai], ['rec', form.rec], ['dessin', form.dessin]] as const) {
+      const condo = comAlma ? [['desbai', form.desbai]] as const
+        : [['balanual', form.balanual], ['desbai', form.desbai], ['rec', form.rec], ['dessin', form.dessin]] as const
+      for (const [field, file] of condo) {
         if (file) fd.append(field, file)
       }
       if (form.sistemas.length === 1 && form.inad) fd.append('inad', form.inad)
     }
     if (form.sistemas.includes('group')) {
-      for (const [field, file] of [['group_bal', form.groupBal], ['group_des', form.groupDes], ['group_rec', form.groupRec]] as const) {
+      const group = comAlma ? [['group_des', form.groupDes]] as const
+        : [['group_bal', form.groupBal], ['group_des', form.groupDes], ['group_rec', form.groupRec]] as const
+      for (const [field, file] of group) {
         if (file) fd.append(field, file)
       }
     }

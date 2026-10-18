@@ -946,7 +946,7 @@ _HTML_TEMPLATE = r"""
     <h2>Evolução mensal</h2>
     {{ grafico_mensal.svg|safe }}
     <div class="mensal-legenda">
-      <span><i style="background:#1c355e"></i>Receita</span>
+      <span><i style="background:#1c355e"></i>Receita atual</span>
       <span><i style="background:#c3c2b7"></i>Despesa</span>
       {% if grafico_mensal.pior_mes_txt %}<strong>{{ grafico_mensal.pior_mes_txt }}</strong>{% endif %}
     </div>

@@ -28,12 +28,13 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 
 ## Sistemas e documentos aceitos hoje
 
-- **Condo21**: `balanual.xls`, `desbai06.xls`, `rec02.xls` obrigatórios; `dessin02.xls`, `inad01.xls` opcionais.
-- **Group**: balancete anual, despesas detalhadas, receitas por unidade.
+- **Condo21 sozinho**: `balanual.xls`, `desbai06.xls`, `rec02.xls` obrigatórios; `dessin02.xls`, `inad01.xls` opcionais.
+- **Group sozinho**: balancete anual, despesas detalhadas, receitas por unidade.
 - **Alma**: FIN00601 (XLSX despesas), Por período agrupado por contas (PDF), Contas a receber agrupado
   por conta (PDF), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
-- **Misto** (Condo21+Alma ou Group+Alma): Alma ocupa os meses recentes, o outro sistema os anteriores, sem duplicar.
-  Receita e inadimplência vêm **só do Alma** (valor atual).
+- **Com o Alma no conjunto, o Alma prevalece**: Condo21 envia só `desbai06`; Group só despesas detalhadas.
+  Receita atual e inadimplência vêm só do Alma. Demonstrativo do sistema anterior = soma dos pagamentos
+  (`parsers_alma.balance_from_payments`). Alma ocupa os meses recentes, o outro sistema os anteriores.
 
 ## Regras de negócio vigentes
 
@@ -47,27 +48,27 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (18/10/2026) — feedback José 13/10 e 17/10
+## Último trabalho (18/10/2026)
 
-Feito (commit desta data):
-- Seguro pela apólice vigente (Atlântico: 652,90 × 6 = 3.917,40/ano = 326,45/mês).
-- Considerações: inicial maiúscula por frase, "R$" maiúsculo; conservação sem "Outras despesas" e com ", etc.".
-- R5 desligada: cartório fica em "Despesas Cartoriais e Honorários" (José não tinha a "Provisão para
-  Sistema de Incêndio/Registro" na planilha; era registro de ata + reconhecimento de firma).
+- Feedback José 13/10 e 17/10: seguro pela apólice vigente; considerações com maiúscula, "R$" e "etc.";
+  R5 desligada (cartório em "Despesas Cartoriais e Honorários").
+- **Fase 2 feita (commit local, ainda NÃO pushado/publicado):** com o Alma no conjunto, Condo21/Group só
+  despesas detalhadas; inadimplência abate o boleto inteiro (taxa+fundo+água) da unidade que não pagou os
+  2 últimos meses do relatório Alma; gráfico do PDF = despesa de cada mês × **receita atual** (legenda
+  "Receita atual") em todos os modos.
+- Prova real (`tmp/prova_codigo_novo.py`/`.txt`, dados de prod em `tmp/sessoes/`): Santorini só com
+  desbai06 + Alma e Berlin só com despesas Group + Alma → subtotal, total e receita idênticos aos de antes.
+  Inadimplência não exercitada com dado real (0 unidades na janela dos dois); coberta por teste unitário.
 
 ## Próximos passos
 
-1. **Fase 2 — menos documentos no modo misto com Alma** (pedido do José, 17/10):
-   Condo21/Group só precisam das despesas detalhadas (Condo21: `desbai06`); Alma: FIN00601 (despesas) +
-   FIN00801 (taxa, fundo de reserva e inadimplência atuais, equivale ao rec02). Dispensar balanual, dessin,
-   rec/inad do sistema antigo e o "Por período agrupado" do Alma. Exemplo real: sessão "Forte Way" no banco
-   (nome exato não encontrado com LIKE '%fort%'; listar sessões com `tmp/baixar_sessao.py`). Falta um FIN00801.
-   Atenção: hoje o balanual define cobertura de meses e confere totais — substituir pelas datas de pagamento.
-2. Deploy no EasyPanel de tudo desde `892a54a` e regerar PDFs (Berlin `b633bf8000b5`, Atlântico).
+1. Push + rebuild no EasyPanel de tudo desde `892a54a`; regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
+   Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
+2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.
 3. R4 ainda gera "Provisão para Laudo de Autovistoria" para contas não genéricas de Despesas Diversas
-   (nome que o José também não usa) — avaliar desligar se ele estranhar.
-4. Santorini: R$ 9.000 de caminhões-pipa deduzidos pela estatística precisam de validação humana;
-   R$ 55,38 de tarifas no demonstrativo Alma ausentes do FIN (mantidos na base).
+   (aparece no Berlin) — nome que o José não usa; avaliar com ele.
+4. Santorini: R$ 9.000 de caminhões-pipa deduzidos pela estatística precisam de validação humana.
+   FIN do Alma não traz tarifas bancárias (aviso de diferença aparece; o demonstrativo Alma cobre).
 5. Segurança: revisar credenciais do banco e autenticação da API (pendência registrada fora do repo).
 
 ## Arquivos locais (fora do git)

@@ -74,11 +74,19 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       setErro('Selecione pelo menos um sistema.')
       return
     }
-    if (condo && (!balanual || !desbai || !rec)) {
+    if (condo && alma && !desbai) {
+      setErro('Envie o desbai06.xls do Condo21.')
+      return
+    }
+    if (condo && !alma && (!balanual || !desbai || !rec)) {
       setErro('Envie balanual.xls, desbai06.xls e rec02.xls do Condo21.')
       return
     }
-    if (group && (!groupBal || !groupDes || !groupRec)) {
+    if (group && alma && !groupDes) {
+      setErro('Envie as despesas detalhadas da Group em XLS ou XLSX.')
+      return
+    }
+    if (group && !alma && (!groupBal || !groupDes || !groupRec)) {
       setErro('Envie o balancete anual, as despesas detalhadas e as receitas por unidade da Group em XLS ou XLSX.')
       return
     }
@@ -100,8 +108,8 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         nome: nome.trim(),
         ano,
         sistemas,
-        ...(condo ? { balanual, desbai, rec, dessin, inad: multiplos ? null : inad } : {}),
-        ...(group ? { groupBal, groupDes, groupRec } : {}),
+        ...(condo ? (alma ? { desbai } : { balanual, desbai, rec, dessin, inad: multiplos ? null : inad }) : {}),
+        ...(group ? (alma ? { groupDes } : { groupBal, groupDes, groupRec }) : {}),
         ...(alma ? { almaBal, almaFin, almaRec, almaInad, semInadAlma } : {}),
       })
       if (!mountedRef.current) return
@@ -281,29 +289,29 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
               {condo && <section className="upload-document-block" aria-labelledby="condo21-documentos">
                 <div className="upload-document-header"><h3 id="condo21-documentos">Condo21</h3><span>Documentos · XLS</span></div>
                 <div className="file-grid">
-                  <FileZone
+                  {!alma && <FileZone
                     label="balanual.xls"
                     file={balanual}
                     setFile={setBalanual}
                     required
-                  />
+                  />}
                   <FileZone
                     label="desbai06.xls"
                     file={desbai}
                     setFile={setDesbai}
                     required
                   />
-                  <FileZone
+                  {!alma && <FileZone
                     label="rec02.xls"
                     file={rec}
                     setFile={setRec}
                     required
-                  />
-                  <FileZone
+                  />}
+                  {!alma && <FileZone
                     label="dessin02.xls"
                     file={dessin}
                     setFile={setDessin}
-                  />
+                  />}
                   {!multiplos && <FileZone
                     label="inad01.xls (opcional)"
                     file={inad}
@@ -311,7 +319,9 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                   />}
                 </div>
                 <p className="form-hint">
-                  {multiplos
+                  {alma
+                    ? 'Com o Alma, basta o desbai06 do período que ficou no Condo21: receita e inadimplência atuais vêm do Alma.'
+                    : multiplos
                     ? 'Envie os relatórios do período que ficou no Condo21. Os meses não podem sobrepor os dos outros sistemas.'
                     : '* balanual.xls, desbai06.xls e rec02.xls são obrigatórios. inad01.xls é opcional — só anexe se houver inadimplência.'}
                 </p>
@@ -320,11 +330,13 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
               {group && <section className="upload-document-block" aria-labelledby="group-documentos">
                 <div className="upload-document-header"><h3 id="group-documentos">Group</h3><span>Documentos · XLS ou XLSX</span></div>
                 <div className="file-grid">
-                  <FileZone label="Balancete anual (XLS ou XLSX)" file={groupBal} setFile={setGroupBal} accept=".xls,.xlsx" required />
+                  {!alma && <FileZone label="Balancete anual (XLS ou XLSX)" file={groupBal} setFile={setGroupBal} accept=".xls,.xlsx" required />}
                   <FileZone label="Despesas detalhadas por classe de conta (XLS ou XLSX)" file={groupDes} setFile={setGroupDes} accept=".xls,.xlsx" required />
-                  <FileZone label="Receitas detalhadas por unidade/cliente (XLS ou XLSX)" file={groupRec} setFile={setGroupRec} accept=".xls,.xlsx" required />
+                  {!alma && <FileZone label="Receitas detalhadas por unidade/cliente (XLS ou XLSX)" file={groupRec} setFile={setGroupRec} accept=".xls,.xlsx" required />}
                 </div>
-                <p className="form-hint">Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.</p>
+                <p className="form-hint">{alma
+                  ? 'Com o Alma, bastam as despesas detalhadas do período que ficou na Group: receita e inadimplência atuais vêm do Alma.'
+                  : 'Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.'}</p>
               </section>}
 
               {alma && (
@@ -343,7 +355,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       }} />
                       Não há inadimplência no Alma
                     </label>
-                    <p className="form-hint">Consideramos apenas os dois últimos meses da referência do relatório de inadimplência do Alma.</p>
+                    <p className="form-hint">Inadimplente é quem não pagou os dois últimos meses do relatório do Alma; abatemos o boleto inteiro (taxa, fundo e água).</p>
                   </section>
               )}
               <Button

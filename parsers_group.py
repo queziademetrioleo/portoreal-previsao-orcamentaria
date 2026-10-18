@@ -281,6 +281,14 @@ def parse_receipts(path, core):
             'fixo_anual': float((taxes + fund) * 12), 'itens': items, 'excluidas': excluded}
 
 
+def load_group_expenses(folder):
+    """Group junto com Alma: só as despesas detalhadas são necessárias; receita e
+    inadimplência atuais vêm do Alma (José Henrique, 10/2026)."""
+    from parsers_alma import balance_from_payments
+    des = parse_expenses(Path(folder) / FILES['desbai'])
+    return {'bal': balance_from_payments(des['itens']), 'des': des, 'divergencias': []}
+
+
 def load_group(folder, core):
     folder = Path(folder)
     bal = parse_balance(folder / FILES['balanual'])

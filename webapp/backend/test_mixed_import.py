@@ -94,7 +94,7 @@ class MixedImportTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Faltam dados'):
             alma.consolidate_balances(balance(['05/2026'], [100]), balance(['07/2026'], [200]))
 
-    def test_arrears_use_report_months_and_latest_tax_per_unit(self):
+    def test_arrears_use_report_months_and_whole_bill_per_unit(self):
         lines = [(1, 'Boletos em 17/09/2026'),
                  (1, 'UNICO 01 BL REF. MÊS 15/07/2026 1.800,00 0,00 1.800,00'),
                  (1, 'UNICO 01 BL REF. MÊS 15/08/2026 1.800,00 0,00 1.800,00'),
@@ -102,18 +102,19 @@ class MixedImportTest(unittest.TestCase):
                  (1, 'UNICO 02 BL REF. MÊS 15/08/2026 1.800,00 1.800,00 0,00'),
                  (1, 'UNICO 03 BL REF. MÊS 30/09/2026 1.800,00 0,00 1.800,00')]
         with patch.object(alma, 'pdf_lines', return_value=lines):
-            result = alma.read_arrears('alma_inad.pdf', {'1': 1632})
+            result = alma.read_arrears('alma_inad.pdf')
         self.assertEqual(result['meses_considerados'], ['08/2026', '09/2026'])
         self.assertEqual(len(result['itens']), 1)
         self.assertEqual(result['itens'][0]['mes_ref'], '09/2026')
-        self.assertEqual(result['impacto_mensal_receita'], 1632)
+        # Boleto inteiro (taxa, fundo e água) — José Henrique, 10/2026.
+        self.assertEqual(result['impacto_mensal_receita'], 1800)
 
     def test_historical_arrears_are_zero_without_recent_alma_titles(self):
         with patch.object(alma, 'pdf_lines', return_value=[
             (1, 'Boletos em 17/09/2026'),
             (1, 'UNICO 01 BL REF. MÊS 15/07/2026 1.800,00 0,00 1.800,00'),
         ]):
-            result = alma.read_arrears('alma_inad.pdf', {})
+            result = alma.read_arrears('alma_inad.pdf')
         self.assertEqual(result['impacto_mensal_receita'], 0)
 
 

@@ -45,16 +45,12 @@ tela; meses futuros zerados de Condo21/Group não completam cobertura no uso
 conjunto. O leitor de cada plataforma extrai os valores antes da classificação
 por IA, preservando a estrutura das contas.
 
-No Alma isolado, o PDF de inadimplência pode agregar taxa, fundo e consumo. Se
-não houver uma fonte legível de taxa por unidade, o sistema informa que o
-abatimento não foi apurado, sem presumir inexistência de débitos. No uso
-conjunto, as receitas por unidade Condo21/Group fornecem a taxa para a regra dos
-dois últimos meses Alma. O fluxo Condo21 + Alma existente mantém suas regras.
-
-Quando o Alma está selecionado junto a outro sistema, o PDF **Contas a
-receber agrupado por conta do Alma** prevalece como fonte da cobrança vigente,
-mesmo se um REC legado tiver data posterior. Os relatórios antigos continuam
-como fontes do histórico de despesas; não substituem essa cobrança.
+**Com o Alma no conjunto, o Alma prevalece:** receita vigente (PDF **Contas a
+receber agrupado por conta**) e inadimplência vêm só dele. O outro sistema envia
+apenas as despesas detalhadas — `desbai06.xls` (Condo21) ou despesas detalhadas
+(Group); balanual, dessin, REC, inad01, balancete e receitas Group não são pedidos.
+O demonstrativo de despesas desses meses é somado dos pagamentos (conferido
+centavo a centavo com balanual/balancete no Santorini e no Berlin, 10/2026).
 
 ## Upload Group
 
@@ -89,18 +85,18 @@ com a raiz e `webapp/backend` em `PYTHONPATH`. Os XLSX privados não são versio
 
 ## Upload conjunto Condo21 + Alma
 
-Na tela **Nova previsão**, marque **Condo21** e **Alma**. Além dos relatórios Condo21, envie:
+Na tela **Nova previsão**, marque **Condo21** e **Alma**. Do Condo21 envie só o `desbai06.xls`; do Alma:
 
 - Demonstrativo por período agrupado por contas do Alma: PDF.
 - FIN00601 de despesas detalhadas: XLSX.
 - Contas a receber agrupado por conta: PDF, com um único mês de vencimento.
 - Inadimplência Alma: PDF; se não houver, marque **Não há inadimplência no Alma**.
 
-O período de despesas pode ser escolhido por mês ou identificado automaticamente. Os pagamentos do FIN são selecionados pela **Data Pagto**. Meses com movimentação nas duas fontes ou sem cobertura são recusados para evitar duplicidade e lacunas. Meses futuros zerados do balanual Condo21 permitem cobertura pelo Alma.
+O período de despesas pode ser escolhido por mês ou identificado automaticamente. Os pagamentos do FIN são selecionados pela **Data Pagto**. Meses com movimentação nas duas fontes ou sem cobertura são recusados para evitar duplicidade e lacunas. 
 
 O plano de contas fornecido pela Porto Real é contexto interno do sistema, versionado em `data/plano_contas_alma.json`; não precisa ser enviado em cada previsão. Ele associa classes aos grupos, inclusive classes novas. Pagamentos sem correspondência no demonstrativo permanecem na revisão; diferenças entre demonstrativo e pagamentos aparecem na tela, sem criar notas fictícias.
 
-**Somente no uso conjunto:** a inadimplência considera os dois últimos meses da referência do relatório Alma, independentemente do período de despesas. Para cada unidade, entra a última taxa condominial vencida nesse intervalo. Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico Condo21 não é recuperado. Como o PDF Alma agrega taxa, fundo e consumo, a taxa por unidade é identificada no REC Condo21; divergência com a cobrança agregada atual é avisada para conferência.
+**Somente no uso conjunto:** a inadimplência considera os dois últimos meses da referência do relatório Alma, independentemente do período de despesas. Inadimplente é a unidade que não pagou nesses dois meses; abate-se o boleto mais recente inteiro (taxa, fundo de reserva e água). Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico do sistema anterior não é recuperado.
 
 Os arquivos de ambas as fontes e a seleção do período ficam salvos na sessão, inclusive para reanálise. O banco recebe as colunas necessárias automaticamente na inicialização do backend. O fluxo exclusivo Condo21 mantém sua regra de inadimplência existente.
 

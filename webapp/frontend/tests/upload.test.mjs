@@ -115,8 +115,14 @@ test('seleção livre envia apenas os arquivos dos sistemas marcados em todas as
     ['condo21', 'group'], ['alma', 'group'], ['condo21', 'alma', 'group']]) {
     await criarSessao({ ...base, sistemas })
     assert.deepEqual(JSON.parse(body.get('sistemas')), sistemas)
+    // Com o Alma, Condo21 e Group enviam só as despesas detalhadas.
+    const soDespesas = new Set(['desbai', 'group_des', ...fields.alma])
+    const comAlma = sistemas.includes('alma')
     for (const [system, names] of Object.entries(fields)) {
-      for (const name of names) assert.equal(body.has(name), sistemas.includes(system), `${sistemas}: ${name}`)
+      for (const name of names) {
+        const esperado = sistemas.includes(system) && (!comAlma || soDespesas.has(name))
+        assert.equal(body.has(name), esperado, `${sistemas}: ${name}`)
+      }
     }
     assert.equal(body.has('inad'), sistemas.length === 1 && sistemas[0] === 'condo21')
     assert.equal(body.has('alma_inad'), false)

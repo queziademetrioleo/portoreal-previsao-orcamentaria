@@ -374,16 +374,14 @@ def _preparar_explicacoes(estado):
         item['explicacao'] = _explicacao_deterministica_inad(item)
 
 
-def _fluxo_mensal_balanco(bal):
+def _fluxo_mensal_balanco(bal, receita_mensal):
+    """Despesa de cada mês do período × receita ATUAL: a previsão parte da
+    cobrança vigente, não da receita histórica (José Henrique, 10/2026)."""
     meses = bal.get('meses') or []
     n = len(meses)
     out = []
+    receita = float(receita_mensal or 0)
     for i in range(n):
-        receita = sum(
-            float((ln.get('monthly') or [0] * n)[i] or 0)
-            for ln in bal.get('receitas', [])
-            if i < len(ln.get('monthly') or [])
-        )
         despesa = sum(
             float((ln.get('monthly') or [0] * n)[i] or 0)
             for ln in bal.get('despesas', [])
@@ -620,7 +618,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'linhas_contas': linhas,
         'lancamentos_contas': lancamentos_contas,
         'previsao_final': [],
-        'fluxo_mensal': _fluxo_mensal_balanco(bal),
+        'fluxo_mensal': _fluxo_mensal_balanco(bal, (R.get('receita_anual') or 0) / 12),
         'status': 'em_revisao',
     }
 
@@ -732,8 +730,11 @@ async def criar_sessao(
         selecionados = [s for s in ('condo21', 'group', 'alma') if s in selecionados]
         origem_sistema = selecionados[0] if len(selecionados) == 1 else 'misto'
         necessarios = {}
+        # Com o Alma no conjunto, receita e inadimplência atuais vêm só dele; os
+        # demais sistemas entram apenas com as despesas detalhadas (José, 10/2026).
+        com_alma = 'alma' in selecionados
         if 'condo21' in selecionados:
-            necessarios.update(balanual=balanual, desbai=desbai, rec=rec)
+            necessarios.update(desbai=desbai) if com_alma else necessarios.update(balanual=balanual, desbai=desbai, rec=rec)
         if 'alma' in selecionados:
             necessarios.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec)
             if not alma_inad and not sem_inadimplencia_alma:
@@ -741,7 +742,7 @@ async def criar_sessao(
             if alma_inad and sem_inadimplencia_alma:
                 raise HTTPException(400, 'Escolha enviar inadimplência Alma ou declarar ausência de inadimplência.')
         if 'group' in selecionados:
-            necessarios.update(group_bal=group_bal, group_des=group_des, group_rec=group_rec)
+            necessarios.update(group_des=group_des) if com_alma else necessarios.update(group_bal=group_bal, group_des=group_des, group_rec=group_rec)
         faltantes = [campo for campo, upload in necessarios.items() if upload is None]
         if faltantes:
             raise HTTPException(400, 'Envie os relatórios obrigatórios dos sistemas selecionados: ' + ', '.join(faltantes))
@@ -794,13 +795,13 @@ async def criar_sessao(
     }
     if selecionados:
         uploads = dict(necessarios)
-        if 'condo21' in selecionados:
+        if 'condo21' in selecionados and 'alma' not in selecionados:
             uploads.update(dessin=dessin, inad=inad if len(selecionados) == 1 else None)
         if 'alma' in selecionados:
             uploads['alma_inad'] = alma_inad
     elif origem_sistema == 'misto':
-        uploads.update(alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec,
-                       alma_inad=alma_inad)
+        uploads = {'desbai': desbai, 'alma_bal': alma_bal, 'alma_fin': alma_fin,
+                   'alma_rec': alma_rec, 'alma_inad': alma_inad}
     file_bytes = {}
     for chave, up in uploads.items():
         if up is None:
@@ -824,7 +825,9 @@ async def criar_sessao(
             raise HTTPException(400, f'Arquivo {up.filename}: o conteúdo está em XLSX, embora o nome termine em XLS. Para relatórios da Group, selecione Group e use os arquivos XLSX originais.')
         file_bytes[chave] = conteudo
 
-    if not selecionados and ('balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes):
+    if not selecionados and origem_sistema == 'misto' and 'desbai' not in file_bytes:
+        raise HTTPException(400, 'Arquivo obrigatório ausente: desbai06 do Condo21')
+    if not selecionados and origem_sistema != 'misto' and ('balanual' not in file_bytes or 'desbai' not in file_bytes or 'rec' not in file_bytes):
         raise HTTPException(400, 'Arquivos obrigatorios ausentes (balanual, desbai06 e REC)')
     if origem_sistema == 'group' and not selecionados:
         # Validar estrutura e condomínio antes de persistir a sessão ou chamar IA.

@@ -86,6 +86,7 @@ class SystemsConsolidationTest(unittest.TestCase):
                 data = {name: source(f'2026-{i:02}') for i, name in enumerate(systems, 1)}
                 fallback = source('2026-01')
                 with patch.object(selected.group, 'load_group', return_value=data.get('group', fallback)), \
+                     patch.object(selected.group, 'load_group_expenses', return_value=data.get('group', fallback)), \
                      patch.object(main.core, 'parse_balanual', return_value=data.get('condo21', fallback)['bal']), \
                      patch.object(main.core, 'parse_desbai', return_value=data.get('condo21', fallback)['des']), \
                      patch.object(main.core, 'parse_rec', return_value=data.get('condo21', fallback)['rec']), \
@@ -99,21 +100,6 @@ class SystemsConsolidationTest(unittest.TestCase):
                 self.assertEqual(result['bal']['total_despesas'], 60 * len(systems))
                 self.assertEqual(result['sistemas'], systems)
 
-    def test_alma_arrears_without_individual_taxes_is_explicitly_uncomputed(self):
-        data = source('2026-01')
-        with tempfile.TemporaryDirectory() as folder:
-            (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': ['alma']}))
-            (Path(folder) / 'alma_inad.pdf').write_bytes(b'pdf')
-            with patch.object(selected.alma, 'read_balance', return_value=data['bal']), \
-                 patch.object(selected.alma, 'read_fin', return_value=data['des']['itens']), \
-                 patch.object(selected.alma, 'read_receivables', return_value=data['rec']), \
-                 patch.object(selected.alma, 'read_internal_plan', return_value={}), \
-                 patch.object(selected.alma, 'read_arrears', side_effect=ValueError('Não foi possível identificar a taxa condominial da unidade 101.')):
-                result = selected.load_selected(folder, main.core)
-        self.assertFalse(result['inadimplencia_apurada'])
-        self.assertIsNone(result['inad'])
-        self.assertTrue(any('individual por unidade' in warning for warning in result['divergencias']))
-
     def test_alma_receipt_always_wins_even_when_legacy_receipt_is_newer(self):
         for systems in (['group', 'alma'], ['condo21', 'group', 'alma']):
             with self.subTest(systems=systems), tempfile.TemporaryDirectory() as folder:
@@ -124,6 +110,7 @@ class SystemsConsolidationTest(unittest.TestCase):
                     data[name]['rec']['fixo_anual'] = 99999 if name != 'alma' else 24000
                 fallback = source('2026-01')
                 with patch.object(selected.group, 'load_group', return_value=data['group']), \
+                     patch.object(selected.group, 'load_group_expenses', return_value=data['group']), \
                      patch.object(main.core, 'parse_balanual', return_value=data.get('condo21', fallback)['bal']), \
                      patch.object(main.core, 'parse_desbai', return_value=data.get('condo21', fallback)['des']), \
                      patch.object(main.core, 'parse_rec', return_value=data.get('condo21', fallback)['rec']), \
@@ -136,22 +123,28 @@ class SystemsConsolidationTest(unittest.TestCase):
                 self.assertEqual(result['rec']['fixo_anual'], 24000)
                 self.assertEqual(result['rec']['mes_ref'], '09/2026')
 
-    def test_group_receipts_supply_individual_tax_for_alma_arrears(self):
+    def test_with_alma_legacy_systems_only_supply_expenses(self):
+        """Receita e inadimplência atuais vêm só do Alma (José Henrique, 10/2026)."""
         legacy, current = source('2026-01'), source('2026-02')
-        legacy['rec']['itens'] = [{'unidade': '101', 'classe': 'Tx. Condomínio',
-                                  'mes_ref': '01/2026', 'lancado': 100}]
         arrears = {'regra': 'misto_ultimos_2_meses_alma', 'itens': [{'valor': 100}]}
         with tempfile.TemporaryDirectory() as folder:
-            (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': ['group', 'alma']}))
+            (Path(folder) / 'importacao.json').write_text(json.dumps({'sistemas': ['condo21', 'group', 'alma']}))
             (Path(folder) / 'alma_inad.pdf').write_bytes(b'pdf')
-            with patch.object(selected.group, 'load_group', return_value=legacy), \
+            with patch.object(selected.group, 'load_group') as full_group, \
+                 patch.object(selected.group, 'load_group_expenses', return_value=legacy), \
+                 patch.object(main.core, 'parse_balanual') as balanual, \
+                 patch.object(main.core, 'parse_rec') as rec02, \
+                 patch.object(main.core, 'parse_desbai', return_value={'itens': []}), \
+                 patch.object(selected.alma, 'balance_from_payments', return_value={'meses': [], 'receitas': [], 'despesas': []}), \
                  patch.object(selected.alma, 'read_balance', return_value=current['bal']), \
                  patch.object(selected.alma, 'read_fin', return_value=current['des']['itens']), \
                  patch.object(selected.alma, 'read_receivables', return_value=current['rec']), \
                  patch.object(selected.alma, 'read_internal_plan', return_value={}), \
                  patch.object(selected.alma, 'read_arrears', return_value=arrears) as read:
                 result = selected.load_selected(folder, main.core)
-        self.assertEqual(read.call_args.args[1], {'101': 100})
+        full_group.assert_not_called(); balanual.assert_not_called(); rec02.assert_not_called()
+        self.assertEqual(read.call_args.args, (Path(folder) / 'alma_inad.pdf',))
+        self.assertEqual(result['rec']['sistema'], 'alma')
         self.assertTrue(result['inadimplencia_apurada'])
         self.assertEqual(result['inad'], arrears)
 
@@ -165,6 +158,8 @@ class SystemsUploadTest(unittest.TestCase):
         fields = {'condo21': ('balanual', 'desbai', 'rec'),
                   'alma': ('alma_bal', 'alma_fin', 'alma_rec'),
                   'group': ('group_bal', 'group_des', 'group_rec')}
+        if 'alma' in systems:  # com o Alma, os demais só enviam despesas detalhadas
+            fields.update(condo21=('desbai',), group=('group_des',))
         return {field: (main.ARQUIVOS_ESPERADOS[field], b'dados')
                 for system in systems for field in fields[system]}
 
