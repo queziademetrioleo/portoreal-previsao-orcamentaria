@@ -53,8 +53,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Feedback José 13/10 e 17/10: seguro pela apólice vigente; considerações com maiúscula, "R$" e "etc.";
   R5 desligada (cartório em "Despesas Cartoriais e Honorários").
 - **Fase 2 feita (commit local, ainda NÃO pushado/publicado):** com o Alma no conjunto, Condo21/Group só
-  despesas detalhadas; inadimplência abate o boleto inteiro (taxa+fundo+água) da unidade que não pagou os
-  2 últimos meses do relatório Alma; gráfico do PDF = despesa de cada mês × **receita atual** (legenda
+  despesas detalhadas; inadimplência abate um boleto inteiro (taxa+fundo+água) da unidade que deve OS DOIS
+  meses anteriores ao mês do relatório Alma (outubro → setembro e agosto); gráfico do PDF = despesa de cada mês × **receita atual** (legenda
   "Receita atual") em todos os modos.
 - Prova real (`tmp/prova_codigo_novo.py`/`.txt`, dados de prod em `tmp/sessoes/`): Santorini só com
   desbai06 + Alma e Berlin só com despesas Group + Alma → subtotal, total e receita idênticos aos de antes.

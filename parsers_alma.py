@@ -99,8 +99,10 @@ def group_name(name):
 
 
 def read_arrears(path):
-    """No fluxo misto, apura somente os dois meses da data-base Almah.
+    """Inadimplente = deve os DOIS meses anteriores ao mês do relatório.
 
+    Ex.: relatório de outubro → deve setembro E agosto. Débito antigo com os
+    meses recentes pagos indica acordo e não entra (José Henrique, 10/2026).
     Abate o boleto inteiro da unidade (taxa, fundo de reserva e água): são as
     taxas que ela deixa de pagar (José Henrique, 10/2026). Assim não depende
     do REC do sistema anterior para a taxa individual.
@@ -111,9 +113,11 @@ def read_arrears(path):
     if not match:
         raise ValueError('Inadimplência Almah: data-base não identificada.')
     base = dt.datetime.strptime(match[1], '%d/%m/%Y').date()
-    end = base.strftime('%Y-%m')
-    prev = (base.replace(day=1) - dt.timedelta(days=1)).strftime('%Y-%m')
+    end_day = base.replace(day=1) - dt.timedelta(days=1)
+    end = end_day.strftime('%Y-%m')
+    prev = (end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%Y-%m')
     window = {prev, end}
+    owed = defaultdict(set)
     latest = {}
     historical_count = 0
     for page, line in lines:
@@ -132,6 +136,7 @@ def read_arrears(path):
         if month not in window or due > base or original - paid <= 0.005:
             continue
         unit = row[1].strip()
+        owed[unit].add(month)
         item = {'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'mes_ref': month_label(month),
                 'vencimento': due, 'valor': original, 'valor_original_titulo': original,
                 'proj_rec': original, 'meses_atraso': 1 if month == end else 2,
@@ -141,7 +146,7 @@ def read_arrears(path):
             latest[unit] = item
     if not historical_count and '0 registro' not in norm(text) and '0 unidade' not in norm(text):
         raise ValueError('Inadimplência Almah: nenhum título reconhecido; confira o formato do PDF.')
-    items = list(latest.values())
+    items = [item for unit, item in latest.items() if owed[unit] == window]
     total = round(sum(i['valor'] for i in items), 2)
     return {'total': total, 'critica': total, 'recente': 0.0, 'data_base': base,
             'itens': items, 'unidades_criticas': len(items),

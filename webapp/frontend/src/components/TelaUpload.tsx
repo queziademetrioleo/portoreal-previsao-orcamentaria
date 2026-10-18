@@ -355,7 +355,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       }} />
                       Não há inadimplência no Alma
                     </label>
-                    <p className="form-hint">Inadimplente é quem não pagou os dois últimos meses do relatório do Alma; abatemos o boleto inteiro (taxa, fundo e água).</p>
+                    <p className="form-hint">Inadimplente é quem deve os dois meses anteriores ao do relatório do Alma (ex.: relatório de outubro → setembro e agosto); abatemos um boleto inteiro (taxa, fundo e água).</p>
                   </section>
               )}
               <Button

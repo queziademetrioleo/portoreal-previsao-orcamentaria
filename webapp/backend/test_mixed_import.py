@@ -94,20 +94,31 @@ class MixedImportTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Faltam dados'):
             alma.consolidate_balances(balance(['05/2026'], [100]), balance(['07/2026'], [200]))
 
-    def test_arrears_use_report_months_and_whole_bill_per_unit(self):
-        lines = [(1, 'Boletos em 17/09/2026'),
-                 (1, 'UNICO 01 BL REF. MÊS 15/07/2026 1.800,00 0,00 1.800,00'),
+    def test_arrears_require_both_previous_months_and_abate_whole_bill(self):
+        """Exemplo do José: em outubro, inadimplente é quem deve setembro E agosto."""
+        lines = [(1, 'Boletos em 05/10/2026'),
+                 # 01: deve agosto e setembro → inadimplente
                  (1, 'UNICO 01 BL REF. MÊS 15/08/2026 1.800,00 0,00 1.800,00'),
-                 (1, 'UNICO 01 BL REF. MÊS 15/09/2026 1.800,00 0,00 1.800,00'),
-                 (1, 'UNICO 02 BL REF. MÊS 15/08/2026 1.800,00 1.800,00 0,00'),
-                 (1, 'UNICO 03 BL REF. MÊS 30/09/2026 1.800,00 0,00 1.800,00')]
+                 (1, 'UNICO 01 BL REF. MÊS 15/09/2026 1.900,00 0,00 1.900,00'),
+                 # 02: deve só setembro → não
+                 (1, 'UNICO 02 BL REF. MÊS 15/09/2026 1.800,00 0,00 1.800,00'),
+                 # 03: deve março e abril, pagou de maio a setembro (acordo) → não
+                 (1, 'UNICO 03 BL REF. MÊS 15/03/2026 1.800,00 0,00 1.800,00'),
+                 (1, 'UNICO 03 BL REF. MÊS 15/04/2026 1.800,00 0,00 1.800,00'),
+                 # 04: deve de junho a setembro → inadimplente, abate um boleto só
+                 (1, 'UNICO 04 BL REF. MÊS 15/06/2026 1.700,00 0,00 1.700,00'),
+                 (1, 'UNICO 04 BL REF. MÊS 15/07/2026 1.700,00 0,00 1.700,00'),
+                 (1, 'UNICO 04 BL REF. MÊS 15/08/2026 1.700,00 0,00 1.700,00'),
+                 (1, 'UNICO 04 BL REF. MÊS 15/09/2026 1.700,00 0,00 1.700,00'),
+                 # 05: boleto de outubro ainda não entra na janela
+                 (1, 'UNICO 05 BL REF. MÊS 15/09/2026 1.800,00 1.800,00 0,00')]
         with patch.object(alma, 'pdf_lines', return_value=lines):
             result = alma.read_arrears('alma_inad.pdf')
         self.assertEqual(result['meses_considerados'], ['08/2026', '09/2026'])
-        self.assertEqual(len(result['itens']), 1)
-        self.assertEqual(result['itens'][0]['mes_ref'], '09/2026')
-        # Boleto inteiro (taxa, fundo e água) — José Henrique, 10/2026.
-        self.assertEqual(result['impacto_mensal_receita'], 1800)
+        self.assertEqual({i['unidade']: i['valor'] for i in result['itens']},
+                         {'UNICO 01': 1900, 'UNICO 04': 1700})
+        # Boleto inteiro (taxa, fundo e água), um mês por unidade.
+        self.assertEqual(result['impacto_mensal_receita'], 3600)
 
     def test_historical_arrears_are_zero_without_recent_alma_titles(self):
         with patch.object(alma, 'pdf_lines', return_value=[
@@ -147,7 +158,8 @@ class SantoriniIntegrationTest(unittest.TestCase):
         self.assertEqual(len(result['des']['itens']), 249)
         self.assertAlmostEqual(result['des']['grand_total'], 247103.24)
         self.assertAlmostEqual(result['bal']['total_despesas'], 247158.62)
-        self.assertEqual(result['inad']['meses_considerados'], ['08/2026', '09/2026'])
+        # Relatório de 17/09: os dois meses anteriores ao mês do relatório.
+        self.assertEqual(result['inad']['meses_considerados'], ['07/2026', '08/2026'])
         self.assertEqual(result['inad']['impacto_mensal_receita'], 0)
         self.assertTrue(any('55.38' in warning for warning in result['divergencias']))
         self.assertEqual(result['origem_sistema'], 'misto')

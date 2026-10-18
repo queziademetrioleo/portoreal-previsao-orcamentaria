@@ -96,7 +96,7 @@ O período de despesas pode ser escolhido por mês ou identificado automaticamen
 
 O plano de contas fornecido pela Porto Real é contexto interno do sistema, versionado em `data/plano_contas_alma.json`; não precisa ser enviado em cada previsão. Ele associa classes aos grupos, inclusive classes novas. Pagamentos sem correspondência no demonstrativo permanecem na revisão; diferenças entre demonstrativo e pagamentos aparecem na tela, sem criar notas fictícias.
 
-**Somente no uso conjunto:** a inadimplência considera os dois últimos meses da referência do relatório Alma, independentemente do período de despesas. Inadimplente é a unidade que não pagou nesses dois meses; abate-se o boleto mais recente inteiro (taxa, fundo de reserva e água). Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico do sistema anterior não é recuperado.
+**Somente no uso conjunto:** inadimplente é a unidade que deve **os dois** meses anteriores ao mês do relatório Alma (relatório de outubro → setembro e agosto), independentemente do período de despesas. Débito antigo com esses meses pagos indica acordo e não entra. Abate-se um boleto inteiro (taxa, fundo de reserva e água), sem multa e juros. Se não houver títulos no intervalo ou não houver inadimplência Alma, o impacto é zero; o histórico do sistema anterior não é recuperado.
 
 Os arquivos de ambas as fontes e a seleção do período ficam salvos na sessão, inclusive para reanálise. O banco recebe as colunas necessárias automaticamente na inicialização do backend. O fluxo exclusivo Condo21 mantém sua regra de inadimplência existente.
 
