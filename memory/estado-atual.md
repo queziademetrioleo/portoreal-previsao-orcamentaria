@@ -52,7 +52,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 - Feedback José 13/10 e 17/10: seguro pela apólice vigente; considerações com maiúscula, "R$" e "etc.";
   R5 desligada (cartório em "Despesas Cartoriais e Honorários").
-- **Fase 2 feita (commit local, ainda NÃO pushado/publicado):** com o Alma no conjunto, Condo21/Group só
+- **Fase 2 feita (no GitHub em 18/10; falta rebuild no EasyPanel):** com o Alma no conjunto, Condo21/Group só
   despesas detalhadas; inadimplência abate um boleto inteiro (taxa+fundo+água) da unidade que deve OS DOIS
   meses anteriores ao mês do relatório Alma (outubro → setembro e agosto); gráfico do PDF = despesa de cada mês × **receita atual** (legenda
   "Receita atual") em todos os modos.
@@ -62,7 +62,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Push + rebuild no EasyPanel de tudo desde `892a54a`; regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
+1. Rebuild no EasyPanel (GitHub já tem tudo até `5532eb9`); regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.
 3. R4 ainda gera "Provisão para Laudo de Autovistoria" para contas não genéricas de Despesas Diversas
