@@ -953,8 +953,55 @@ def _projecao_ultima_taxa(linha, itens):
                 or _norm(ultimo.get('grupo')) != _norm(linha.get('grupo'))):
             return 0.0, 'Seguro projetado na conta do pagamento mais recente'
 
+        # Apólice vigente: última parcela × total de parcelas da apólice
+        # (feedback José 10/2026). O resultado anual é rateado por 12 adiante.
+        valor = float(ultimo['valor_pago'])
+        n = _total_parcelas_seguro(ultimo, pagos)
+        return round(valor * n, 2), f'Última parcela do seguro R$ {valor:.2f} × {n} parcela(s) da apólice'
+
     valor = float(ultimo['valor_pago'])
     return round(valor * n, 2), f'Última parcela paga R$ {valor:.2f} × {n}'
+
+
+_RE_PARCELA = re.compile(r'(?:parcela\s*)?\b(\d{1,2})\s*/\s*(\d{1,2})\b', re.IGNORECASE)
+
+
+def _total_parcelas_seguro(ultimo, pagos):
+    """Total de parcelas da apólice do pagamento mais recente.
+
+    Alma traz a coluna Parcela ("02/06"); Condo21 e Group trazem "Parcela 2/6"
+    na descrição. Sem essa informação, conta os pagamentos mensais seguidos de
+    mesmo valor que terminam no último (pagamento único = 1).
+    """
+    candidatos = [str(ultimo.get('parcela') or '')]
+    desc = str(ultimo.get('descricao') or '')
+    if 'parcela' in _norm(desc):
+        candidatos.append(desc)
+    for texto in candidatos:
+        m = _RE_PARCELA.search(texto)
+        if m and 1 <= int(m.group(1)) <= int(m.group(2)) <= 12:
+            return int(m.group(2))
+
+    valor = float(ultimo['valor_pago'])
+    anteriores = sorted((p for p in pagos if p is not ultimo),
+                        key=lambda i: str(i.get('data') or ''), reverse=True)
+    def _data(item):
+        try:
+            return datetime.date.fromisoformat(str(item.get('data') or '')[:10])
+        except ValueError:
+            return None
+
+    n, data_ref = 1, _data(ultimo)
+    for p in anteriores:
+        data = _data(p)
+        mesmo_valor = abs(float(p['valor_pago']) - valor) <= max(1.0, valor * 0.02)
+        if data_ref is None or data is None:
+            break
+        dias = (data_ref - data).days
+        if not mesmo_valor or dias > 45:
+            break
+        n, data_ref = n + 1, data
+    return min(n, 12)
 
 
 def _eh_fundo_reserva(classe):

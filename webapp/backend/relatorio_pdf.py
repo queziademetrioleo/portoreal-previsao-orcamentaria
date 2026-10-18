@@ -569,8 +569,8 @@ def _nome_na_composicao(classe):
     """Nome da classe como aparece no texto de Gastos com conservação
     (feedback José Henrique 09/2026). None = não citar."""
     nc = _norm(classe)
-    if nc == 'outros materiais':
-        return None  # "não colocar 'Outros Materiais'" — genérico, não diz nada ao síndico
+    if nc in ('outros materiais', 'outras despesas'):
+        return None  # genéricos, não dizem nada ao síndico; o "etc." do texto os cobre
     if 'extintor' in nc:
         return 'Recarga de Extintores'
     return classe
@@ -608,6 +608,15 @@ def _componentes_administrativas(linhas):
         if _categoria_despesa(linha) == 'administrativas':
             _adicionar_sem_repetir(componentes, linha.get('classe'))
     return componentes
+
+
+def _texto_consideracao(texto):
+    """Padroniza nomes de contas (Alma vem em CAIXA ALTA) com inicial maiúscula
+    em cada frase e "R$" maiúsculo (feedback José Henrique 10/2026)."""
+    texto = texto.lower()
+    texto = re.sub(r'(^|[.!?]\s+)([a-zà-ÿ])', lambda m: m.group(1) + m.group(2).upper(), texto)
+    texto = re.sub(r'\br\$', 'R$', texto)
+    return texto.replace('Atenção/importante', 'ATENÇÃO/IMPORTANTE')
 
 
 def _lista_portugues(itens):
@@ -718,7 +727,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     if conservacao_itens:
         consideracoes.append(
             'O item "Gastos com conservação" é composto pelas seguintes despesas de manutenção: '
-            + _lista_portugues(conservacao_itens) + '.'
+            + ', '.join(conservacao_itens) + ', etc.'
         )
     administrativas_itens = _componentes_administrativas(linhas)
     if administrativas_itens:
@@ -751,7 +760,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
         'extintores, dedetização das áreas comuns e compra de uniforme para o(s) empregado(s), '
         'conforme determina a Convenção Coletiva de Trabalho da Categoria.'
     )
-    consideracoes = [f'{i + 1}) {texto.lower()}' for i, texto in enumerate(consideracoes)]
+    consideracoes = [f'{i + 1}) {_texto_consideracao(texto)}' for i, texto in enumerate(consideracoes)]
 
     subtotal_mensal = sum(v for _, v in despesas)
     aumento_mensal = subtotal_mensal * inflacao if inflacao > 0 else 0

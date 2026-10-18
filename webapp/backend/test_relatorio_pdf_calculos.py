@@ -287,5 +287,17 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         self.assertAlmostEqual(sum(despesas.values()), 30)
 
 
+class TextoConsideracaoTest(unittest.TestCase):
+    def test_frases_com_inicial_maiuscula_e_real_maiusculo(self):
+        from relatorio_pdf import _texto_consideracao
+        self.assertEqual(
+            _texto_consideracao('A RECEITA não será suficiente. Faltam R$ 10,00 por mês.'),
+            'A receita não será suficiente. Faltam R$ 10,00 por mês.')
+
+    def test_conservacao_sem_outras_despesas_termina_com_etc(self):
+        from relatorio_pdf import _nome_na_composicao
+        self.assertIsNone(_nome_na_composicao('Outras Despesas'))
+
+
 if __name__ == '__main__':
     unittest.main()
