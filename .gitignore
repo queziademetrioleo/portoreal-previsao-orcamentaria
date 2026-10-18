@@ -18,3 +18,10 @@ webapp/frontend/dist/
 # Sistema
 .DS_Store
 *.log
+
+# Dados locais de clientes, backups de produção e scripts descartáveis
+tmp/
+output/
+outputs/
+.venv/
+.claude/

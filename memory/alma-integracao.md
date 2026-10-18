@@ -9,6 +9,8 @@ metadata:
 
 # Integração Alma — preservar o resultado da previsão orçamentária
 
+> Referência técnica do mapeamento Alma. Regras vigentes e estado atual: `estado-atual.md` e `regras.md`.
+
 ## Objetivo
 
 Aceitar relatórios do sistema **Alma** sem alterar o motor financeiro já
