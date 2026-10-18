@@ -19,10 +19,10 @@ REGRAS APRENDIDAS DO HISTORICO (2022-2026, 4 condominios):
      fossa) -> deduzir a parcela extraordinaria. Calculo: soma dos lancamentos
      do desbai06 classificados como extraordinarios; fallback = fator mediano
      historico de deducao da conta.
- R4. Grupo "Despesas Diversas" exceto Seguro Incendio -> deduzido integralmente
-     e REALOCADO como provisao para Laudo de Autovistoria Predial (mesmo valor).
- R5. Grupo "Despesas Cartoriais e Honorarios" -> deduzido e REALOCADO como
-     provisao para Sistema de Combate a Incendio / Registro da Convencao.
+ R4. Grupo "Despesas Diversas": seguro tem regra propria; manutencoes e contas
+     genericas ficam (menos extraordinarios); demais contas viram provisao para
+     Laudo de Autovistoria Predial (mesmo valor).
+ R5. DESLIGADA (10/2026): "Despesas Cartoriais e Honorarios" fica na linha propria.
  R6. Contratos, Pro-labore e Taxa de Administracao -> previsao = ultimo valor
      mensal vigente x 12 (anualizacao da tarifa atual, nao a soma historica).
  R7. Aumento previsto: 10% fixo sobre o subtotal (INFLACAO).
@@ -1755,14 +1755,13 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
                          if ex > 0.005 else
                          'R4: Diversas -> provisao Laudo Autovistoria')
-        # R5 cartoriais
+        # R5 desligada (José 10/2026): cartório/honorários ficam na própria linha
+        # "Despesas Cartoriais e Honorários", como no modelo dele; prov_incendio fica 0.
         elif 'cartoriais' in ng or 'honorarios' in ng:
-            ex = min(extra_por_classe.get((ng, nc), 0.0), base)
-            ded, final = ex, 0.0
-            prov_incendio += base - ex
-            regra = ('R5: extraordinários removidos; saldo provisionado para Incêndio/Registro'
-                     if ex > 0.005 else
-                     'R5: Cartoriais -> provisao Sist. Incendio/Registro')
+            ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+            final = base - ded
+            regra = ('Cartoriais: extraordinários removidos' if ded > 0.005
+                     else 'Cartoriais: mantido na linha própria')
         # R2 pessoal pontual — pensao alimenticia CONTINUA (6+ meses) e
         # desconto em folha repassado, nao custo extra: fica na base
         # (aprendido do manual 2023: Quezia manteve pensao de 11 meses)
@@ -2022,13 +2021,11 @@ def recalcular(R, inflacao_pct=None):
                 prov_laudo += base - ex
                 regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
                          if ex > 0.005 else 'R4: Diversas -> provisao Laudo')
-        elif 'cartoriais' in ng or 'honorarios' in ng:
-            ex = min(extra_por_classe.get((ng, nc), 0.0), base)
-            ded, final = ex, 0.0
-            prov_incendio += base - ex
-            regra = ('R5: extraordinários removidos; saldo provisionado para Incêndio/Registro'
-                     if ex > 0.005 else
-                     'R5: Cartoriais -> provisao Incendio/Registro')
+        elif 'cartoriais' in ng or 'honorarios' in ng:  # R5 desligada (ver acima)
+            ded = min(extra_por_classe.get((ng, nc), 0.0), base)
+            final = base - ded
+            regra = ('Cartoriais: extraordinários removidos' if ded > 0.005
+                     else 'Cartoriais: mantido na linha própria')
         elif any(k in nc for k in PESSOAL_PONTUAL):
             ded = min(extra_por_classe.get((ng, nc), 0.0), base)
             final = base - ded
