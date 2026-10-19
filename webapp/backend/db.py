@@ -111,6 +111,10 @@ def _init_schema():
         # tela de upload. NULL = sessao criada antes desse campo existir.
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'tem_fundo_reserva', 'TINYINT(1) DEFAULT NULL')
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'config_importacao', 'LONGTEXT')
+        # Upload gravado assim que chega (10/2026): etapa e erro ficam como log
+        # para investigar arquivos recusados. NULL = sessão anterior a essa mudança.
+        _adicionar_coluna_se_ausente(cursor, 'sessoes', 'etapa', 'VARCHAR(20) DEFAULT NULL')
+        _adicionar_coluna_se_ausente(cursor, 'sessoes', 'erro', 'TEXT')
         for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad', 'group_bal', 'group_des', 'group_rec'):
             _adicionar_coluna_se_ausente(cursor, 'sessoes', COLUNAS_ARQUIVOS[campo], 'LONGBLOB')
         conn.commit()
@@ -133,6 +137,34 @@ def criar_sessao(sid, nome_condominio, ano_previsao, tem_fundo_reserva=None):
             (sid, nome_condominio, ano_previsao,
              None if tem_fundo_reserva is None else int(bool(tem_fundo_reserva)))
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def registrar_recebimento(sid, nome_condominio, ano_previsao, tem_fundo_reserva, arquivos, config_json):
+    """Grava a sessão e os arquivos como chegaram, antes de qualquer validação."""
+    colunas = [COLUNAS_ARQUIVOS[campo] for campo in arquivos]
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO sessoes (id, nome_condominio, ano_previsao, tem_fundo_reserva, config_importacao, etapa"
+            + ''.join(', ' + c for c in colunas) + ") VALUES (%s, %s, %s, %s, %s, 'recebido'"
+            + ', %s' * len(colunas) + ")",
+            (sid, nome_condominio, ano_previsao,
+             None if tem_fundo_reserva is None else int(bool(tem_fundo_reserva)),
+             config_json, *arquivos.values()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def marcar_etapa(sid, etapa, erro=None):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE sessoes SET etapa = %s, erro = %s WHERE id = %s", (etapa, erro, sid))
         conn.commit()
     finally:
         conn.close()

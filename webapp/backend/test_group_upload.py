@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import test_mixed_upload  # instala o stub de renderização antes de importar main
 import main
 import parsers_group
+from banco_falso import BancoFalso
 
 
 class GroupUploadTest(unittest.TestCase):
@@ -16,23 +17,25 @@ class GroupUploadTest(unittest.TestCase):
     def test_real_group_legacy_xls_upload_and_restoration(self):
         files = {field: (name, (Path('tmp/berlin-db-audit') / name).read_bytes())
                  for field, name in {'group_bal': 'balanual.xls', 'group_des': 'desbai06.xls', 'group_rec': 'rec02.xls'}.items()}
-        with patch.object(main.db, 'criar_sessao'), patch.object(main.db, 'salvar_arquivo') as save, patch.object(main.db, 'salvar_config_importacao'):
+        with BancoFalso().ativo() as banco:
             response = TestClient(main.app).post('/api/sessao',
                 data={'nome_condominio': 'Berlin', 'ano_previsao': '2026', 'sistemas': '["group"]'}, files=files)
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(save.call_count, 3)
+        self.assertEqual(banco.etapa, 'validado')
+        self.assertEqual(sum(1 for k, v in banco.row.items() if k.startswith('arquivo_') and v), 3)
 
-    def test_condo21_rejects_group_xlsx_even_when_renamed_before_persistence(self):
+    def test_condo21_rejects_group_xlsx_even_when_renamed_and_keeps_the_upload(self):
         for selection in ({'sistemas': '["condo21"]'}, {'origem_sistema': 'condo21'}):
             for name in ('Balancete anual Berlin.xlsx', 'balanual.xls'):
-                with self.subTest(selection=selection, name=name), patch.object(main.db, 'criar_sessao') as create:
+                with self.subTest(selection=selection, name=name), BancoFalso().ativo() as banco:
                     files = {'balanual': (name, b'PK\x03\x04xlsx'),
                              'desbai': ('desbai06.xls', b'xls'), 'rec': ('rec02.xls', b'xls')}
                     response = TestClient(main.app).post('/api/sessao',
                         data={'nome_condominio': 'Berlin', 'ano_previsao': '2026', **selection}, files=files)
                     self.assertEqual(response.status_code, 400, response.text)
                     self.assertIn('selecione Group', response.json()['detail'])
-                    create.assert_not_called()
+                    self.assertEqual(banco.etapa, 'erro_validacao')
+                    self.assertEqual(banco.row['arquivo_balanual'], b'PK\x03\x04xlsx')
 
     def setUp(self):
         self.client = TestClient(main.app)
@@ -40,36 +43,28 @@ class GroupUploadTest(unittest.TestCase):
         self.files = {field: (filename, b'group bytes') for field, filename in parsers_group.FILES.items()}
 
     def test_upload_and_restoration_use_group_names_and_existing_database_columns(self):
-        row = {}
-        def save_file(sid, field, data):
-            row[main.db.COLUNAS_ARQUIVOS[field]] = data
-        def save_config(sid, config):
-            row['config_importacao'] = config
-        with patch.object(main.db, 'criar_sessao'), \
-             patch.object(main.db, 'salvar_arquivo', side_effect=save_file), \
-             patch.object(main.db, 'salvar_config_importacao', side_effect=save_config), \
+        with BancoFalso().ativo() as banco, \
              patch.object(parsers_group, 'load_group', return_value={}) as validate:
             response = self.client.post('/api/sessao', data=self.form, files=self.files)
         self.assertEqual(response.status_code, 200, response.text)
         validate.assert_called_once()
         with tempfile.TemporaryDirectory() as folder:
-            main._restaurar_arquivos(row, folder)
+            main._restaurar_arquivos(banco.row, folder)
             for filename in parsers_group.FILES.values():
                 self.assertEqual((Path(folder) / filename).read_bytes(), b'group bytes')
             self.assertFalse((Path(folder) / 'balanual.xls').exists())
             self.assertEqual(json.loads((Path(folder) / 'importacao.json').read_text())['origem_sistema'], 'group')
 
-    def test_rejects_corrupt_workbooks_old_extensions_and_incompatible_reports_before_persistence(self):
+    def test_rejects_corrupt_workbooks_old_extensions_and_incompatible_reports_keeping_upload(self):
         cases = [self.files,
                  {**self.files, 'balanual': ('balanual.xls', b'bad')},
                  {**self.files, 'inad': ('inad.xls', b'bad')},
                  {**self.files, 'dessin': ('dessin.xls', b'bad')}]
-        with patch.object(main.db, 'criar_sessao') as create:
-            for files in cases:
-                with self.subTest(files=list(files)):
-                    response = self.client.post('/api/sessao', data=self.form, files=files)
-                    self.assertEqual(response.status_code, 400, response.text)
-            create.assert_not_called()
+        for files in cases:
+            with self.subTest(files=list(files)), BancoFalso().ativo() as banco:
+                response = self.client.post('/api/sessao', data=self.form, files=files)
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertEqual(banco.etapa, 'erro_validacao')
 
     @unittest.skipUnless(os.environ.get('GROUP_SAMPLE_DIR'), 'GROUP_SAMPLE_DIR não definido.')
     def test_real_upload_restoration_and_engine(self):
@@ -78,18 +73,11 @@ class GroupUploadTest(unittest.TestCase):
                  'rec': 'Receitas_detalhadas_por_unidade_cliente_2026_10_08_14_05_17.xlsx'}
         files = {field: (name, (Path(os.environ['GROUP_SAMPLE_DIR']) / name).read_bytes())
                  for field, name in names.items()}
-        row = {}
-        def save_file(sid, field, data):
-            row[main.db.COLUNAS_ARQUIVOS[field]] = data
-        def save_config(sid, config):
-            row['config_importacao'] = config
-        with patch.object(main.db, 'criar_sessao'), \
-             patch.object(main.db, 'salvar_arquivo', side_effect=save_file), \
-             patch.object(main.db, 'salvar_config_importacao', side_effect=save_config):
+        with BancoFalso().ativo() as banco:
             response = self.client.post('/api/sessao', data=self.form, files=files)
         self.assertEqual(response.status_code, 200, response.text)
         with tempfile.TemporaryDirectory() as folder, patch.object(main.core, '_ia_disponivel', return_value=False):
-            main._restaurar_arquivos(row, folder)
+            main._restaurar_arquivos(banco.row, folder)
             result = main.core.analisar(folder)
             self.assertEqual(result['origem_sistema'], 'group')
             self.assertEqual(result['rec']['fixo_anual'], 399544.92)
@@ -116,18 +104,12 @@ class GroupUploadTest(unittest.TestCase):
                  'group_rec': 'Receitas_detalhadas_por_unidade_cliente_2026_10_08_14_05_17.xlsx'}
         files = {field: (name, (Path(os.environ['GROUP_SAMPLE_DIR']) / name).read_bytes())
                  for field, name in names.items()}
-        row = {}
-        def save(sid, field, content):
-            row[main.db.COLUNAS_ARQUIVOS[field]] = content
-        def config(sid, content):
-            row['config_importacao'] = content
-        with patch.object(main.db, 'criar_sessao'), patch.object(main.db, 'salvar_arquivo', side_effect=save), \
-             patch.object(main.db, 'salvar_config_importacao', side_effect=config):
+        with BancoFalso().ativo() as banco:
             response = self.client.post('/api/sessao', data={
                 'nome_condominio': 'Berlin', 'ano_previsao': '2026', 'sistemas': '["group"]'}, files=files)
         self.assertEqual(response.status_code, 200, response.text)
         with tempfile.TemporaryDirectory() as folder, patch.object(main.core, '_ia_disponivel', return_value=False):
-            main._restaurar_arquivos(row, folder)
+            main._restaurar_arquivos(banco.row, folder)
             result = main.core.analisar(folder)
         self.assertEqual(result['sistemas'], ['group'])
         self.assertFalse(result['inadimplencia_apurada'])

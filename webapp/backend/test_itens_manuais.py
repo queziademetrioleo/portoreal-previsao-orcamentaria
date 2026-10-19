@@ -87,12 +87,14 @@ class ItensManuaisTest(unittest.TestCase):
              patch.object(main.core, 'analisar', return_value=resultado()), \
              patch.object(main, '_aplicar_aprendizado_resultado', side_effect=lambda r: r), \
              patch.object(main.db, 'salvar_cache_analise'), \
+             patch.object(main.db, 'marcar_etapa') as etapa, \
              patch.object(main, '_montar_estado', return_value=estado()), \
              patch.object(main, '_obter_R', return_value=resultado()), \
              patch.object(main, '_salvar_estado_sync'):
             s = asyncio.run(main.reanalisar_sincrono('manual'))
         self.assertEqual(s['itens_manuais'], manual)
         self.assertEqual(s['resumo']['receita_anual'], 24600)
+        etapa.assert_called_once_with('manual', 'analisado')
 
     def test_pdf_seguro_pagamento_unico_sem_parcela(self):
         R = resultado()

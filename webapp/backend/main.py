@@ -713,6 +713,69 @@ async def criar_sessao(
     group_des: UploadFile = File(None),
     group_rec: UploadFile = File(None),
 ):
+    """Grava a sessão e os arquivos no momento do clique; só então valida.
+
+    Upload recusado continua no banco (etapa ``erro_validacao`` + mensagem) para
+    investigação, e a tela mostra o protocolo (id da sessão). Antes de 10/2026 a
+    validação vinha primeiro e o arquivo recusado se perdia (Forte Way, Aldeia das Asas).
+    """
+    sid = uuid.uuid4().hex[:12]
+    arquivos = {}
+    for campo, up in (('balanual', balanual), ('desbai', desbai), ('rec', rec), ('dessin', dessin),
+                      ('inad', inad), ('alma_bal', alma_bal), ('alma_fin', alma_fin), ('alma_rec', alma_rec),
+                      ('alma_inad', alma_inad), ('group_bal', group_bal), ('group_des', group_des),
+                      ('group_rec', group_rec)):
+        if up is None:
+            continue
+        conteudo = await up.read(MAX_UPLOAD_BYTES + 1)
+        await up.seek(0)
+        if conteudo and len(conteudo) <= MAX_UPLOAD_BYTES:
+            arquivos[campo] = conteudo
+    formulario = {'origem_sistema': origem_sistema, 'sistemas': sistemas, 'periodo_inicio': periodo_inicio,
+                  'periodo_fim': periodo_fim, 'alma_inicio': alma_inicio,
+                  'sem_inadimplencia_alma': sem_inadimplencia_alma, 'recebido': True}
+    db.registrar_recebimento(sid, nome_condominio.strip() or '(sem nome)', ano_previsao, tem_fundo_reserva,
+                             arquivos, json.dumps(formulario))
+    logger.info('Upload %s recebido: %s (%s) %s', sid, nome_condominio.strip(), ano_previsao, sorted(arquivos))
+    try:
+        return await _validar_e_registrar(sid, set(arquivos), nome_condominio=nome_condominio, ano_previsao=ano_previsao, tem_fundo_reserva=tem_fundo_reserva, balanual=balanual, desbai=desbai, rec=rec, dessin=dessin, inad=inad, origem_sistema=origem_sistema, periodo_inicio=periodo_inicio, periodo_fim=periodo_fim, alma_inicio=alma_inicio, alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec, alma_inad=alma_inad, sem_inadimplencia_alma=sem_inadimplencia_alma, sistemas=sistemas, group_bal=group_bal, group_des=group_des, group_rec=group_rec)
+    except HTTPException as exc:
+        logger.warning('Upload %s recusado: %s', sid, exc.detail)
+        db.marcar_etapa(sid, 'erro_validacao', str(exc.detail))
+        raise HTTPException(exc.status_code, f'{exc.detail} (Protocolo {sid})') from exc
+    except Exception as exc:
+        logger.exception('Upload %s falhou na validação', sid)
+        db.marcar_etapa(sid, 'erro_validacao', repr(exc)[:5000])
+        raise
+
+
+async def _validar_e_registrar(
+    sid: str, recebidos: set,
+    nome_condominio: str = Form(..., max_length=200),
+    ano_previsao: int = Form(..., ge=2000, le=2100),
+    # Compatibilidade com o fluxo Condo21 já em produção: solicitações das
+    # versões anteriores da tela não enviam esse campo e sempre trabalharam
+    # com fundo de reserva incluído.
+    tem_fundo_reserva: bool = Form(True),
+    balanual: UploadFile = File(None),
+    desbai: UploadFile = File(None),
+    rec: UploadFile = File(None),
+    dessin: UploadFile = File(None),
+    inad: UploadFile = File(None),
+    origem_sistema: str = Form('condo21'),
+    periodo_inicio: str | None = Form(None),
+    periodo_fim: str | None = Form(None),
+    alma_inicio: str | None = Form(None),
+    alma_bal: UploadFile = File(None),
+    alma_fin: UploadFile = File(None),
+    alma_rec: UploadFile = File(None),
+    alma_inad: UploadFile = File(None),
+    sem_inadimplencia_alma: bool = Form(False),
+    sistemas: str | None = Form(None),
+    group_bal: UploadFile = File(None),
+    group_des: UploadFile = File(None),
+    group_rec: UploadFile = File(None),
+):
     nome_condominio = nome_condominio.strip()
     if not nome_condominio:
         raise HTTPException(400, 'Nome do condomínio é obrigatório.')
@@ -783,8 +846,6 @@ async def criar_sessao(
             months_between(alma_inicio, alma_inicio)
         except ValueError as exc:
             raise HTTPException(400, 'Mês de mudança para Alma inválido.') from exc
-
-    sid = uuid.uuid4().hex[:12]
 
     uploads = {
         'balanual': balanual,
@@ -860,20 +921,18 @@ async def criar_sessao(
         except Exception as exc:
             logger.warning('Relatório inválido na seleção %s: %s', selecionados, exc)
             raise HTTPException(400, 'Não foi possível ler os relatórios dos sistemas selecionados. Confira os formatos e envie as exportações originais.') from exc
-    db.criar_sessao(sid, nome_condominio, ano_previsao, tem_fundo_reserva)
-    try:
-        for chave, conteudo in file_bytes.items():
-            db.salvar_arquivo(sid, chave, conteudo)
-        config = {
-            'origem_sistema': origem_sistema, 'periodo_inicio': periodo_inicio,
-            'periodo_fim': periodo_fim, 'alma_inicio': alma_inicio, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
-        }
-        if selecionados:
-            config['sistemas'] = selecionados
-        db.salvar_config_importacao(sid, json.dumps(config))
-    except Exception:
-        db.deletar_sessao(sid)
-        raise
+    # Os arquivos já estão gravados desde o recebimento; ficam só os que a
+    # análise usa, para a restauração não ler um relatório fora da seleção.
+    for campo in recebidos - set(file_bytes):
+        db.salvar_arquivo(sid, campo, None)
+    config = {
+        'origem_sistema': origem_sistema, 'periodo_inicio': periodo_inicio,
+        'periodo_fim': periodo_fim, 'alma_inicio': alma_inicio, 'sem_inadimplencia_alma': sem_inadimplencia_alma,
+    }
+    if selecionados:
+        config['sistemas'] = selecionados
+    db.salvar_config_importacao(sid, json.dumps(config))
+    db.marcar_etapa(sid, 'validado')
     logger.info(f'Sessao {sid} criada: {nome_condominio.strip()} ({ano_previsao})')
 
     return {'sessao_id': sid, 'nome_condominio': nome_condominio.strip(),
@@ -888,6 +947,8 @@ async def analisar_sse(sid: str):
     row = db.carregar_sessao(sid)
     if not row:
         raise HTTPException(404, 'Sessao nao encontrada')
+    if row.get('etapa') in ('recebido', 'erro_validacao'):
+        raise HTTPException(409, f'Os relatórios desta sessão não passaram na validação (Protocolo {sid}). Envie novamente.')
 
     eventos = []
     lock = threading.Lock()
@@ -939,6 +1000,7 @@ async def analisar_sse(sid: str):
                 tem_fr = None if tem_fr is None else bool(tem_fr)
                 estado = _montar_estado(sid, nome, ano, R, tem_fr)
                 _salvar_estado_sync(sid, estado)
+                db.marcar_etapa(sid, 'analisado')
 
                 yield f"data: {json.dumps({'done': True, 'sessao_id': sid}, ensure_ascii=False)}\n\n"
 
@@ -950,6 +1012,10 @@ async def analisar_sse(sid: str):
                 future.cancel()
         except Exception as exc:
             logger.exception('Erro na analise SSE da sessao %s', sid)
+            try:
+                db.marcar_etapa(sid, 'erro_analise', repr(exc)[:5000])
+            except Exception:
+                logger.exception('Não foi possível registrar o erro da sessão %s', sid)
             # A excecao tecnica fica no log; o navegador recebe uma mensagem
             # acionavel e nao transforma ``None.get`` em erro da interface.
             mensagem = str(exc) if isinstance(exc, ValueError) else 'Não foi possível concluir a análise. Confira os arquivos enviados e tente novamente.'
@@ -966,6 +1032,8 @@ async def reanalisar_sincrono(sid: str):
     row = db.carregar_sessao(sid)
     if not row:
         raise HTTPException(404, 'Sessao nao encontrada')
+    if row.get('etapa') in ('recebido', 'erro_validacao'):
+        raise HTTPException(409, f'Os relatórios desta sessão não passaram na validação (Protocolo {sid}). Envie novamente.')
 
     loop = asyncio.get_event_loop()
     try:
@@ -986,10 +1054,15 @@ async def reanalisar_sincrono(sid: str):
             R2, impacto = _recalcular_com_decisoes(sid, estado)
             _atualizar_resumo_calculado(estado, R2, impacto)
             _salvar_estado_sync(sid, estado)
+            db.marcar_etapa(sid, 'analisado')
 
             return estado
     except Exception as exc:
         logger.exception('Erro na reanalise da sessao %s: %s', sid, exc)
+        try:
+            db.marcar_etapa(sid, 'erro_analise', repr(exc)[:5000])
+        except Exception:
+            logger.exception('Não foi possível registrar o erro da sessão %s', sid)
         raise HTTPException(500, f'Erro ao reanalisar: {exc}')
 
 

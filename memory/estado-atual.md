@@ -21,7 +21,7 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 - Deploy: push no GitHub → **rebuild manual no EasyPanel** (serviço previsao). Push ≠ deploy:
   nunca dizer que está no ar sem confirmar.
 - Banco prod: credenciais fora do repo (arquivo local da usuária); porta externa só aberta p/ uso pontual.
-  Acesso direto do agente é bloqueado → usuária roda `! .venv/bin/python tmp/baixar_sessao.py [id]` (só leitura).
+  Acesso direto do agente é bloqueado → usuária roda `! .venv/bin/python tmp/baixar_sessao.py [id]` (só leitura).\n  Desde 19/10 uploads recusados também ficam no banco (etapa/erro): pedir o protocolo mostrado na tela.
 - IA: OpenAI exclusivamente (`PREVISAO_IA_PROVEDOR=openai`, modelo `gpt-6.1-sol`, reasoning `high`).
 - Testes: `cd webapp/backend && PYTHONPATH=../.. ../../.venv/bin/python -m unittest discover -p 'test_*.py'`
   (4 falhas conhecidas em `test_classificacao_capital` — caso "projetor", pré-existentes).
@@ -59,7 +59,15 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 - **Bug Aldeia das Asas (Group sozinho):** "Group: conta 1.1.6 repetida no balancete". Agora linhas com o mesmo
   código na mesma seção são somadas numa conta só, com aviso na análise; a conferência com o total da seção
-  continua barrando cópia indevida. Hipótese (Taxa Extra em 2 linhas) não confirmada com o arquivo real.
+  continua barrando cópia indevida. Confirmado com o arquivo real (ver abaixo).
+
+- **Upload gravado antes de validar (pedido da usuária, 19/10):** `POST /api/sessao` grava sessão + arquivos no clique
+  (`etapa='recebido'`), depois valida. Recusa → `etapa='erro_validacao'` + `erro`, e a tela mostra "(Protocolo <id>)".
+  Análise grava `analisado`/`erro_analise`; sessões recusadas não podem ser analisadas (409). Colunas `etapa`/`erro`
+  criadas pelo `_init_schema` na subida (testado em MySQL 8.4 com esquema antigo). `tmp/baixar_sessao.py` mostra etapa e erro.
+- **Aldeia das Asas conferido com os arquivos reais:** 1.1.6 Taxa Extra e 1.1.8 Compl. Tx. Condomínio vêm em 2 linhas
+  cada (uma de estornos negativos) → somadas. MAS o "Despesas detalhadas" veio filtrado em **Competência 08/2026**
+  (R$ 131 mil de R$ 1,49 mi do balancete); reexportar com Competência: Todas.
 
 ## Fase 2 (18/10/2026)
 
@@ -75,7 +83,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Reenviar Forte Way e Aldeia das Asas após o rebuild; conferir o aviso da 1.1.6 no Aldeia. Se ainda acusar sobreposição, pedir os arquivos
+1. Reenviar Forte Way e Aldeia das Asas (despesas reexportadas sem filtro de competência) após o rebuild.\n   Avaliar com o José: bloquear quando as despesas detalhadas cobrem muito menos que o balancete (hoje só avisa). Se ainda acusar sobreposição, pedir os arquivos
    (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.

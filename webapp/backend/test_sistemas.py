@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import test_mixed_upload
 import main
+from banco_falso import BancoFalso
 import parsers_sistemas as selected
 
 
@@ -166,40 +167,36 @@ class SystemsUploadTest(unittest.TestCase):
     def test_all_combinations_persist_and_restore_distinct_files(self):
         for count in range(1, 4):
             for systems in itertools.combinations(('condo21', 'alma', 'group'), count):
-                row = {}
-                def save(sid, field, content):
-                    row[main.db.COLUNAS_ARQUIVOS[field]] = content
-                def config(sid, content):
-                    row['config_importacao'] = content
-                with self.subTest(systems=systems), patch.object(main.db, 'criar_sessao'), \
-                     patch.object(main.db, 'salvar_arquivo', side_effect=save), \
-                     patch.object(main.db, 'salvar_config_importacao', side_effect=config), \
+                with self.subTest(systems=systems), BancoFalso().ativo() as banco, \
                      patch.object(selected, 'load_selected', return_value={}):
                     response = self.client.post('/api/sessao', data={**self.form, 'sistemas': json.dumps(systems)}, files=self.files(systems))
                 self.assertEqual(response.status_code, 200, response.text)
                 with tempfile.TemporaryDirectory() as folder:
-                    main._restaurar_arquivos(row, folder)
+                    main._restaurar_arquivos(banco.row, folder)
                     for field in self.files(systems):
                         self.assertEqual((Path(folder) / main.ARQUIVOS_ESPERADOS[field]).read_bytes(), b'dados')
 
-    def test_bad_selection_missing_selected_files_and_period_fail_before_persistence(self):
+    def test_bad_selection_and_missing_selected_files_are_kept_with_error(self):
         for systems in ([], ['group', 'group'], ['outro'], 'group', ['alma', 1]):
-            with patch.object(main.db, 'criar_sessao') as create:
+            with BancoFalso().ativo() as banco:
                 response = self.client.post('/api/sessao', data={**self.form, 'sistemas': json.dumps(systems)}, files=self.files(['group']))
                 self.assertEqual(response.status_code, 400, response.text)
-                create.assert_not_called()
-        with patch.object(main.db, 'criar_sessao') as create:
+                self.assertEqual(banco.etapa, 'erro_validacao')
+        with BancoFalso().ativo() as banco:
             response = self.client.post('/api/sessao', data={**self.form, 'sistemas': '["alma","group"]'}, files=self.files(['group']))
             self.assertEqual(response.status_code, 400)
-            create.assert_not_called()
+            self.assertEqual(banco.etapa, 'erro_validacao')
 
-    def test_consolidation_failure_is_returned_to_user_before_saving(self):
+    def test_consolidation_failure_keeps_files_and_returns_protocol(self):
         with patch.object(selected, 'load_selected', side_effect=ValueError('Há meses com movimentação em mais de um sistema.')), \
-             patch.object(main.db, 'criar_sessao') as create:
+             BancoFalso().ativo() as banco:
             response = self.client.post('/api/sessao', data={**self.form, 'sistemas': '["alma","group"]'}, files=self.files(['alma', 'group']))
         self.assertEqual(response.status_code, 400)
         self.assertIn('mais de um sistema', response.json()['detail'])
-        create.assert_not_called()
+        self.assertIn(f"Protocolo {banco.row['id']}", response.json()['detail'])
+        self.assertEqual(banco.etapa, 'erro_validacao')
+        self.assertIn('mais de um sistema', banco.row['erro'])
+        self.assertEqual(banco.row['arquivo_group_des'], b'dados')
 
 
 if __name__ == '__main__':
