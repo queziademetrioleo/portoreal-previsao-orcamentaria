@@ -57,6 +57,10 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   Commit local, **falta push + rebuild**. Hipótese não confirmada com os arquivos reais: a validação roda antes de
   salvar a sessão, então os arquivos do Forte Way não ficaram no banco.
 
+- **Bug Aldeia das Asas (Group sozinho):** "Group: conta 1.1.6 repetida no balancete". Agora linhas com o mesmo
+  código na mesma seção são somadas numa conta só, com aviso na análise; a conferência com o total da seção
+  continua barrando cópia indevida. Hipótese (Taxa Extra em 2 linhas) não confirmada com o arquivo real.
+
 ## Fase 2 (18/10/2026)
 
 - Feedback José 13/10 e 17/10: seguro pela apólice vigente; considerações com maiúscula, "R$" e "etc.";
@@ -71,7 +75,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Push + rebuild da correção Forte Way; reenviar o Forte Way. Se ainda acusar sobreposição, pedir os arquivos
+1. Reenviar Forte Way e Aldeia das Asas após o rebuild; conferir o aviso da 1.1.6 no Aldeia. Se ainda acusar sobreposição, pedir os arquivos
    (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.

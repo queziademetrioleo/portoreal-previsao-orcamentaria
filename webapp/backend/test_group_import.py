@@ -117,6 +117,24 @@ class GroupImportTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.load()
 
+    def test_account_on_two_balance_lines_is_summed_when_section_total_matches(self):
+        """Aldeia das Asas: 1.1.6 Taxa Extra em duas linhas do balancete Group."""
+        self.balance[4:4] = [['1.1.6 - Taxa Extra', *([10] * 12), 120],
+                             ['1.1.6 - Taxa Extra Obra', 30, *([0] * 11), 30]]
+        self.balance[7] = ['Total de receitas', 140, *([110] * 11), 1350]
+        with patch.object(group, 'read', side_effect=self.reader):
+            bal = group.parse_balance('group_bal.xlsx')
+        extra = [r for r in bal['receitas'] if r['codigo'] == '1.1.6']
+        self.assertEqual(len(extra), 1)
+        self.assertEqual(extra[0]['total'], 150)
+        self.assertEqual(extra[0]['monthly'][0], 40)
+        self.assertTrue(any('1.1.6' in w and 'somados' in w for w in bal['avisos']))
+        # Linha copiada por engano não entra no total da seção e continua barrada.
+        self.balance[7] = ['Total de receitas', 110, *([110] * 11), 1320]
+        with patch.object(group, 'read', side_effect=self.reader):
+            with self.assertRaisesRegex(ValueError, 'soma das classes de receitas'):
+                group.parse_balance('group_bal.xlsx')
+
     def test_rejects_mixed_condominiums_and_short_periods(self):
         def wrong(path):
             rows, name = self.reader(path)

@@ -143,13 +143,25 @@ def parse_balance(path):
             continue
         if not group_code or not code.startswith(group_code + '.'):
             raise ValueError(f'Group: conta {code} sem grupo correspondente na linha {row_no}.')
-        if code in seen:
-            raise ValueError(f'Group: conta {code} repetida no balancete.')
-        seen.add(code)
         values = [money(row[c]) for c, _ in month_cols]
         total = money(row[cols['total']])
         if abs(sum(values) - total) > Decimal('0.01'):
             raise ValueError(f'Group: soma mensal da conta {code} difere do total informado.')
+        if code in seen:
+            # O Group pode listar a mesma conta em mais de uma linha (Aldeia das Asas,
+            # 1.1.6 Taxa Extra, 10/2026). Somar mantém o cruzamento por código com as
+            # despesas detalhadas; a conferência com o total da seção barra cópia indevida.
+            previous = next((r for r in sections[section] if r['codigo'] == code), None)
+            if not previous:
+                raise ValueError(f'Group: conta {code} repetida em receitas e despesas do balancete.')
+            previous['monthly'] = [round(a + float(b), 2) for a, b in zip(previous['monthly'], values)]
+            previous['total'] = round(previous['total'] + float(total), 2)
+            previous['media'] = previous['total'] / 12
+            previous['n_meses'] = sum(abs(v) > 0.005 for v in previous['monthly'])
+            warnings.append(f'Group: conta {code} aparece em mais de uma linha do balancete '
+                            f'("{previous["classe"]}" e "{title}"); os valores foram somados.')
+            continue
+        seen.add(code)
         sections[section].append({'grupo': group, 'classe': title, 'codigo': code,
                                   'codigo_grupo': group_code, 'monthly': list(map(float, values)),
                                   'total': float(total), 'media': float(total / 12),
