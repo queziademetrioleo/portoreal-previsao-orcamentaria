@@ -88,6 +88,14 @@ class MixedImportTest(unittest.TestCase):
         self.assertEqual(keys, ['2026-06', '2026-07'])
         self.assertEqual(coverage['2026-07'], 'alma')
 
+    def test_alma_exported_for_whole_year_ignores_zero_months_before_migration(self):
+        """Forte Way: Alma exportado de 06 a 08 com zeros antes da migração em 08."""
+        result, keys, coverage = alma.consolidate_balances(
+            balance(['06/2026', '07/2026'], [100, 150]), balance(['06/2026', '07/2026', '08/2026'], [0, 0, 200]))
+        self.assertEqual(result['total_despesas'], 450)
+        self.assertEqual(keys, ['2026-06', '2026-07', '2026-08'])
+        self.assertEqual([coverage[k] for k in keys], ['condo21', 'condo21', 'alma'])
+
     def test_overlap_and_missing_month_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'dois sistemas'):
             alma.consolidate_balances(balance(['07/2026'], [100]), balance(['07/2026'], [200]))

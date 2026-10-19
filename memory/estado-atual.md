@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 18/10/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 19/10/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -48,7 +48,16 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (18/10/2026)
+## Último trabalho (19/10/2026)
+
+- **Bug Forte Way (Condo21 + Alma):** upload travava com "Há meses com movimentação nos dois sistemas: 10/2025 … 08/2026".
+  Causa: o demonstrativo Alma exportado para o ano todo lista zerados os meses antes da migração, e
+  `consolidate_balances` contava todo mês do PDF como cobertura do Alma. Agora só conta da 1ª à última movimentação
+  (mesma regra do fluxo Group + Alma). Teste novo em `test_mixed_import.py`; Santorini e Berlin idênticos.
+  Commit local, **falta push + rebuild**. Hipótese não confirmada com os arquivos reais: a validação roda antes de
+  salvar a sessão, então os arquivos do Forte Way não ficaram no banco.
+
+## Fase 2 (18/10/2026)
 
 - Feedback José 13/10 e 17/10: seguro pela apólice vigente; considerações com maiúscula, "R$" e "etc.";
   R5 desligada (cartório em "Despesas Cartoriais e Honorários").
@@ -62,7 +71,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Rebuild no EasyPanel (GitHub já tem tudo até `5532eb9`); regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
+1. Push + rebuild da correção Forte Way; reenviar o Forte Way. Se ainda acusar sobreposição, pedir os arquivos
+   (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.
 3. R4 ainda gera "Provisão para Laudo de Autovistoria" para contas não genéricas de Despesas Diversas

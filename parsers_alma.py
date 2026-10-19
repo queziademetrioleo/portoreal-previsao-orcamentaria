@@ -337,9 +337,14 @@ def consolidate_balances(condo, alma, start=None, end=None):
     condo_covered = {key for idx, key in enumerate(condo_keys)
                      if any(abs(r['monthly'][idx]) > 0.005
                             for kind in ('receitas', 'despesas') for r in condo[kind])}
-    all_keys = sorted(condo_covered | set(alma_keys))
+    # O demonstrativo Alma exportado para o ano todo lista zerados os meses
+    # anteriores à migração (Forte Way, 10/2026): também não são cobertura.
+    active = [key for idx, key in enumerate(alma_keys)
+              if any(abs(r['monthly'][idx]) > 0.005 for kind in ('receitas', 'despesas') for r in alma[kind])]
+    alma_covered = {key for key in alma_keys if active and active[0] <= key <= active[-1]}
+    all_keys = sorted(condo_covered | alma_covered)
     keys = months_between(start or all_keys[0], end or all_keys[-1])
-    overlap = set(keys) & condo_covered & set(alma_keys)
+    overlap = set(keys) & condo_covered & alma_covered
     if overlap:
         raise ValueError('Há meses com movimentação nos dois sistemas: ' + ', '.join(map(month_label, sorted(overlap))) + '. Envie exportações sem sobreposição.')
     missing = set(keys) - set(all_keys)
@@ -374,7 +379,7 @@ def consolidate_balances(condo, alma, start=None, end=None):
             if row['n_meses']:
                 result[kind].append(row)
         result['total_' + kind] = round(sum(r['total'] for r in result[kind]), 2)
-    return result, keys, {key: 'alma' if key in alma_keys else 'condo21' for key in keys}
+    return result, keys, {key: 'alma' if key in alma_covered else 'condo21' for key in keys}
 
 
 def balance_from_payments(items):
