@@ -108,7 +108,7 @@ def load_selected(folder, core):
         return data
     if systems == ['group']:
         data = group.load_group(folder, core)
-        data.update(origem_sistema='group', sistemas=systems, inadimplencia_apurada=False)
+        data.update(origem_sistema='group', sistemas=systems, inadimplencia_apurada=data['inad'] is not None)
         return data
     sources = {}
     # Com o Alma no conjunto, os demais sistemas só fornecem despesas detalhadas.

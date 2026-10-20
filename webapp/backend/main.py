@@ -100,6 +100,7 @@ ARQUIVOS_ESPERADOS = {
     'group_bal': 'group_bal.xlsx',
     'group_des': 'group_des.xlsx',
     'group_rec': 'group_rec.xlsx',
+    'group_inad': 'group_inad.xlsx',
 }
 
 
@@ -129,6 +130,12 @@ def _carregar_estado(sid):
     if not row or not row.get('estado_json'):
         raise HTTPException(404, 'Sessao nao encontrada')
     return json.loads(row['estado_json'])
+
+
+def _chave_mes(mes_ref):
+    """MM/AAAA → (AAAA, MM) para ordenar competências."""
+    partes = str(mes_ref or '').split('/')
+    return (partes[1], partes[0]) if len(partes) == 2 else ('', '')
 
 
 def _json_dumps(obj):
@@ -543,12 +550,14 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         for original_id, it in enumerate(inad.get('itens') or []):
             critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
             classe = core._norm(it.get('classe'))
-            eh_taxa_condominio = 'condom' in classe and ('taxa' in classe or 'tx' in classe)
+            # A Group marca a taxa (o Compl.Tx.Condomínio também tem "tx" e "condom").
+            eh_taxa_condominio = it.get('taxa_condominio', 'condom' in classe and ('taxa' in classe or 'tx' in classe))
             if not critica or not eh_taxa_condominio:
                 continue
             unidade = it.get('unidade') or ''
             atual = ultima_critica.get(unidade)
-            if atual is None or str(it.get('mes_ref') or '') > str(atual[1].get('mes_ref') or ''):
+            # mes_ref é MM/AAAA: comparar como texto pegava 12/2025 em vez de 09/2026.
+            if atual is None or _chave_mes(it.get('mes_ref')) > _chave_mes(atual[1].get('mes_ref')):
                 ultima_critica[unidade] = (original_id, it)
 
         for original_id, it in ultima_critica.values():
@@ -712,6 +721,7 @@ async def criar_sessao(
     group_bal: UploadFile = File(None),
     group_des: UploadFile = File(None),
     group_rec: UploadFile = File(None),
+    group_inad: UploadFile = File(None),
 ):
     """Grava a sessão e os arquivos no momento do clique; só então valida.
 
@@ -724,7 +734,7 @@ async def criar_sessao(
     for campo, up in (('balanual', balanual), ('desbai', desbai), ('rec', rec), ('dessin', dessin),
                       ('inad', inad), ('alma_bal', alma_bal), ('alma_fin', alma_fin), ('alma_rec', alma_rec),
                       ('alma_inad', alma_inad), ('group_bal', group_bal), ('group_des', group_des),
-                      ('group_rec', group_rec)):
+                      ('group_rec', group_rec), ('group_inad', group_inad)):
         if up is None:
             continue
         conteudo = await up.read(MAX_UPLOAD_BYTES + 1)
@@ -738,7 +748,7 @@ async def criar_sessao(
                              arquivos, json.dumps(formulario))
     logger.info('Upload %s recebido: %s (%s) %s', sid, nome_condominio.strip(), ano_previsao, sorted(arquivos))
     try:
-        return await _validar_e_registrar(sid, set(arquivos), nome_condominio=nome_condominio, ano_previsao=ano_previsao, tem_fundo_reserva=tem_fundo_reserva, balanual=balanual, desbai=desbai, rec=rec, dessin=dessin, inad=inad, origem_sistema=origem_sistema, periodo_inicio=periodo_inicio, periodo_fim=periodo_fim, alma_inicio=alma_inicio, alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec, alma_inad=alma_inad, sem_inadimplencia_alma=sem_inadimplencia_alma, sistemas=sistemas, group_bal=group_bal, group_des=group_des, group_rec=group_rec)
+        return await _validar_e_registrar(sid, set(arquivos), nome_condominio=nome_condominio, ano_previsao=ano_previsao, tem_fundo_reserva=tem_fundo_reserva, balanual=balanual, desbai=desbai, rec=rec, dessin=dessin, inad=inad, origem_sistema=origem_sistema, periodo_inicio=periodo_inicio, periodo_fim=periodo_fim, alma_inicio=alma_inicio, alma_bal=alma_bal, alma_fin=alma_fin, alma_rec=alma_rec, alma_inad=alma_inad, sem_inadimplencia_alma=sem_inadimplencia_alma, sistemas=sistemas, group_bal=group_bal, group_des=group_des, group_rec=group_rec, group_inad=group_inad)
     except HTTPException as exc:
         logger.warning('Upload %s recusado: %s', sid, exc.detail)
         db.marcar_etapa(sid, 'erro_validacao', str(exc.detail))
@@ -775,6 +785,7 @@ async def _validar_e_registrar(
     group_bal: UploadFile = File(None),
     group_des: UploadFile = File(None),
     group_rec: UploadFile = File(None),
+    group_inad: UploadFile = File(None),
 ):
     nome_condominio = nome_condominio.strip()
     if not nome_condominio:
@@ -858,6 +869,9 @@ async def _validar_e_registrar(
         uploads = dict(necessarios)
         if 'condo21' in selecionados and 'alma' not in selecionados:
             uploads.update(dessin=dessin, inad=inad if len(selecionados) == 1 else None)
+        if selecionados == ['group']:
+            # Opcional, como o inad01 do Condo21; com o Alma a inadimplência vem dele.
+            uploads['group_inad'] = group_inad
         if 'alma' in selecionados:
             uploads['alma_inad'] = alma_inad
     elif origem_sistema == 'misto':

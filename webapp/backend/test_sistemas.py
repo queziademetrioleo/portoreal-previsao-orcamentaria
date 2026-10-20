@@ -176,6 +176,21 @@ class SystemsUploadTest(unittest.TestCase):
                     for field in self.files(systems):
                         self.assertEqual((Path(folder) / main.ARQUIVOS_ESPERADOS[field]).read_bytes(), b'dados')
 
+    def test_group_arrears_upload_only_when_group_is_alone(self):
+        inad = {'group_inad': ('Inadimplências_detalhadas.xlsx', b'inad group')}
+        for systems, kept in ((['group'], True), (['alma', 'group'], False)):
+            with self.subTest(systems=systems), BancoFalso().ativo() as banco, \
+                 patch.object(selected, 'load_selected', return_value={}):
+                response = self.client.post('/api/sessao', data={**self.form, 'sistemas': json.dumps(systems)},
+                                            files={**self.files(systems), **inad})
+                self.assertEqual(response.status_code, 200, response.text)
+                with tempfile.TemporaryDirectory() as folder:
+                    main._restaurar_arquivos(banco.row, folder)
+                    self.assertEqual((Path(folder) / 'group_inad.xlsx').exists(), kept)
+
+    def test_last_overdue_installment_is_ordered_by_year_then_month(self):
+        self.assertGreater(main._chave_mes('09/2026'), main._chave_mes('12/2025'))
+
     def test_bad_selection_and_missing_selected_files_are_kept_with_error(self):
         for systems in ([], ['group', 'group'], ['outro'], 'group', ['alma', 1]):
             with BancoFalso().ativo() as banco:

@@ -1889,7 +1889,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             if max_consec >= 3:
                 # Unidade critica: impacto = media da Tx. Condominio mensal × meses consecutivos
                 tx_items = [i for i in unidade_itens[u]
-                           if 'condominio' in _norm(i.get('classe', ''))]
+                           if i.get('taxa_condominio', 'condominio' in _norm(i.get('classe', '')))]
                 if tx_items:
                     tx_media = sum(i['valor'] for i in tx_items) / len(tx_items)
                 else:

@@ -17,7 +17,7 @@ COLUNAS_ARQUIVOS = {
     'alma_bal': 'arquivo_alma_bal', 'alma_fin': 'arquivo_alma_fin',
     'alma_rec': 'arquivo_alma_rec', 'alma_inad': 'arquivo_alma_inad',
     'group_bal': 'arquivo_group_bal', 'group_des': 'arquivo_group_des',
-    'group_rec': 'arquivo_group_rec',
+    'group_rec': 'arquivo_group_rec', 'group_inad': 'arquivo_group_inad',
 }
 
 
@@ -115,7 +115,7 @@ def _init_schema():
         # para investigar arquivos recusados. NULL = sessão anterior a essa mudança.
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'etapa', 'VARCHAR(20) DEFAULT NULL')
         _adicionar_coluna_se_ausente(cursor, 'sessoes', 'erro', 'TEXT')
-        for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad', 'group_bal', 'group_des', 'group_rec'):
+        for campo in ('alma_bal', 'alma_fin', 'alma_rec', 'alma_inad', 'group_bal', 'group_des', 'group_rec', 'group_inad'):
             _adicionar_coluna_se_ausente(cursor, 'sessoes', COLUNAS_ARQUIVOS[campo], 'LONGBLOB')
         conn.commit()
         cursor.close()

@@ -707,7 +707,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
 
     unidades_inad = len(set(i.get('unidade') for i in (estado.get('inadimplencia') or [])
                              if i.get('decisao') == 'abater'))
-    if estado.get('inadimplencia_apurada') is False or estado.get('origem_sistema') == 'group':
+    if estado.get('inadimplencia_apurada') is False:
         consideracoes.append(
             'A inadimplência não foi apurada com os documentos disponíveis. Esta previsão não inclui '
             'abatimento da receita por débitos; isso não comprova ausência de inadimplência.'
@@ -807,7 +807,7 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
             'rotina. '
             + ('A inadimplência não foi apurada. Confirme a cobertura dos meses e a vigência '
                'da receita antes de adotar os valores desta previsão. '
-               if estado.get('inadimplencia_apurada') is False or estado.get('origem_sistema') == 'group' else
+               if estado.get('inadimplencia_apurada') is False else
                'A inadimplência é tratada como redução de receita disponível. ')
             + (
                 f'O resultado mensal é de {_money(resultado_quadro / 12)} — '

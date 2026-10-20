@@ -81,6 +81,7 @@ export async function criarSessao(form: {
   groupBal?: File | null
   groupDes?: File | null
   groupRec?: File | null
+  groupInad?: File | null
   almaBal?: File | null
   almaFin?: File | null
   almaRec?: File | null
@@ -111,6 +112,7 @@ export async function criarSessao(form: {
       for (const [field, file] of group) {
         if (file) fd.append(field, file)
       }
+      if (form.sistemas.length === 1 && form.groupInad) fd.append('group_inad', form.groupInad)
     }
     if (form.sistemas.includes('alma')) {
       for (const [field, file] of [['alma_bal', form.almaBal], ['alma_fin', form.almaFin], ['alma_rec', form.almaRec], ['alma_inad', form.semInadAlma ? null : form.almaInad]] as const) {

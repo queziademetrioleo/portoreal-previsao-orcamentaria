@@ -29,7 +29,7 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 ## Sistemas e documentos aceitos hoje
 
 - **Condo21 sozinho**: `balanual.xls`, `desbai06.xls`, `rec02.xls` obrigatórios; `dessin02.xls`, `inad01.xls` opcionais.
-- **Group sozinho**: balancete anual, despesas detalhadas, receitas por unidade.
+- **Group sozinho**: balancete anual, despesas detalhadas, receitas por unidade; inadimplência detalhada opcional.
 - **Alma**: FIN00601 (XLSX despesas), Por período agrupado por contas (PDF), Contas a receber agrupado
   por conta (PDF), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
 - **Com o Alma no conjunto, o Alma prevalece**: Condo21 envia só `desbai06`; Group só despesas detalhadas.
@@ -68,6 +68,13 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **Aldeia das Asas conferido com os arquivos reais:** 1.1.6 Taxa Extra e 1.1.8 Compl. Tx. Condomínio vêm em 2 linhas
   cada (uma de estornos negativos) → somadas. MAS o "Despesas detalhadas" veio filtrado em **Competência 08/2026**
   (R$ 131 mil de R$ 1,49 mi do balancete); reexportar com Competência: Todas.
+
+- **Inadimplência no Group sozinho (pedido da usuária, 19/10):** novo upload opcional "Inadimplência detalhada"
+  (`group_inad`, coluna `arquivo_group_inad`), lido por `parsers_group.parse_arrears` no formato comum do inad01 e
+  tratado pela mesma R8 do Condo21. Confere total e nº de unidades do relatório (não traz nome do condomínio).
+  Aldeia das Asas real: Águia-201 (13 meses) → abate R$ 472,23/mês. Corrigido junto: última parcela era escolhida
+  comparando "MM/AAAA" como texto (12/2025 > 09/2026) — afetava também o Condo21. PDF não força mais
+  "inadimplência não apurada" para todo Group. Com Alma no conjunto, o campo não aparece (inadimplência do Alma).
 
 ## Fase 2 (18/10/2026)
 

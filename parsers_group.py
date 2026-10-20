@@ -15,6 +15,8 @@ import xlrd
 
 FILES = {'balanual': 'group_bal.xlsx', 'desbai': 'group_des.xlsx',
          'rec': 'group_rec.xlsx'}
+# Opcional, como o inad01 do Condo21 (Aldeia das Asas, 10/2026).
+ARREARS_FILE = 'group_inad.xlsx'
 MONTHS = {name: i for i, name in enumerate(
     ('jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'), 1)}
 
@@ -74,6 +76,15 @@ def month(value):
 
 
 def read(path):
+    rows = read_rows(path)
+    names = [str(row[0]).strip() for row in rows if row and
+             norm(row[0]).startswith(('cond.', 'condominio '))]
+    if not names:
+        raise ValueError(f'Group: condomínio não identificado em {Path(path).name}.')
+    return rows, names[0]
+
+
+def read_rows(path):
     try:
         with open(path, 'rb') as source:
             signature = source.read(8)
@@ -92,11 +103,7 @@ def read(path):
                     wb.close()
     except Exception as exc:
         raise ValueError(f'Group: não foi possível ler {Path(path).name} como XLS ou XLSX.') from exc
-    names = [str(row[0]).strip() for row in rows if row and
-             norm(row[0]).startswith(('cond.', 'condominio '))]
-    if not names:
-        raise ValueError(f'Group: condomínio não identificado em {Path(path).name}.')
-    return rows, names[0]
+    return rows
 
 
 def header(rows, required):
@@ -301,6 +308,52 @@ def load_group_expenses(folder):
     return {'bal': balance_from_payments(des['itens']), 'des': des, 'divergencias': []}
 
 
+def parse_arrears(path):
+    """Inadimplência detalhada da Group no formato do inad01 do Condo21.
+
+    Uma linha por unidade × competência × conta; a regra R8 (>= 3 meses
+    consecutivos) roda depois no motor, igual ao Condo21. O relatório não traz o
+    nome do condomínio: confere-se o total e o número de unidades declarados.
+    """
+    rows = read_rows(path)
+    text = ' '.join(norm(v) for row in rows for v in row if v is not None)
+    base = re.search(r'inadimplencia ate:?\s*(\d{2}/\d{2}/\d{4})', text)
+    if 'inadimplencia detalhada' not in text or not base:
+        raise ValueError('Group: envie o relatório "Inadimplência detalhada" com a data de inadimplência no filtro.')
+    data_base = date(base[1])
+    start, cols = header(rows, ('unidade', 'classe de conta', 'competencia', 'vencimento', 'valor (r$)'))
+    items, declared = [], None
+    for row_no, row in enumerate(rows[start + 1:], start + 2):
+        if norm(row[cols['unidade']]).startswith('total inadimplencia das unidades'):
+            declared = money(row[cols['valor (r$)']])
+            break
+        code, title = account(row[cols['classe de conta']])
+        if not code:
+            continue
+        competence = month(row[cols['competencia']])
+        if not competence:
+            raise ValueError(f'Group: competência inválida na inadimplência da linha {row_no}.')
+        due = date(row[cols['vencimento']])
+        received = row[cols['recebimento']] if 'recebimento' in cols else None
+        items.append({'unidade': str(row[cols['unidade']]).strip(), 'codigo': code, 'classe': title,
+                      # Compl.Tx.Condomínio também tem "condomínio" no nome; a média da
+                      # taxa da unidade (R8) usa só a taxa condominial.
+                      'taxa_condominio': 'condominio' in norm(title) and 'compl' not in norm(title),
+                      'mes_ref': competence, 'vencimento': due, 'valor': float(money(row[cols['valor (r$)']])),
+                      'proj_rec': None, 'meses_atraso': (data_base.year - due.year) * 12 + data_base.month - due.month,
+                      'recebimento': None if str(received or '').strip() in ('', '-') else str(received).strip(),
+                      'linha_origem': row_no})
+    if declared is None:
+        raise ValueError('Group: total da inadimplência das unidades não encontrado.')
+    total = sum(money(i['valor']) for i in items)
+    if abs(total - declared) > Decimal('0.01'):
+        raise ValueError('Group: soma da inadimplência difere do total informado no relatório.')
+    units = re.search(r'numero de unidades:?\s*(\d+)', text)
+    if units and int(units[1]) != len({i['unidade'] for i in items}):
+        raise ValueError('Group: número de unidades da inadimplência difere das unidades listadas.')
+    return {'data_base': data_base, 'itens': items, 'total': float(total)}
+
+
 def load_group(folder, core):
     folder = Path(folder)
     bal = parse_balance(folder / FILES['balanual'])
@@ -309,7 +362,11 @@ def load_group(folder, core):
     if len({norm(report['nome_condominio']) for report in (bal, des, rec)}) != 1:
         raise ValueError('Group: os três relatórios devem pertencer ao mesmo condomínio.')
     warnings = list(bal['avisos'])
-    warnings.append('Group: relatório de inadimplência não fornecido. O abatimento por inadimplência não foi calculado; isso não comprova ausência de débitos.')
+    arrears = parse_arrears(folder / ARREARS_FILE) if (folder / ARREARS_FILE).exists() else None
+    if arrears is None:
+        warnings.append('Group: relatório de inadimplência não fornecido. O abatimento por inadimplência não foi calculado; isso não comprova ausência de débitos.')
+    elif arrears['data_base'].strftime('%m/%Y') != bal['meses'][-1]:
+        warnings.append(f'Group: inadimplência apurada até {arrears["data_base"]:%d/%m/%Y}; o balancete termina em {bal["meses"][-1]}.')
     if rec['excluidas']:
         warnings.append(f'Group: {len(rec["excluidas"])} linhas de cobranças excluídas das unidades foram retiradas da base da receita.')
     if rec['mes_ref'] != bal['meses'][-1]:
@@ -335,5 +392,5 @@ def load_group(folder, core):
                        for (code, label), value in detail.items() if abs(value) > Decimal('0.01'))
     if differences:
         warnings.append('Group: diferenças entre balancete e pagamentos por conta/mês: ' + '; '.join(differences))
-    return {'bal': bal, 'des': des, 'rec': rec, 'sin': {'grand_total': None}, 'inad': None,
+    return {'bal': bal, 'des': des, 'rec': rec, 'sin': {'grand_total': None}, 'inad': arrears,
             'divergencias': warnings, 'cobertura': {label: 'group' for label in labels}}

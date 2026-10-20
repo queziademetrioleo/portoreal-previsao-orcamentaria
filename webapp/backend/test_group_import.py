@@ -135,6 +135,52 @@ class GroupImportTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'soma das classes de receitas'):
                 group.parse_balance('group_bal.xlsx')
 
+    def arrears(self):
+        head = ['Unidade', 'Sacado', 'NN', 'Classe de conta', 'Competência', 'Vencimento', 'Atraso',
+                'Valor (R$)', 'Juros (R$)', 'Total (R$)', 'Informações do acordo', 'Recebimento']
+        rows = [['I Porto Real - VHR'], ['INADIMPLÊNCIA DETALHADA'], ['Número de unidades: 2'], [], head]
+        # 201 deve 07, 08 e 09 (crítica); 102 só 09. Compl. não entra na média da taxa.
+        for unit, months in (('Águia - 201', ('07', '08', '09')), ('Lince - 102', ('09',))):
+            for m in months:
+                rows.append([unit, 'Fulano', '1', '1.1.2 - .Tx. Condomínio', f'{m}/2026', f'10/{m}/2026', '20', 100 + int(m), 0, 0, '-', '-'])
+                rows.append([unit, 'Fulano', '1', '1.1.36 - Água', f'{m}/2026', f'10/{m}/2026', '20', 50, 0, 0, '-', '-'])
+        rows.append(['Águia - 201', 'Fulano', '1', '1.1.8 - Compl.Tx.Condomínio', '07/2026', '10/07/2026', '20', -9, 0, 0, '-', '-'])
+        total = sum(r[7] for r in rows[5:])
+        rows += [['Total inadimplência das unidades', None, None, None, None, None, None, total],
+                 ['Filtros:  Inadimplência até:30/09/2026; Competência: Todas']]
+        return rows
+
+    def test_group_arrears_follow_condo21_rule(self):
+        """Group sozinho: mesma R8 do Condo21 (>= 3 meses consecutivos abate 1 mês da taxa)."""
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / group.ARREARS_FILE).write_bytes(b'')
+            with patch.object(group, 'read', side_effect=self.reader), \
+                 patch.object(group, 'read_rows', return_value=self.arrears()):
+                data = group.load_group(folder, core)
+        ina = data['inad']
+        self.assertEqual(ina['data_base'].isoformat(), '2026-09-30')
+        self.assertEqual(len(ina['itens']), 9)
+        self.assertFalse(any('inadimplência não fornecido' in v for v in data['divergencias']))
+        compl = next(i for i in ina['itens'] if i['codigo'] == '1.1.8')
+        self.assertFalse(compl['taxa_condominio'])
+        # A regra R8 do motor só usa o formato comum (unidade, mes_ref, valor, classe).
+        self.assertEqual({i['unidade'] for i in ina['itens'] if i['mes_ref'] == '07/2026'}, {'Águia - 201'})
+
+    def test_group_arrears_report_is_checked_against_its_totals(self):
+        rows = self.arrears()
+        rows[-2][7] += 1
+        with patch.object(group, 'read_rows', return_value=rows):
+            with self.assertRaisesRegex(ValueError, 'difere do total'):
+                group.parse_arrears('inad.xlsx')
+        rows = self.arrears()
+        rows[2] = ['Número de unidades: 3']
+        with patch.object(group, 'read_rows', return_value=rows):
+            with self.assertRaisesRegex(ValueError, 'número de unidades'):
+                group.parse_arrears('inad.xlsx')
+        with patch.object(group, 'read_rows', return_value=self.balance):
+            with self.assertRaisesRegex(ValueError, 'Inadimplência detalhada'):
+                group.parse_arrears('inad.xlsx')
+
     def test_rejects_mixed_condominiums_and_short_periods(self):
         def wrong(path):
             rows, name = self.reader(path)

@@ -13,7 +13,7 @@
 | **R6** Contratos / pró-labore / taxa de administração | Último valor pago × 12. A 13ª taxa não usa essa regra. |
 | **Seguro** | Apólice vigente: última parcela × total de parcelas (coluna Parcela do Alma ou "Parcela N/M" na descrição). Sem essa informação, conta pagamentos mensais seguidos de mesmo valor (pagamento único = 1). |
 | **R7** Aumento previsto | 10% fixo sobre o subtotal (não editável). |
-| **R8** Inadimplência | Abate da receita (não é despesa), um mês por unidade. Só Condo21: ≥3 meses consecutivos, taxa da unidade. Com Alma: unidade que deve **os dois** meses anteriores ao mês do relatório Alma (outubro → setembro e agosto; débito antigo com esses meses pagos = acordo, não entra) → abate **um boleto inteiro** (taxa, fundo e água, sem multa/juros); sem registro = zero; não buscar débitos antigos do outro sistema. |
+| **R8** Inadimplência | Abate da receita (não é despesa), um mês por unidade. Só Condo21 **ou só Group** (Inadimplência detalhada, opcional como o inad01): ≥3 meses consecutivos, abate a taxa condominial da última parcela (sem Compl.Tx.). Com Alma: unidade que deve **os dois** meses anteriores ao mês do relatório Alma (outubro → setembro e agosto; débito antigo com esses meses pagos = acordo, não entra) → abate **um boleto inteiro** (taxa, fundo e água, sem multa/juros); sem registro = zero; não buscar débitos antigos do outro sistema. |
 | **R9** Superávit | ≥ R$ 2.000/mês confortável; entre 0 e 2.000 insuficiente (alerta); < 0 déficit. Reajuste sugerido mira a margem mínima. |
 
 Exceções fixas: `PONTUAL_FORA` (combate a incêndio — gasto pontual, fora); `SEMPRE_RECORRENTE`

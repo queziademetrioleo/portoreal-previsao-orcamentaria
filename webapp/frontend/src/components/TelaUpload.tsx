@@ -25,6 +25,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   const [groupBal, setGroupBal] = useState<File | null>(null)
   const [groupDes, setGroupDes] = useState<File | null>(null)
   const [groupRec, setGroupRec] = useState<File | null>(null)
+  const [groupInad, setGroupInad] = useState<File | null>(null)
   const [almaBal, setAlmaBal] = useState<File | null>(null)
   const [almaFin, setAlmaFin] = useState<File | null>(null)
   const [almaRec, setAlmaRec] = useState<File | null>(null)
@@ -109,7 +110,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
         ano,
         sistemas,
         ...(condo ? (alma ? { desbai } : { balanual, desbai, rec, dessin, inad: multiplos ? null : inad }) : {}),
-        ...(group ? (alma ? { groupDes } : { groupBal, groupDes, groupRec }) : {}),
+        ...(group ? (alma ? { groupDes } : { groupBal, groupDes, groupRec, groupInad: multiplos ? null : groupInad }) : {}),
         ...(alma ? { almaBal, almaFin, almaRec, almaInad, semInadAlma } : {}),
       })
       if (!mountedRef.current) return
@@ -333,10 +334,13 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                   {!alma && <FileZone label="Balancete anual (XLS ou XLSX)" file={groupBal} setFile={setGroupBal} accept=".xls,.xlsx" required />}
                   <FileZone label="Despesas detalhadas por classe de conta (XLS ou XLSX)" file={groupDes} setFile={setGroupDes} accept=".xls,.xlsx" required />
                   {!alma && <FileZone label="Receitas detalhadas por unidade/cliente (XLS ou XLSX)" file={groupRec} setFile={setGroupRec} accept=".xls,.xlsx" required />}
+                  {!multiplos && <FileZone label="Inadimplência detalhada (opcional)" file={groupInad} setFile={setGroupInad} accept=".xls,.xlsx" />}
                 </div>
                 <p className="form-hint">{alma
                   ? 'Com o Alma, bastam as despesas detalhadas do período que ficou na Group: receita e inadimplência atuais vêm do Alma.'
-                  : 'Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência Group ainda não é apurada por estes três relatórios.'}</p>
+                  : multiplos
+                  ? 'Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas.'
+                  : 'Envie o balancete com 12 meses e pagamentos do mesmo período. Cobranças excluídas serão desconsideradas. A inadimplência detalhada é opcional — só anexe se houver inadimplência.'}</p>
               </section>}
 
               {alma && (
