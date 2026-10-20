@@ -69,12 +69,14 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   cada (uma de estornos negativos) → somadas. MAS o "Despesas detalhadas" veio filtrado em **Competência 08/2026**
   (R$ 131 mil de R$ 1,49 mi do balancete); reexportar com Competência: Todas.
 
-- **Inadimplência no Group sozinho (pedido da usuária, 19/10):** novo upload opcional "Inadimplência detalhada"
-  (`group_inad`, coluna `arquivo_group_inad`), lido por `parsers_group.parse_arrears` no formato comum do inad01 e
-  tratado pela mesma R8 do Condo21. Confere total e nº de unidades do relatório (não traz nome do condomínio).
-  Aldeia das Asas real: Águia-201 (13 meses) → abate R$ 472,23/mês. Corrigido junto: última parcela era escolhida
-  comparando "MM/AAAA" como texto (12/2025 > 09/2026) — afetava também o Condo21. PDF não força mais
-  "inadimplência não apurada" para todo Group. Com Alma no conjunto, o campo não aparece (inadimplência do Alma).
+- **Inadimplência no Group sozinho (usuária, 19/10):** upload opcional "Inadimplência detalhada" (`group_inad`, coluna
+  `arquivo_group_inad`), `parsers_group.parse_arrears` com a **regra do Alma**: mês do relatório = data de Emissão; unidade
+  com boleto em aberto (sem Recebimento) nos 2 meses anteriores → abate o boleto inteiro mais recente (taxa+fundo+água,
+  sem juros/multa; boleto só de acordo não conta). Confere total e nº de unidades (relatório não traz o nome do condomínio).
+  Aldeia das Asas real (emissão 19/10): só Águia-201 deve 08 e 09 → abate R$ 690,50/mês.
+  Corrigido junto: (a) item do Alma ("Boleto…") era descartado na montagem da tela pelo filtro "condom" — o abatimento
+  Alma nunca chegava à tela/PDF (não apareceu porque Santorini/Berlin tinham 0 unidades); (b) última parcela Condo21
+  escolhida comparando "MM/AAAA" como texto; (c) PDF forçava "inadimplência não apurada" para todo Group.
 
 ## Fase 2 (18/10/2026)
 

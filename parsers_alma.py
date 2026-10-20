@@ -137,7 +137,8 @@ def read_arrears(path):
             continue
         unit = row[1].strip()
         owed[unit].add(month)
-        item = {'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'mes_ref': month_label(month),
+        # taxa_condominio: o boleto inteiro é o que se abate (o filtro da tela procura "condom").
+        item = {'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'taxa_condominio': True, 'mes_ref': month_label(month),
                 'vencimento': due, 'valor': original, 'valor_original_titulo': original,
                 'proj_rec': original, 'meses_atraso': 1 if month == end else 2,
                 'critica': True, 'regra_inad': 'misto_ultimos_2_meses_alma',

@@ -308,21 +308,29 @@ def load_group_expenses(folder):
     return {'bal': balance_from_payments(des['itens']), 'des': des, 'divergencias': []}
 
 
-def parse_arrears(path):
-    """Inadimplência detalhada da Group no formato do inad01 do Condo21.
+REGRA_INAD = 'group_ultimos_2_meses'
 
-    Uma linha por unidade × competência × conta; a regra R8 (>= 3 meses
-    consecutivos) roda depois no motor, igual ao Condo21. O relatório não traz o
-    nome do condomínio: confere-se o total e o número de unidades declarados.
+
+def parse_arrears(path):
+    """Inadimplência detalhada da Group: mesma regra do Alma (José Henrique, 10/2026).
+
+    Inadimplente = boleto em aberto nos DOIS meses anteriores ao mês do relatório
+    (emissão em outubro → setembro E agosto). Com esses meses pagos, débito antigo é
+    acordo e não entra. Abate o boleto inteiro mais recente (taxa, fundo, água; sem
+    juros/multa). Linha com Recebimento preenchido já foi paga. O relatório não traz
+    o nome do condomínio: confere-se o total e o número de unidades declarados.
     """
     rows = read_rows(path)
     text = ' '.join(norm(v) for row in rows for v in row if v is not None)
     base = re.search(r'inadimplencia ate:?\s*(\d{2}/\d{2}/\d{4})', text)
-    if 'inadimplencia detalhada' not in text or not base:
-        raise ValueError('Group: envie o relatório "Inadimplência detalhada" com a data de inadimplência no filtro.')
-    data_base = date(base[1])
-    start, cols = header(rows, ('unidade', 'classe de conta', 'competencia', 'vencimento', 'valor (r$)'))
-    items, declared = [], None
+    issued = re.search(r'emissao:?\s*(\d{2}/\d{2}/\d{4})', text)
+    if 'inadimplencia detalhada' not in text or not base or not issued:
+        raise ValueError('Group: envie o relatório "Inadimplência detalhada" original, com filtro e data de emissão.')
+    data_base, issued = date(base[1]), date(issued[1])
+    end_day = issued.replace(day=1) - dt.timedelta(days=1)
+    window = [(end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%m/%Y'), end_day.strftime('%m/%Y')]
+    start, cols = header(rows, ('unidade', 'nn', 'classe de conta', 'competencia', 'vencimento', 'valor (r$)', 'recebimento'))
+    lines, declared = [], None
     for row_no, row in enumerate(rows[start + 1:], start + 2):
         if norm(row[cols['unidade']]).startswith('total inadimplencia das unidades'):
             declared = money(row[cols['valor (r$)']])
@@ -333,25 +341,44 @@ def parse_arrears(path):
         competence = month(row[cols['competencia']])
         if not competence:
             raise ValueError(f'Group: competência inválida na inadimplência da linha {row_no}.')
-        due = date(row[cols['vencimento']])
-        received = row[cols['recebimento']] if 'recebimento' in cols else None
-        items.append({'unidade': str(row[cols['unidade']]).strip(), 'codigo': code, 'classe': title,
-                      # Compl.Tx.Condomínio também tem "condomínio" no nome; a média da
-                      # taxa da unidade (R8) usa só a taxa condominial.
-                      'taxa_condominio': 'condominio' in norm(title) and 'compl' not in norm(title),
-                      'mes_ref': competence, 'vencimento': due, 'valor': float(money(row[cols['valor (r$)']])),
-                      'proj_rec': None, 'meses_atraso': (data_base.year - due.year) * 12 + data_base.month - due.month,
-                      'recebimento': None if str(received or '').strip() in ('', '-') else str(received).strip(),
-                      'linha_origem': row_no})
+        received = str(row[cols['recebimento']] or '').strip()
+        lines.append({'unidade': str(row[cols['unidade']]).strip(), 'nn': str(row[cols['nn']] or '').strip(),
+                      'codigo': code, 'classe': title, 'mes_ref': competence,
+                      'vencimento': date(row[cols['vencimento']]), 'valor': money(row[cols['valor (r$)']]),
+                      'pago': received not in ('', '-'), 'linha_origem': row_no})
     if declared is None:
         raise ValueError('Group: total da inadimplência das unidades não encontrado.')
-    total = sum(money(i['valor']) for i in items)
-    if abs(total - declared) > Decimal('0.01'):
+    if abs(sum(i['valor'] for i in lines) - declared) > Decimal('0.01'):
         raise ValueError('Group: soma da inadimplência difere do total informado no relatório.')
     units = re.search(r'numero de unidades:?\s*(\d+)', text)
-    if units and int(units[1]) != len({i['unidade'] for i in items}):
+    if units and int(units[1]) != len({i['unidade'] for i in lines}):
         raise ValueError('Group: número de unidades da inadimplência difere das unidades listadas.')
-    return {'data_base': data_base, 'itens': items, 'total': float(total)}
+    # Um boleto (NN) tem uma linha por conta; boleto só de acordo não é taxa do mês.
+    bills = defaultdict(list)
+    for line in lines:
+        if 'acordo' not in norm(line['classe']):
+            bills[(line['unidade'], line['nn'])].append(line)
+    open_bills = defaultdict(dict)
+    for (unit, _), bill in bills.items():
+        competence = bill[0]['mes_ref']
+        if competence in window and not any(i['pago'] for i in bill) and bill[0]['vencimento'] <= data_base:
+            open_bills[unit][competence] = bill
+    items = []
+    for unit, by_month in open_bills.items():
+        if set(by_month) != set(window):
+            continue
+        bill = by_month[window[1]]
+        items.append({'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'taxa_condominio': True,
+                      'mes_ref': window[1], 'vencimento': bill[0]['vencimento'],
+                      'valor': float(sum(i['valor'] for i in bill)), 'proj_rec': None, 'meses_atraso': 2,
+                      'critica': True, 'regra_inad': REGRA_INAD, 'sistema': 'group',
+                      'linhas_origem': [i['linha_origem'] for i in bill]})
+    total = round(sum(i['valor'] for i in items), 2)
+    return {'total': float(declared), 'critica': total, 'recente': round(float(declared) - total, 2),
+            'data_base': data_base, 'itens': items, 'unidades_criticas': len(items),
+            'unidades_criticas_detalhe': {i['unidade']: {'impacto': i['valor'], 'tx_mensal_media': i['valor'],
+                                                       'meses_consecutivos': 2} for i in items},
+            'impacto_mensal_receita': total, 'meses_considerados': window, 'regra': REGRA_INAD}
 
 
 def load_group(folder, core):

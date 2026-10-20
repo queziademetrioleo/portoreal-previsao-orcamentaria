@@ -138,37 +138,38 @@ class GroupImportTest(unittest.TestCase):
     def arrears(self):
         head = ['Unidade', 'Sacado', 'NN', 'Classe de conta', 'Competência', 'Vencimento', 'Atraso',
                 'Valor (R$)', 'Juros (R$)', 'Total (R$)', 'Informações do acordo', 'Recebimento']
-        rows = [['I Porto Real - VHR'], ['INADIMPLÊNCIA DETALHADA'], ['Número de unidades: 2'], [], head]
-        # 201 deve 07, 08 e 09 (crítica); 102 só 09. Compl. não entra na média da taxa.
-        for unit, months in (('Águia - 201', ('07', '08', '09')), ('Lince - 102', ('09',))):
-            for m in months:
-                rows.append([unit, 'Fulano', '1', '1.1.2 - .Tx. Condomínio', f'{m}/2026', f'10/{m}/2026', '20', 100 + int(m), 0, 0, '-', '-'])
-                rows.append([unit, 'Fulano', '1', '1.1.36 - Água', f'{m}/2026', f'10/{m}/2026', '20', 50, 0, 0, '-', '-'])
-        rows.append(['Águia - 201', 'Fulano', '1', '1.1.8 - Compl.Tx.Condomínio', '07/2026', '10/07/2026', '20', -9, 0, 0, '-', '-'])
+        rows = [['I Porto Real - VHR'], ['INADIMPLÊNCIA DETALHADA'], ['Número de unidades: 4'], [], head]
+        def bill(unit, nn, m, received='-', water=50):
+            for cls, value in (('1.1.2 - .Tx. Condomínio', 100), ('1.1.3 - .Fundo Reserva', 10), ('1.1.36 - Água', water)):
+                rows.append([unit, 'Fulano', nn, cls, m, f'10/{m}', '20', value, 1, value + 1, '-', received])
+        bill('Águia - 201', '1', '08/2026'); bill('Águia - 201', '2', '09/2026', water=60)  # deve 08 e 09
+        rows.append(['Águia - 201', 'Fulano', '3', '1.7.8 - Acordo Extrajudicial', '09/2026', '20/09/2026', '10', 900, 0, 900, 'Acordo 7', '-'])
+        bill('Lince - 102', '4', '09/2026')                                                # só 09
+        bill('Pegasus - 310', '5', '08/2026', received='05/10/2026'); bill('Pegasus - 310', '6', '09/2026')  # 08 pago depois
+        bill('Pegasus - 505', '7', '02/2026'); bill('Pegasus - 505', '8', '03/2026')     # débito antigo
         total = sum(r[7] for r in rows[5:])
         rows += [['Total inadimplência das unidades', None, None, None, None, None, None, total],
-                 ['Filtros:  Inadimplência até:30/09/2026; Competência: Todas']]
+                 ['Filtros:  Inadimplência até:30/09/2026; Competência: Todas'], ['Emissão: 19/10/2026 20:40']]
         return rows
 
-    def test_group_arrears_follow_condo21_rule(self):
-        """Group sozinho: mesma R8 do Condo21 (>= 3 meses consecutivos abate 1 mês da taxa)."""
+    def test_group_arrears_use_two_months_before_report_like_alma(self):
+        """Emissão em outubro: inadimplente é quem deve setembro E agosto (José, 10/2026)."""
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder) / group.ARREARS_FILE).write_bytes(b'')
             with patch.object(group, 'read', side_effect=self.reader), \
                  patch.object(group, 'read_rows', return_value=self.arrears()):
                 data = group.load_group(folder, core)
         ina = data['inad']
-        self.assertEqual(ina['data_base'].isoformat(), '2026-09-30')
-        self.assertEqual(len(ina['itens']), 9)
+        self.assertEqual(ina['meses_considerados'], ['08/2026', '09/2026'])
+        self.assertEqual([i['unidade'] for i in ina['itens']], ['Águia - 201'])
+        # Boleto inteiro de 09 (taxa + fundo + água), sem juros e sem a parcela do acordo.
+        self.assertEqual(ina['itens'][0]['valor'], 170)
+        self.assertEqual(ina['impacto_mensal_receita'], 170)
         self.assertFalse(any('inadimplência não fornecido' in v for v in data['divergencias']))
-        compl = next(i for i in ina['itens'] if i['codigo'] == '1.1.8')
-        self.assertFalse(compl['taxa_condominio'])
-        # A regra R8 do motor só usa o formato comum (unidade, mes_ref, valor, classe).
-        self.assertEqual({i['unidade'] for i in ina['itens'] if i['mes_ref'] == '07/2026'}, {'Águia - 201'})
 
     def test_group_arrears_report_is_checked_against_its_totals(self):
         rows = self.arrears()
-        rows[-2][7] += 1
+        rows[-3][7] += 1
         with patch.object(group, 'read_rows', return_value=rows):
             with self.assertRaisesRegex(ValueError, 'difere do total'):
                 group.parse_arrears('inad.xlsx')

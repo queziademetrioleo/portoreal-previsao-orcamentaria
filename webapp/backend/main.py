@@ -344,6 +344,10 @@ def _explicacao_deterministica_inad(item):
         return {'resumo': 'Parcela em aberto nos dois últimos meses da referência do relatório Almah. O abatimento considera uma taxa mensal da unidade.',
                 'evidencias': ['Posição atual Almah; histórico Condo21 não é somado.',
                                f"Última parcela: {item.get('mes_ref', '')}."]}
+    if item.get('regra_inad') == 'group_ultimos_2_meses':
+        return {'resumo': 'Boletos em aberto nos dois meses anteriores ao relatório de inadimplência Group. '
+                          'O abatimento considera o boleto inteiro da unidade (taxa, fundo e água), sem juros e multa.',
+                'evidencias': [f"Último boleto em aberto: {item.get('mes_ref', '')}."]}
     critica = bool(item.get('critica'))
     meses = item.get('meses_atraso', 0)
     if item.get('decisao') == 'abater':
@@ -550,7 +554,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         for original_id, it in enumerate(inad.get('itens') or []):
             critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
             classe = core._norm(it.get('classe'))
-            # A Group marca a taxa (o Compl.Tx.Condomínio também tem "tx" e "condom").
+            # Alma e Group marcam o que se abate (boleto inteiro; o Compl.Tx. também tem "tx").
             eh_taxa_condominio = it.get('taxa_condominio', 'condom' in classe and ('taxa' in classe or 'tx' in classe))
             if not critica or not eh_taxa_condominio:
                 continue

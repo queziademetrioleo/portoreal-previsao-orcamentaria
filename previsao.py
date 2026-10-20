@@ -426,7 +426,7 @@ def ia_parecer(R, nome_condo):
                        sorted(ex_top.items(), key=lambda x: -x[1])[:8])
     inad_txt = 'sem inadimplencia registrada'
     if R['inad']:
-        criterio = 'dois últimos meses do relatório Alma' if R['inad'].get('regra') == 'misto_ultimos_2_meses_alma' else 'critica (>=3 meses)'
+        criterio = _criterio_2_meses(R['inad']) or 'critica (>=3 meses)'
         inad_txt = (f"total R${R['inad']['total']:,.2f}; {criterio} "
                     f"R${R['inad']['critica']:,.2f} ({R['inad']['unidades_criticas']} unidade(s)); "
                     f"impacto mensal na receita R${R['inad']['impacto_mensal_receita']:,.2f}")
@@ -669,6 +669,15 @@ def parse_dessin(path):
 # ----------------------------------------------------------------------------
 # INAD01 - inadimplencia
 # ----------------------------------------------------------------------------
+# Inadimplente = boleto em aberto nos dois meses anteriores ao relatório (José, 10/2026).
+REGRAS_INAD_2_MESES = ('misto_ultimos_2_meses_alma', 'group_ultimos_2_meses')
+
+
+def _criterio_2_meses(inad):
+    return {'misto_ultimos_2_meses_alma': 'dois últimos meses do relatório Alma',
+            'group_ultimos_2_meses': 'dois meses anteriores ao relatório Group'}.get(inad.get('regra'))
+
+
 def parse_inad(path):
     wb = xlrd.open_workbook(path)
     sh = wb.sheet_by_index(0)
@@ -1846,7 +1855,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     # Impacto: abate da receita a taxa mensal da unidade × meses consecutivos devidos.
     # O arquivo inad01 ja traz o total calculado.
     inad_res = (selected_data or mixed_data or {}).get('inad')
-    inad_res = inad_res if inad_res and inad_res.get('regra') == 'misto_ultimos_2_meses_alma' else None
+    inad_res = inad_res if inad_res and inad_res.get('regra') in REGRAS_INAD_2_MESES else None
     if inad_res is None and ina and ina['itens']:
         data_base = ina['data_base']
         # Agrupar por unidade e extrair meses consecutivos
@@ -1889,7 +1898,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             if max_consec >= 3:
                 # Unidade critica: impacto = media da Tx. Condominio mensal × meses consecutivos
                 tx_items = [i for i in unidade_itens[u]
-                           if i.get('taxa_condominio', 'condominio' in _norm(i.get('classe', '')))]
+                           if 'condominio' in _norm(i.get('classe', ''))]
                 if tx_items:
                     tx_media = sum(i['valor'] for i in tx_items) / len(tx_items)
                 else:
@@ -2127,10 +2136,10 @@ def gerar_xlsx(folder, out_path=None):
         ws.cell(r, 1, 'INADIMPLENCIA — abate da receita (nao e despesa)').font = Font(bold=True)
         r += 1
         inad = R['inad']
-        misto_inad = inad.get('regra') == 'misto_ultimos_2_meses_alma'
+        misto_inad = inad.get('regra') in REGRAS_INAD_2_MESES
         for label, val, critica in [
-            ('Total considerado nos dois últimos meses Alma' if misto_inad else 'Total em aberto (todos os devedores)', inad['total'], False),
-            (f'{"Dois últimos meses Alma" if misto_inad else "Critica (>= 3 meses)"} — {inad["unidades_criticas"]} unidade(s)', inad['critica'], True),
+            (f'Total considerado: {_criterio_2_meses(inad)}' if misto_inad else 'Total em aberto (todos os devedores)', inad['total'], False),
+            (f'{_criterio_2_meses(inad).capitalize() if misto_inad else "Critica (>= 3 meses)"} — {inad["unidades_criticas"]} unidade(s)', inad['critica'], True),
             ('Fora do período considerado' if misto_inad else 'Recente (< 3 meses) — nao abate receita', inad['recente'], False),
             ('(-) Impacto mensal na receita prevista (taxa das unidades criticas)',
              inad['impacto_mensal_receita'], True),
@@ -2313,8 +2322,8 @@ def gerar_xlsx(folder, out_path=None):
     # ============== ABA INADIMPLENCIA ==============
     ws = wb.create_sheet('Inadimplencia')
     if R['inad']:
-        misto_inad = R['inad'].get('regra') == 'misto_ultimos_2_meses_alma'
-        criterio = 'Dois últimos meses do relatório Alma' if misto_inad else 'Critica = vencido ha mais de 3 meses'
+        misto_inad = R['inad'].get('regra') in REGRAS_INAD_2_MESES
+        criterio = _criterio_2_meses(R['inad']).capitalize() if misto_inad else 'Critica = vencido ha mais de 3 meses'
         ws['A1'] = f"Data-base: {R['inad']['data_base']}  |  {criterio}"
         ws['A1'].font = Font(bold=True)
         _ws_header(ws, 3, ['Unidade/Devedor', 'Classe', 'Mes Ref', 'Vencimento',
