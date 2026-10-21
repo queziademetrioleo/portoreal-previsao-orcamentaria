@@ -415,16 +415,13 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
 
     # Contas sem correspondência ficam juntas, com detalhe na revisão,
     # em vez de despejar cada classe bruta no fim do resumo público.
-    outras = 0.0
-    for idx, linha in ativas:
-        if idx in consumidos:
-            continue
-        outras += float(linha.get('final') or 0)
-    if abs(outras) > 0.005:
-        despesas.append(('Outras despesas', outras))
+    # "Outras despesas" nunca aparece no relatório: o resíduo sem categoria
+    # fica fora da tabela e também do fechamento abaixo.
+    outras = sum(float(linha.get('final') or 0)
+                 for idx, linha in ativas if idx not in consumidos)
 
     # Mantém também a salvaguarda de fechamento usada no documento antigo.
-    subtotal_alvo = float(resumo.get('subtotal') or 0)
+    subtotal_alvo = float(resumo.get('subtotal') or 0) - outras
     diferenca = round(subtotal_alvo - sum(valor for _, valor in despesas), 2)
     if subtotal_alvo and abs(diferenca) > 0.05:
         despesas.append(('Ajustes de previsão', diferenca))
@@ -641,6 +638,10 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     inflacao = float(resumo.get('inflacao') or 0)
 
     com_fundo_pref = com_fundo_override if com_fundo_override is not None else estado.get('com_fundo', True)
+    if not com_fundo_pref:
+        # "Colocar fundo de reserva no relatório? Não": o fundo some da tabela
+        # de receitas, das opções de custeio e das considerações.
+        fundo_reserva_anual = 0
 
     previsao_final = estado.get('previsao_final') or []
     receitas, _ = _extrair_receitas_despesas(previsao_final)
@@ -665,6 +666,9 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
     nao_ordinarias = cenarios.get('receitas_nao_ordinarias') or []
     receitas += [(i['classe'], float(i['mensal'])) for i in nao_ordinarias
                  if _norm(i['classe']) not in {_norm(l) for l, _ in receitas}]
+    if not com_fundo_pref:
+        receitas = [(l, v) for l, v in receitas
+                    if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
     # A inadimplência considerada sai da Taxa de Condomínio (e de toda receita
     # usada nos cenários/reajuste) — feedback José Henrique 09/2026: o texto
     # dizia "subtraímos" mas a tabela mostrava a receita cheia.
