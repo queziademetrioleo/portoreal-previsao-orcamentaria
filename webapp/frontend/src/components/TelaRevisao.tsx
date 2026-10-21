@@ -308,8 +308,6 @@ export default function TelaRevisao({
           .map(([classe, itens]) => ({
             classe,
             itens: itens.sort((a, b) => a.data.localeCompare(b.data)),
-            pago: itens.reduce((total, item) => total + item.valor_pago, 0),
-            deduzido: itens.filter((item) => item.deduzido).reduce((total, item) => total + item.valor_pago, 0),
           }))
           .sort((a, b) => a.classe.localeCompare(b.classe)),
       }))
@@ -557,20 +555,16 @@ export default function TelaRevisao({
                 ) : (
                   <div className="audit-groups">
                     {contasPorGrupo.map(({ grupo, classes }, index) => {
-                      const pagoGrupo = classes.reduce((total, classe) => total + classe.pago, 0)
-                      const deduzidoGrupo = classes.reduce((total, classe) => total + classe.deduzido, 0)
                       return (
                         <details className="audit-group" key={grupo} open={index === 0}>
                           <summary>
                             <span><strong>{grupo}</strong><small>{classes.length} classe{classes.length === 1 ? '' : 's'}</small></span>
-                            <span>{money(pagoGrupo)} pago · {money(deduzidoGrupo)} deduzido <small>Dedução mensal equivalente: {money(deduzidoGrupo / 12)}</small></span>
                           </summary>
                           <div className="audit-classes">
-                            {classes.map(({ classe, itens, pago, deduzido }) => (
+                            {classes.map(({ classe, itens }) => (
                               <section className="audit-class" key={classe}>
                                 <div className="audit-class-header">
                                   <div><strong>{classe}</strong><small>{itens.length} lançamento{itens.length === 1 ? '' : 's'}</small></div>
-                                  <div><span>Pago: {money(pago)}</span><span>Deduzido: {money(deduzido)}</span><span>Dedução mensal equivalente: {money(deduzido / 12)}</span></div>
                                 </div>
                                 <div className="audit-table-wrap">
                                   <table className="audit-table">
