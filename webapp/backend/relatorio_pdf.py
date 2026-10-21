@@ -415,13 +415,21 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
 
     # Contas sem correspondência ficam juntas, com detalhe na revisão,
     # em vez de despejar cada classe bruta no fim do resumo público.
-    # "Outras despesas" nunca aparece no relatório: o resíduo sem categoria
-    # fica fora da tabela e também do fechamento abaixo.
+    # "Outras despesas" nunca aparece como linha no relatório: o resíduo sem
+    # categoria é somado em Gastos com conservação, para a tabela continuar
+    # fechando com o total previsto.
     outras = sum(float(linha.get('final') or 0)
                  for idx, linha in ativas if idx not in consumidos)
+    if abs(outras) > 0.005:
+        for pos, (label, valor) in enumerate(despesas):
+            if _norm(label) == _norm('Gastos com conservação'):
+                despesas[pos] = (label, valor + outras)
+                break
+        else:
+            despesas.append(('Gastos com conservação', outras))
 
     # Mantém também a salvaguarda de fechamento usada no documento antigo.
-    subtotal_alvo = float(resumo.get('subtotal') or 0) - outras
+    subtotal_alvo = float(resumo.get('subtotal') or 0)
     diferenca = round(subtotal_alvo - sum(valor for _, valor in despesas), 2)
     if subtotal_alvo and abs(diferenca) > 0.05:
         despesas.append(('Ajustes de previsão', diferenca))
@@ -625,7 +633,8 @@ def _lista_portugues(itens):
 # ---------------------------------------------------------------------------
 # Entrada principal
 # ---------------------------------------------------------------------------
-def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
+def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
+    """Contexto único do relatório, compartilhado pelos formatos PDF e DOCX."""
     resumo = estado.get('resumo') or {}
     linhas = estado.get('linhas_contas') or []
     fluxo_mensal = estado.get('fluxo_mensal') or []
@@ -823,8 +832,13 @@ def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
             )
         ),
         'consideracoes': consideracoes,
+        'fluxo_mensal': fluxo_mensal,
     }
+    return ctx
 
+
+def gerar_relatorio_pdf(estado, logo_path=None, com_fundo_override=None):
+    ctx = montar_contexto_relatorio(estado, logo_path, com_fundo_override)
     template = Template(_HTML_TEMPLATE)
     html = template.render(**ctx)
     pdf_bytes = HTML(string=html, base_url=os.path.dirname(os.path.abspath(__file__))).write_pdf()

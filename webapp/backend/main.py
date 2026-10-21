@@ -36,6 +36,7 @@ import db
 import aprendizado
 import previsao as core
 from relatorio_pdf import gerar_relatorio_pdf
+from relatorio_docx import gerar_relatorio_docx
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -1157,9 +1158,8 @@ def preview(sid: str, dec: Decisoes):
             'cenarios': R2.get('cenarios')}
 
 
-@app.post('/api/sessao/{sid}/relatorio-pdf')
-def relatorio_pdf(sid: str, dec: Decisoes):
-    """Aplica as decisões e devolve o PDF, sem criar documento XLSX intermediário."""
+def _preparar_estado_relatorio(sid: str, dec: Decisoes):
+    """Aplica as decisões, recalcula e persiste; base comum do PDF e do DOCX."""
     inicio = time.perf_counter()
     estado = _carregar_estado(sid)
 
@@ -1181,9 +1181,20 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     _atualizar_resumo_calculado(estado, R2, impacto_receita)
     estado['com_fundo'] = dec.com_fundo
     db.salvar_estado(sid, json.dumps(estado, ensure_ascii=False, default=str))
+    return estado, inicio, recalculado
+
+
+def _logo_relatorio():
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets', 'logo.png')
+    return logo_path if os.path.exists(logo_path) else None
+
+
+@app.post('/api/sessao/{sid}/relatorio-pdf')
+def relatorio_pdf(sid: str, dec: Decisoes):
+    """Aplica as decisões e devolve o PDF, sem criar documento XLSX intermediário."""
+    estado, inicio, recalculado = _preparar_estado_relatorio(sid, dec)
     inicio_render = time.perf_counter()
-    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=logo_path if os.path.exists(logo_path) else None)
+    pdf_bytes = gerar_relatorio_pdf(estado, logo_path=_logo_relatorio())
     fim = time.perf_counter()
     logger.info('PDF sessão %s: preparação/cálculo %.2fs; persistência %.2fs; renderização %.2fs; total %.2fs',
                 sid, recalculado - inicio, inicio_render - recalculado, fim - inicio_render, fim - inicio)
@@ -1191,6 +1202,22 @@ def relatorio_pdf(sid: str, dec: Decisoes):
     return Response(
         content=pdf_bytes,
         media_type='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Cache-Control': 'no-store, max-age=0',
+        },
+    )
+
+
+@app.post('/api/sessao/{sid}/relatorio-docx')
+def relatorio_docx(sid: str, dec: Decisoes):
+    """Mesmo relatório do PDF, em Word editável."""
+    estado, _, _ = _preparar_estado_relatorio(sid, dec)
+    docx_bytes = gerar_relatorio_docx(estado, logo_path=_logo_relatorio())
+    filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         headers={
             'Content-Disposition': f'attachment; filename="{filename}"',
             'Cache-Control': 'no-store, max-age=0',

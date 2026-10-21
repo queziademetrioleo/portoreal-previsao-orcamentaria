@@ -150,11 +150,14 @@ export async function criarSessao(form: {
   return r.json()
 }
 
-export async function gerarRelatorioPdf(
+export type FormatoRelatorio = 'pdf' | 'docx'
+
+export async function gerarRelatorio(
   sid: string,
   decisoes: PayloadDecisoes,
+  formato: FormatoRelatorio = 'pdf',
 ): Promise<Blob> {
-  const r = await fetch(`${BASE}/api/sessao/${sid}/relatorio-pdf`, {
+  const r = await fetch(`${BASE}/api/sessao/${sid}/relatorio-${formato}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decisoes),

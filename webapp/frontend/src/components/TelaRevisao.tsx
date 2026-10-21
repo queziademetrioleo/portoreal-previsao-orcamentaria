@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ItemInad, ItemRevisao, LancamentoConta, Sessao } from '../types'
 import { useDecisoes } from '../hooks/useDecisoes'
-import { gerarRelatorioPdf } from '../api'
+import { gerarRelatorio, type FormatoRelatorio } from '../api'
 import { money } from '../utils/format'
 import Header from './ui/Header'
 import Card from './ui/Card'
@@ -219,6 +219,7 @@ export default function TelaRevisao({
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState('')
   const [comFundo, setComFundo] = useState(true)
+  const [formato, setFormato] = useState<FormatoRelatorio>('pdf')
   const [modalGerarAberto, setModalGerarAberto] = useState(false)
 
   // Cenários com/sem fundo de reserva
@@ -247,11 +248,11 @@ export default function TelaRevisao({
     try {
       const payload = buildPayload()
       payload.com_fundo = comFundo
-      const pdf = await gerarRelatorioPdf(sessao.sessao_id, payload)
-      const url = URL.createObjectURL(pdf)
+      const arquivo = await gerarRelatorio(sessao.sessao_id, payload, formato)
+      const url = URL.createObjectURL(arquivo)
       const link = document.createElement('a')
       link.href = url
-      link.download = `Relatorio ${sessao.ano_previsao} - ${sessao.nome_condominio}.pdf`
+      link.download = `Relatorio ${sessao.ano_previsao} - ${sessao.nome_condominio}.${formato}`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -614,10 +615,10 @@ export default function TelaRevisao({
         <div className="info-modal-overlay" onClick={() => !gerando && setModalGerarAberto(false)}>
           <div className="info-modal-box gerar-modal" role="dialog" aria-modal="true" aria-labelledby="gerar-relatorio-titulo" onClick={(e) => e.stopPropagation()}>
             <div className="info-modal-header">
-              <strong id="gerar-relatorio-titulo">Gerar relatório em PDF</strong>
+              <strong id="gerar-relatorio-titulo">Gerar relatório</strong>
               <button type="button" className="info-modal-close" onClick={() => setModalGerarAberto(false)} disabled={gerando} aria-label="Fechar">×</button>
             </div>
-            <p className="gerar-modal-intro">Confirme as informações que serão usadas no relatório antes de baixar o PDF.</p>
+            <p className="gerar-modal-intro">Confirme as informações que serão usadas no relatório antes de baixar o relatório.</p>
             <label className="gerar-modal-field">
               <span>Aumento Previsto (Salários, Tarifas, Serviços)</span>
               <div><strong>10%</strong> <small>(valor fixo)</small></div>
@@ -631,9 +632,14 @@ export default function TelaRevisao({
               <label><input type="radio" name="fundo-reserva" checked={comFundo} onChange={() => setComFundo(true)} /> Sim</label>
               <label><input type="radio" name="fundo-reserva" checked={!comFundo} onChange={() => setComFundo(false)} /> Não</label>
             </fieldset>
+            <fieldset className="gerar-modal-field gerar-modal-choice">
+              <legend>Formato do relatório</legend>
+              <label><input type="radio" name="formato-relatorio" checked={formato === 'pdf'} onChange={() => setFormato('pdf')} /> PDF</label>
+              <label><input type="radio" name="formato-relatorio" checked={formato === 'docx'} onChange={() => setFormato('docx')} /> Word (DOCX, editável)</label>
+            </fieldset>
             <div className="gerar-modal-actions">
               <Button variant="secondary" onClick={() => setModalGerarAberto(false)} disabled={gerando}>Cancelar</Button>
-              <Button variant="primary" onClick={handleGerar} disabled={gerando}>{gerando ? 'Gerando PDF...' : 'Confirmar e baixar PDF'}</Button>
+              <Button variant="primary" onClick={handleGerar} disabled={gerando}>{gerando ? 'Gerando...' : `Confirmar e baixar ${formato === 'pdf' ? 'PDF' : 'Word'}`}</Button>
             </div>
           </div>
         </div>,
