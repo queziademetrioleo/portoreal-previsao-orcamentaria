@@ -32,8 +32,8 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 
 - **Condo21 sozinho**: `balanual.xls`, `desbai06.xls`, `rec02.xls` obrigatórios; `dessin02.xls`, `inad01.xls` opcionais.
 - **Group sozinho**: balancete anual, despesas detalhadas, receitas por unidade; inadimplência detalhada opcional.
-- **Alma**: FIN00601 (XLSX despesas), Por período agrupado por contas (PDF), Contas a receber agrupado
-  por conta (PDF), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
+- **Alma**: FIN00601 (XLSX despesas; Status opcional), Por período agrupado por contas (PDF), Contas a receber agrupado
+  por conta (PDF) **ou** Rateio por Unidade (XLSX), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
 - **Com o Alma no conjunto, o Alma prevalece**: Condo21 envia só `desbai06`; Group só despesas detalhadas.
   Receita atual e inadimplência vêm só do Alma. Demonstrativo do sistema anterior = soma dos pagamentos
   (`parsers_alma.balance_from_payments`). Alma ocupa os meses recentes, o outro sistema os anteriores;
@@ -67,7 +67,10 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   - FIN Alma do Forte Way vem **sem coluna Status** (só pagas) e com **pagamento dividido** (partes sem data + linha
     "TOTAL" com data/fornecedor). `read_fin` agora aceita os dois; testes novos em `test_mixed_import.py`.
   - **Contas a receber exportado sem filtro de Data Vencimento** → recusa correta ("selecione um único mês").
-    José precisa reexportar com um único mês de vencimento (ex.: 01/10 a 31/10/2026). Com receita simulada, o resto passa.
+    Resolvido com o **Rateio por Unidade (XLSX)**, aceito no MESMO campo do Contas a receber (um OU outro;
+    `read_receivables` reconhece pelo conteúdo, `read_unit_apportionment` lê o XML direto porque o openpyxl recusa os
+    estilos do arquivo). Forte Way: totais idênticos ao PDF (taxa 38.377,18; fundo 3.978,85; chamada de capital
+    4.401,60 fica fora da receita ordinária). Análise completa local passou (receita ordinária R$ 42.356,03/mês).
 - **Gráfico mensal (NÃO corrigido, aguarda decisão):** barra de despesa = despesa total do balancete; barra de receita =
   receita atual SEM a água cobrada das unidades (Group 1.1.36 Água ≈ R$ 363 mil/ano vs despesa Água ≈ R$ 366 mil/ano).
   Por isso a despesa fica acima o ano todo. A mesma exclusão infla o déficit da previsão (cópia local da sessão: 61%).
@@ -135,7 +138,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Forte Way: José reexporta o Contas a receber Alma com um único mês de vencimento e reenvia (após rebuild).
+1. Forte Way (`9e46c8126497`): sessão preparada no banco com o Rateio; após o rebuild, abrir na lista → a aplicação
+   reanalisa sozinha (IA de produção). Conferir números e `modelo_ia`.
    Reenviar Aldeia das Asas (despesas reexportadas sem filtro de competência) após o rebuild.\n   Avaliar com o José: bloquear quando as despesas detalhadas cobrem muito menos que o balancete (hoje só avisa). Se ainda acusar sobreposição, pedir os arquivos
    (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.

@@ -324,7 +324,104 @@ def read_fin(path, plan, pdf_accounts):
     return items
 
 
+def _xlsx_rows(path):
+    """Linhas de uma planilha lidas direto do XML: o "Rateio por Unidade" do
+    Alma tem estilos que o openpyxl recusa (Fill inválido)."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        shared = []
+        if 'xl/sharedStrings.xml' in names:
+            for item in ET.fromstring(archive.read('xl/sharedStrings.xml')).iter(ns + 'si'):
+                shared.append(''.join(t.text or '' for t in item.iter(ns + 't')))
+        sheet = sorted(n for n in names if n.startswith('xl/worksheets/sheet'))[0]
+        root = ET.fromstring(archive.read(sheet))
+    rows = []
+    for row in root.iter(ns + 'row'):
+        values = {}
+        for cell in row.findall(ns + 'c'):
+            column = re.match(r'[A-Z]+', cell.get('r'))[0]
+            inline, value = cell.find(ns + 'is'), cell.find(ns + 'v')
+            if inline is not None:
+                text = ''.join(t.text or '' for t in inline.iter(ns + 't'))
+            elif value is None:
+                continue
+            elif cell.get('t') == 's':
+                text = shared[int(value.text)]
+            else:
+                text = value.text
+            values[column] = text
+        if values:
+            width = max(sum((ord(ch) - 64) * 26 ** i for i, ch in enumerate(reversed(col))) for col in values)
+            rows.append([values.get(_column_name(i)) for i in range(1, width + 1)])
+    return rows
+
+
+def _column_name(index):
+    name = ''
+    while index:
+        index, rest = divmod(index - 1, 26)
+        name = chr(65 + rest) + name
+    return name
+
+
+def read_unit_apportionment(path):
+    """"Rateio por Unidade" (XLSX) do Alma: alternativa ao Contas a receber.
+
+    Colunas entre VENCIMENTO e TOTAL são as contas de receita (cota condominial,
+    fundo de reserva, chamada de capital...). Última linha = totais.
+    Devolve a mesma estrutura de read_receivables (Forte Way, 10/2026)."""
+    rows = _xlsx_rows(path)
+    header = [norm(v) for v in rows[0]]
+    try:
+        due, last = header.index('vencimento'), header.index('total')
+    except ValueError:
+        raise ValueError('Rateio por Unidade Almah: faltam as colunas VENCIMENTO e TOTAL.') from None
+    unit = header.index('unidade') if 'unidade' in header else None
+    labels = [str(v).strip() for v in rows[0][due + 1:last]]
+    if not labels:
+        raise ValueError('Rateio por Unidade Almah: nenhuma conta de receita entre VENCIMENTO e TOTAL.')
+
+    def amount(value):
+        text = str(value or '').strip()
+        return 0.0 if text in ('', '-') else number(text)
+
+    sums, months, declared = [0.0] * len(labels), set(), None
+    for index, row in enumerate(rows[1:], 2):
+        row = row + [None] * (len(header) - len(row))
+        values = [amount(v) for v in row[due + 1:last]]
+        if not row[due] and (unit is None or not row[unit]):
+            declared = values  # linha de totais ("33 UNIDADE(S)")
+            continue
+        if abs(sum(values) - amount(row[last])) > 0.02:
+            raise ValueError(f'Rateio por Unidade Almah: linha {index} não soma o TOTAL.')
+        if any(abs(v) > 0.005 for v in values):
+            months.add(str(row[due]).strip()[3:])
+        sums = [s + v for s, v in zip(sums, values)]
+    if len(months) != 1:
+        raise ValueError('Rateio por Unidade Almah: exporte um único mês de vencimento.')
+    if declared is None or any(abs(s - d) > 0.02 for s, d in zip(sums, declared)):
+        raise ValueError('Rateio por Unidade Almah: total não confere com as unidades lidas.')
+    accounts = {label: {'lancado': round(s, 2), 'liquidado': 0.0}
+                for label, s in zip(labels, sums) if abs(s) > 0.005}
+    total = round(sum(v['lancado'] for v in accounts.values()), 2)
+    tax = sum(v['lancado'] for k, v in accounts.items() if 'condomini' in norm(k))
+    reserve = sum(v['lancado'] for k, v in accounts.items() if 'fundo' in norm(k) and 'reserva' in norm(k))
+    return {'mes_ref': months.pop(), 'nome_condominio': None, 'por_classe': accounts,
+            'total_lancado_mes': total, 'total_liquidado_mes': 0.0,
+            'tx_condominio_mensal': round(tax, 2), 'fundo_reserva_mensal': round(reserve, 2),
+            'tx_condominio_anual': round(tax * 12, 2), 'fundo_reserva_anual': round(reserve * 12, 2),
+            'fixo_anual': round((tax + reserve) * 12, 2), 'sistema': 'alma', 'formato': 'rateio_unidade'}
+
+
 def read_receivables(path):
+    """Contas a receber agrupado por conta (PDF) ou Rateio por Unidade (XLSX):
+    o campo aceita um OU outro; o formato é reconhecido pelo conteúdo."""
+    with open(path, 'rb') as handle:
+        if handle.read(4) == b'PK\x03\x04':
+            return read_unit_apportionment(path)
     lines = pdf_lines(path)
     text = '\n'.join(line for _, line in lines)
     period = re.search(r'Data Vencimento\s+(\d{2}/\d{2}/\d{4})\s+até\s+(\d{2}/\d{2}/\d{4})', text)

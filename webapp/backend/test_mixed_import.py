@@ -90,6 +90,32 @@ class MixedImportTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'sem Data Pagto'):
                 alma.read_fin('FIN.xlsx', {}, {})
 
+    def test_unit_apportionment_xlsx_replaces_receivables_pdf(self):
+        """Rateio por Unidade (XLSX, estilos inválidos p/ openpyxl) no lugar do Contas a receber."""
+        import os, zipfile
+        cells = [['BLOCO', 'UNIDADE', 'PROPRIETÁRIO', 'VENCIMENTO', 'COTA CONDOMINIAL', 'FUNDO DE RESERVA',
+                  'CHAMADA DE CAPITAL (REF. 13º SALÁRIO)', 'TOTAL'],
+                 ['UNICO', '101', 'A', '10/10/2026', '1.314,80', '131,48', '145,45', '1.591,73'],
+                 ['UNICO', '405', 'B', '10/10/2026', '-', '141,13', '156,12', '297,25'],
+                 ['UNICO', 'TESTE', 'C', '10/10/2026', '-', '-', '-', '0,00'],
+                 [None, None, '3 UNIDADE(S)', None, '1.314,80', '272,61', '301,57', '1.888,98']]
+        def row_xml(number, values):
+            return f'<row r="{number}">' + ''.join(
+                f'<c r="{chr(65 + i)}{number}" t="inlineStr"><is><t>{v}</t></is></c>'
+                for i, v in enumerate(values) if v is not None) + '</row>'
+        sheet = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                 + ''.join(row_xml(n, r) for n, r in enumerate(cells, 1)) + '</sheetData></worksheet>')
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, 'alma_rec.pdf')  # nome fixo da restauração; formato vem do conteúdo
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('xl/worksheets/sheet1.xml', sheet)
+            rec = alma.read_receivables(path)
+        self.assertEqual(rec['mes_ref'], '10/2026')
+        self.assertEqual(rec['tx_condominio_mensal'], 1314.80)
+        self.assertEqual(rec['fundo_reserva_mensal'], 272.61)
+        receita = previsao._receitas_previstas_documento(rec)
+        self.assertAlmostEqual(sum(l['mensal'] for l in receita), 1587.41)  # chamada de capital fica fora
+
     def test_fin_split_payment_takes_date_and_supplier_from_total_row(self):
         """Forte Way: duas partes sem data + linha TOTAL com data/fornecedor."""
         wb = MagicMock()

@@ -92,7 +92,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
       return
     }
     if (alma && (!almaBal || !almaFin || !almaRec)) {
-      setErro('Envie também o demonstrativo por período, FIN e contas a receber do Alma.')
+      setErro('Envie também o demonstrativo por período, FIN e contas a receber (ou rateio por unidade) do Alma.')
       return
     }
     if (alma && !almaInad && !semInadAlma) {
@@ -349,7 +349,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                     <div className="file-grid">
                       <FileZone label="Por período agrupado por contas (PDF)" file={almaBal} setFile={setAlmaBal} accept=".pdf" required />
                       <FileZone label="FIN00601 — despesas detalhadas (XLSX)" file={almaFin} setFile={setAlmaFin} accept=".xlsx" required />
-                      <FileZone label="Contas a receber agrupado por conta (PDF)" file={almaRec} setFile={setAlmaRec} accept=".pdf" required />
+                      <FileZone label="Contas a receber agrupado por conta (PDF) ou Rateio por Unidade (XLSX)" file={almaRec} setFile={setAlmaRec} accept=".pdf,.xlsx" required />
                       {!semInadAlma && <FileZone label="Inadimplência Alma (PDF)" file={almaInad} setFile={setAlmaInad} accept=".pdf" required />}
                     </div>
                     <label className="form-hint" style={{ display: 'flex', gap: 'var(--s-sm)', alignItems: 'center', marginTop: 'var(--s-md)' }}>
