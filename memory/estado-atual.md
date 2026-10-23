@@ -87,6 +87,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   (antes listava Taxa + Água + cada receita manual).
 - **Conclusão + Considerações juntas numa página nova** (PDF e DOCX); antes a Conclusão ficava sozinha numa página.
   Considerações longas podem continuar na página seguinte, mas nenhum item é partido.
+- **Lista de condomínios:** selo "Em revisão" retirado (só "Gerado" aparece).
 - No GitHub em 23/10 (testes: só as 4 falhas conhecidas); **falta rebuild no EasyPanel** (inclui o trabalho de 21/10).
 
 ## Trabalho de 21/10/2026

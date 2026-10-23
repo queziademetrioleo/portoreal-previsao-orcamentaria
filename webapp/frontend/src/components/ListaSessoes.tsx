@@ -35,12 +35,9 @@ export default function ListaSessoes({ onNova, onAbrir }: Props) {
     }
   }
 
+  // Só o selo "Gerado"; "Em revisão" foi retirado a pedido da usuária (23/10/2026).
   const statusBadge = (status: string) =>
-    status === 'gerado' ? (
-      <Badge label="Gerado" variant="success" />
-    ) : (
-      <Badge label="Em revisão" variant="warning" />
-    )
+    status === 'gerado' ? <Badge label="Gerado" variant="success" /> : null
 
   return (
     <>
