@@ -400,17 +400,6 @@ def _consolidar_despesas_relatorio(linhas, resumo, lancamentos=None):
     for label, predicado in categorias_finais:
         somar(label, predicado)
 
-    # As provisões fazem parte de conservação e não aparecem como linha solta.
-    provisoes = (float(resumo.get('prov_laudo') or 0)
-                 + float(resumo.get('prov_incendio') or 0))
-    if abs(provisoes) > 0.005:
-        for pos, (label, valor) in enumerate(despesas):
-            if _norm(label) == _norm('Gastos com conservação'):
-                despesas[pos] = (label, valor + provisoes)
-                break
-        else:
-            despesas.append(('Gastos com conservação', provisoes))
-
     despesas.extend((l['classe'], float(l['final'])) for _, l in ativas if l.get('manual'))
 
     # Contas sem correspondência ficam juntas, com detalhe na revisão,
@@ -447,7 +436,7 @@ def _agrupar_por_grupo(linhas):
     return grupos
 
 def _grupos_despesas_relatorio(despesas):
-    """Gráfico com a mesma consolidação da tabela, incluindo as provisões."""
+    """Gráfico com a mesma consolidação da tabela."""
     return _agrupar_por_grupo([
         {'grupo': label, 'final': mensal * 12} for label, mensal in despesas
     ])
@@ -590,10 +579,6 @@ def _componentes_conservacao(linhas, resumo):
         if _categoria_despesa(linha) == 'conservacao':
             _adicionar_sem_repetir(componentes, _nome_na_composicao(linha.get('classe')))
 
-    if abs(float(resumo.get('prov_laudo') or 0)) > 0.005:
-        _adicionar_sem_repetir(componentes, 'Provisão para Laudo de Autovistoria')
-    if abs(float(resumo.get('prov_incendio') or 0)) > 0.005:
-        _adicionar_sem_repetir(componentes, 'Provisão para Sistema de Incêndio/Registro')
     return componentes
 
 
@@ -725,10 +710,9 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             'A inadimplência não foi apurada com os documentos disponíveis. Esta previsão não inclui '
             'abatimento da receita por débitos; isso não comprova ausência de inadimplência.'
         )
-    for aviso in estado.get('avisos_importacao') or []:
-        if any(termo in _norm(aviso) for termo in ('nao fechado', 'sem movimentacao', 'receita fixa baseada', 'diferencas entre')):
-            texto = aviso.removeprefix('Group: ')
-            consideracoes.append(texto)
+    # Avisos de importação (mês não fechado, receita fixa, diferenças entre
+    # balancete e pagamentos) são conferência interna: ficam na tela de análise
+    # e nunca entram no documento do condomínio (José Henrique, 22/10/2026).
     if unidades_inad > 0:
         plural = 'da' if unidades_inad == 1 else 'das'
         consideracoes.append(

@@ -252,43 +252,70 @@ def read_fin(path, plan, pdf_accounts):
     finally:
         wb.close()
     header = {norm(v): i for i, v in enumerate(rows[0])}
-    needed = {'despesa', 'valor pago', 'data pagto', 'fornecedor', 'status'}
+    needed = {'despesa', 'valor pago', 'data pagto', 'fornecedor'}
     if not needed <= header.keys():
-        raise ValueError('FIN Almah: faltam colunas Despesa, Valor Pago, Data Pagto, Fornecedor ou Status.')
+        raise ValueError('FIN Almah: faltam colunas Despesa, Valor Pago, Data Pagto ou Fornecedor.')
+    # Exportação só de contas pagas vem sem Status (Forte Way, 10/2026):
+    # aí toda linha com Data Pagto é pagamento.
+    has_status = 'status' in header
     items, report_total = [], None
-    for index, row in enumerate(rows[1:], 2):
-        def get(name):
-            return row[header[name]] if name in header else None
-        account = str(get('despesa') or '').strip()
-        if norm(account) == 'total':
-            report_total = number(get('valor pago'))
-            continue
-        if not account:
-            continue
-        date = get('data pagto')
-        if not date:
-            if norm(get('status')).startswith('pago'):
-                raise ValueError(f'FIN Almah: pagamento sem Data Pagto na linha {index}.')
-            continue
-        if not norm(get('status')).startswith('pago'):
-            continue
-        if isinstance(date, dt.datetime):
-            date = date.date()
-        elif not isinstance(date, dt.date):
-            date = dt.datetime.strptime(str(date).strip(), '%d/%m/%Y').date()
+    # Pagamento dividido (Forte Way, 10/2026): partes sem Data Pagto seguidas de
+    # uma linha "TOTAL" com data e fornecedor do pagamento. As partes herdam
+    # esses dados; a linha "Total" sem data é o total do relatório.
+    split_parts = []
+
+    def parse_date(value):
+        if isinstance(value, dt.datetime):
+            return value.date()
+        if isinstance(value, dt.date):
+            return value
+        return dt.datetime.strptime(str(value).strip(), '%d/%m/%Y').date()
+
+    def add_item(account, row_get, source_get, date, index):
         candidates = plan.get(norm(account), [])
         account_key = FIN_ACCOUNT_ALIASES.get(norm(account), norm(account))
         group = pdf_accounts.get(account_key) or (candidates[0]['grupo'] if len(candidates) == 1 else None)
         group = group or 'Classes a revisar'
-        supplier = str(get('fornecedor') or '').strip()
+        supplier = str(source_get('fornecedor') or '').strip()
         items.append({'grupo': group, 'classe': account, 'data': date,
-                      'fornecedor': supplier, 'descricao': str(get('descricao') or supplier),
-                      'tipo_pgto': str(get('forma pgto.') or ''),
-                      'valor_lcto': number(get('valor')), 'valor_pago': number(get('valor pago')),
-                      'documento': str(get('doc') or ''), 'parcela': str(get('parcela') or ''),
-                      'status': str(get('status') or ''), 'sistema': 'alma',
+                      'fornecedor': supplier, 'descricao': str(source_get('descricao') or supplier),
+                      'tipo_pgto': str(source_get('forma pgto.') or ''),
+                      'valor_lcto': number(row_get('valor')), 'valor_pago': number(row_get('valor pago')),
+                      'documento': str(source_get('doc') or ''), 'parcela': str(row_get('parcela') or ''),
+                      'status': str(row_get('status') or ''), 'sistema': 'alma',
                       'arquivo': Path(path).name, 'linha': index,
                       'classificacao_pendente': group == 'Classes a revisar'})
+
+    for index, row in enumerate(rows[1:], 2):
+        def get(name, row=row):
+            return row[header[name]] if name in header else None
+        account = str(get('despesa') or '').strip()
+        if norm(account) == 'total':
+            if split_parts and get('data pagto'):
+                value = number(get('valor pago'))
+                if abs(sum(number(part_get('valor pago')) for _, part_get, _ in split_parts) - value) > 0.02:
+                    raise ValueError(f'FIN Almah: partes do pagamento não somam o TOTAL da linha {index}.')
+                for part_account, part_get, part_index in split_parts:
+                    add_item(part_account, part_get, get, parse_date(get('data pagto')), part_index)
+                split_parts = []
+            else:
+                report_total = number(get('valor pago'))
+            continue
+        if not account:
+            continue
+        paid = norm(get('status')).startswith('pago') if has_status else True
+        date = get('data pagto')
+        if not date:
+            if has_status and paid:
+                raise ValueError(f'FIN Almah: pagamento sem Data Pagto na linha {index}.')
+            if not has_status:
+                split_parts.append((account, get, index))
+            continue
+        if not paid:
+            continue
+        add_item(account, get, get, parse_date(date), index)
+    if split_parts:
+        raise ValueError(f'FIN Almah: pagamento sem Data Pagto na linha {split_parts[0][2]}.')
     total = round(sum(i['valor_pago'] for i in items), 2)
     if report_total is not None and abs(total - report_total) > 0.02:
         raise ValueError('FIN Almah: total pago não confere com os pagamentos lidos.')
@@ -345,9 +372,10 @@ def consolidate_balances(condo, alma, start=None, end=None):
     alma_covered = {key for key in alma_keys if active and active[0] <= key <= active[-1]}
     all_keys = sorted(condo_covered | alma_covered)
     keys = months_between(start or all_keys[0], end or all_keys[-1])
-    overlap = set(keys) & condo_covered & alma_covered
-    if overlap:
-        raise ValueError('Há meses com movimentação nos dois sistemas: ' + ', '.join(map(month_label, sorted(overlap))) + '. Envie exportações sem sobreposição.')
+    # Mês da migração com lançamentos nos dois sistemas (Forte Way: tarifa em
+    # 07 e 08/2026): os valores se complementam e são somados por conta
+    # (José Henrique, 22/10/2026). Fica só um aviso para conferência na tela.
+    overlap = sorted(set(keys) & condo_covered & alma_covered)
     missing = set(keys) - set(all_keys)
     if missing:
         raise ValueError('Faltam dados para os meses: ' + ', '.join(map(month_label, sorted(missing))))
@@ -358,7 +386,13 @@ def consolidate_balances(condo, alma, start=None, end=None):
         return aliases.get(norm(name), norm(name))
     original_names = {canonical(r['classe']): r['classe'] for kind in ('receitas', 'despesas') for r in condo[kind]}
     result = {'meses': [month_label(m) for m in keys], 'n_meses': len(keys),
-              'saldo_inicial': None, 'saldo_final': None}
+              'saldo_inicial': None, 'saldo_final': None, 'sobreposicao': []}
+    for key in overlap:
+        def total(source, source_keys):
+            index = source_keys.index(key)
+            return round(sum(r['monthly'][index] for kind in ('receitas', 'despesas') for r in source[kind]), 2)
+        result['sobreposicao'].append({'mes': month_label(key), 'condo21': total(condo, condo_keys),
+                                       'alma': total(alma, alma_keys)})
     for kind in ('receitas', 'despesas'):
         merged = {}
         for source, source_keys in ((condo, condo_keys), (alma, alma_keys)):
@@ -380,7 +414,8 @@ def consolidate_balances(condo, alma, start=None, end=None):
             if row['n_meses']:
                 result[kind].append(row)
         result['total_' + kind] = round(sum(r['total'] for r in result[kind]), 2)
-    return result, keys, {key: 'alma' if key in alma_covered else 'condo21' for key in keys}
+    return result, keys, {key: 'condo21+alma' if key in overlap else 'alma' if key in alma_covered else 'condo21'
+                          for key in keys}
 
 
 def balance_from_payments(items):
@@ -438,7 +473,8 @@ def load_mixed(folder, core):
             item['grupo'] = group_name(item['grupo'] or 'Classes a revisar')
             item['classe'] = names.get(aliases.get(norm(item['classe']), norm(item['classe'])), item['classe'])
             items.append(item)
-    warnings = []
+    warnings = [f"{o['mes']}: lançamentos nos dois sistemas (Condo21 R$ {o['condo21']:.2f}; Alma R$ {o['alma']:.2f}); "
+                'os valores foram somados por conta.' for o in bal.get('sobreposicao') or []]
     known = {(norm(r['grupo']), norm(r['classe'])): r for r in bal['despesas']}
     for item in items:
         identity = (norm(item['grupo']), norm(item['classe']))

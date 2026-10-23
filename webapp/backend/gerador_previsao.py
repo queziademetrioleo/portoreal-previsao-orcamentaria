@@ -458,11 +458,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
                 ws_c.cell(r, 9).value = round(val, 2)
                 usados_c.add(chave)
 
-        # Provisoes (Laudo Autovistoria, Sistema Incendio/Registro) nao aparecem
-        # mais como linhas proprias no documento final (feedback CEO 07/2026) —
-        # o valor delas e absorvido por Conservacao direto na PREVISAO (2), sem
-        # passar pela CONTAS. Ver bloco 'Gastos com conservação' mais abaixo.
-
         # Secoes de contratos e pro-labore variam bastante entre condominios.
         # Em vez de manter rotulos fixos do modelo, reescrevemos essas linhas com
         # as classes reais do balanco para evitar numeros em contas erradas.
@@ -771,20 +766,6 @@ def _gerar_via_template(template_path, destino, R, nome_condominio, ano,
             item = _somar(label, pred)
             if item:
                 linhas_prev.append(item)
-
-        # Provisoes (Laudo Autovistoria, Sistema Incendio/Registro) nao aparecem
-        # como linhas proprias no documento final (feedback CEO 07/2026) — o
-        # valor e absorvido por Conservacao, sem alterar o subtotal.
-        prov_laudo = float(R.get('prov_laudo') or 0)
-        prov_incendio = float(R.get('prov_incendio') or 0)
-        provisoes_total = prov_laudo + prov_incendio
-        if abs(provisoes_total) > 0.005:
-            for i, (label, valor) in enumerate(linhas_prev):
-                if _norm(label) == _norm('Gastos com conservação'):
-                    linhas_prev[i] = (label, valor + provisoes_total)
-                    break
-            else:
-                linhas_prev.append(('Gastos com conservação', provisoes_total))
 
         labels_existentes = {_norm(label) for label, _ in linhas_prev}
         for idx, ln in despesas_ativas:
@@ -1299,10 +1280,6 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
     ws_p.cell(r, 4, 'VALOR ANUAL').font = Font(bold=True)
     r += 1
     por_grupo2 = _agrupar_com_diversas_em_conservacao(linhas)
-    # Provisoes (Laudo/Incendio) nao tem linha propria no documento final
-    # (feedback CEO 07/2026) — o valor e absorvido por Conservacao, junto
-    # com Despesas Diversas (via _grupo_efetivo). Sem alterar o subtotal.
-    prov_total = float(R.get('prov_laudo') or 0) + float(R.get('prov_incendio') or 0)
     despesa_total = 0
     idx = 1
     for grupo_nome in ORDEM_GRUPOS:
@@ -1312,8 +1289,6 @@ def _gerar_do_zero(destino, R, nome_condominio, ano, num_fracoes, inflacao,
                 match_key = g
                 break
         final_g = sum(l['final'] for l in por_grupo2.pop(match_key)) if match_key else 0.0
-        if _norm(grupo_nome) == _norm('Conservacao'):
-            final_g += prov_total
         if abs(final_g) < 0.005:
             continue
         ws_p.cell(r, 2, idx)

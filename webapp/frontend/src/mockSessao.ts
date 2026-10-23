@@ -10,8 +10,6 @@ export const mockSessaoResultado: Sessao = {
   resumo: {
     base_total: 322450.8,
     desconsideracoes: 28750.25,
-    prov_laudo: 4200,
-    prov_incendio: 1850,
     subtotal: 299750.55,
     inflacao: 0.0472,
     total_previsto: 313899.57,

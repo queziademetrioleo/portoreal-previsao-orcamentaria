@@ -71,6 +71,42 @@ class MixedImportTest(unittest.TestCase):
         self.assertEqual(items[0]['data'], dt.date(2026, 8, 2))
         self.assertEqual(items[0]['grupo'], 'Contratos')
 
+    def test_fin_without_status_column_treats_dated_rows_as_paid(self):
+        """Forte Way: exportação só de pagas, sem coluna Status."""
+        wb = MagicMock()
+        wb.active.values = iter([
+            ('Despesa', 'Valor Pago', 'Data Pagto', 'Fornecedor', 'Descrição', 'Observações'),
+            ('Gás do Condomínio', '51,07', '03/08/2026', 'Naturgy', 'Cliente', ''),
+        ])
+        with patch.object(alma.openpyxl, 'load_workbook', return_value=wb):
+            items = alma.read_fin('FIN.xlsx', {}, {})
+        self.assertEqual([(i['classe'], i['valor_pago']) for i in items], [('Gás do Condomínio', 51.07)])
+        # Linha sem data e sem "TOTAL" depois: recusa, para não sumir com um pagamento.
+        wb.active.values = iter([
+            ('Despesa', 'Valor Pago', 'Data Pagto', 'Fornecedor'),
+            ('Contrato', '100,00', None, 'Fornecedor'),
+        ])
+        with patch.object(alma.openpyxl, 'load_workbook', return_value=wb):
+            with self.assertRaisesRegex(ValueError, 'sem Data Pagto'):
+                alma.read_fin('FIN.xlsx', {}, {})
+
+    def test_fin_split_payment_takes_date_and_supplier_from_total_row(self):
+        """Forte Way: duas partes sem data + linha TOTAL com data/fornecedor."""
+        wb = MagicMock()
+        wb.active.values = iter([
+            ('Despesa', 'Valor Pago', 'Data Pagto', 'Fornecedor', 'Descrição', 'Observações'),
+            ('CONTRATO DE MANUTENÇÃO (GERAL)', '267,68', '', '', '', ''),
+            ('CONTRATO DE MANUTENÇÃO (GERAL)', '176,52', '', '', '', ''),
+            ('TOTAL', '444,20', '18/08/2026', 'FENIX', 'MONITORAMENTO 24H', ''),
+            ('GÁS DO CONDOMÍNIO', '51,07', '03/08/2026', 'NATURGY', '', ''),
+            ('Total', '495,27', '', '', '', ''),
+        ])
+        with patch.object(alma.openpyxl, 'load_workbook', return_value=wb):
+            items = alma.read_fin('FIN.xlsx', {}, {})
+        self.assertEqual([(i['valor_pago'], i['data'], i['fornecedor']) for i in items[:2]],
+                         [(267.68, dt.date(2026, 8, 18), 'FENIX'), (176.52, dt.date(2026, 8, 18), 'FENIX')])
+        self.assertAlmostEqual(sum(i['valor_pago'] for i in items), 495.27)
+
     def test_paid_fin_row_without_payment_date_is_rejected(self):
         wb = MagicMock()
         wb.active.values = iter([
@@ -96,9 +132,18 @@ class MixedImportTest(unittest.TestCase):
         self.assertEqual(keys, ['2026-06', '2026-07', '2026-08'])
         self.assertEqual([coverage[k] for k in keys], ['condo21', 'condo21', 'alma'])
 
-    def test_overlap_and_missing_month_are_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'dois sistemas'):
-            alma.consolidate_balances(balance(['07/2026'], [100]), balance(['07/2026'], [200]))
+    def test_overlap_month_sums_both_systems(self):
+        """Forte Way (José, 22/10/2026): tarifa lançada em 07 e 08 nos dois sistemas se complementa."""
+        result, keys, coverage = alma.consolidate_balances(
+            balance(['06/2026', '07/2026', '08/2026'], [100, 150, 30]),
+            balance(['07/2026', '08/2026', '09/2026'], [20, 200, 210]))
+        self.assertEqual(keys, ['2026-06', '2026-07', '2026-08', '2026-09'])
+        self.assertEqual(result['total_despesas'], 710)
+        self.assertEqual([coverage[k] for k in keys], ['condo21', 'condo21+alma', 'condo21+alma', 'alma'])
+        self.assertEqual([o['mes'] for o in result['sobreposicao']], ['07/2026', '08/2026'])
+        self.assertEqual((result['sobreposicao'][1]['condo21'], result['sobreposicao'][1]['alma']), (30, 200))
+
+    def test_missing_month_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Faltam dados'):
             alma.consolidate_balances(balance(['05/2026'], [100]), balance(['07/2026'], [200]))
 

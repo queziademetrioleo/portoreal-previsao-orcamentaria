@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 19/10/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 23/10/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -22,7 +22,9 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
   nunca dizer que está no ar sem confirmar.
 - Banco prod: credenciais fora do repo (arquivo local da usuária); porta externa só aberta p/ uso pontual.
   Acesso direto do agente é bloqueado → usuária roda `! .venv/bin/python tmp/baixar_sessao.py [id]` (só leitura).\n  Desde 19/10 uploads recusados também ficam no banco (etapa/erro): pedir o protocolo mostrado na tela.
-- IA: OpenAI exclusivamente (`PREVISAO_IA_PROVEDOR=openai`, modelo `gpt-6.1-sol`, reasoning `high`).
+- IA: em 21/10 a usuária migrou p/ Claude via variáveis no EasyPanel (`PREVISAO_IA_PROVEDOR=anthropic`, `PREVISAO_IA_MODELO=claude-opus-5-5`,
+  `ANTHROPIC_API_KEY`). ID certo é `claude-opus-5-5` (com ponto dá 404 e, sem provedor fixado, cai silenciosamente na OpenAI `gpt-6.1-sol`).
+  `_anthropic_chat` não usa thinking (OpenAI usava reasoning high). Conferir `modelo_ia` da sessão nova. Defaults de `.env.example`/compose/README ainda dizem OpenAI.
 - Testes: `cd webapp/backend && PYTHONPATH=../.. ../../.venv/bin/python -m unittest discover -p 'test_*.py'`
   (4 falhas conhecidas em `test_classificacao_capital` — caso "projetor", pré-existentes).
 
@@ -34,7 +36,8 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
   por conta (PDF), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
 - **Com o Alma no conjunto, o Alma prevalece**: Condo21 envia só `desbai06`; Group só despesas detalhadas.
   Receita atual e inadimplência vêm só do Alma. Demonstrativo do sistema anterior = soma dos pagamentos
-  (`parsers_alma.balance_from_payments`). Alma ocupa os meses recentes, o outro sistema os anteriores.
+  (`parsers_alma.balance_from_payments`). Alma ocupa os meses recentes, o outro sistema os anteriores;
+  no Condo21 + Alma, mês com lançamento nos dois é somado por conta (aviso na tela).
 
 ## Regras de negócio vigentes
 
@@ -48,7 +51,47 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (19/10/2026)
+## Último trabalho (23/10/2026) — feedback José 22/10 (Aldeia das Asas, vale p/ todos)
+
+- **Considerações:** avisos de importação (mês não fechado, receita fixa baseada em, diferenças balancete × pagamentos)
+  saíram do PDF/DOCX — documento vai ao condomínio. Ficam só na tela de análise.
+- **Provisão eliminada 100% (pedido da usuária, 23/10):** não existe mais `prov_laudo`/`prov_incendio` no motor, API,
+  PDF/DOCX, XLSX legado nem frontend. R4 mantém toda conta de Despesas Diversas na própria linha (menos extraordinários).
+  No Aldeia vinha da "13º Taxa de Administração" lançada em Diversas (R$ 750); no Berlin, Contribuição Assistencial + 13ª
+  (R$ 975,83). Sessões antigas se corrigem sozinhas: PDF/DOCX chama `recalcular` do cache, que descarta as chaves velhas.
+- **Forte Way (áudio José 22/10):** Condo21 + Alma com lançamentos nos dois sistemas em 07 e 08/2026 (tarifa) não trava
+  mais: `consolidate_balances` soma por conta, cobertura vira `condo21+alma` e a tela mostra aviso com o valor de cada
+  sistema. Só no fluxo Condo21 + Alma; Group + Alma continua exigindo o mês de mudança.
+  Testado com os arquivos reais (sessão `9e46c8126497`, recusada em 22/10): 08/2026 no Condo21 = só Tarifas Bancárias
+  R$ 102,24; 07/2026 no Alma = receitas antecipadas + tarifa R$ 8,52. Depois disso apareceram mais 2 travas:
+  - FIN Alma do Forte Way vem **sem coluna Status** (só pagas) e com **pagamento dividido** (partes sem data + linha
+    "TOTAL" com data/fornecedor). `read_fin` agora aceita os dois; testes novos em `test_mixed_import.py`.
+  - **Contas a receber exportado sem filtro de Data Vencimento** → recusa correta ("selecione um único mês").
+    José precisa reexportar com um único mês de vencimento (ex.: 01/10 a 31/10/2026). Com receita simulada, o resto passa.
+- **Gráfico mensal (NÃO corrigido, aguarda decisão):** barra de despesa = despesa total do balancete; barra de receita =
+  receita atual SEM a água cobrada das unidades (Group 1.1.36 Água ≈ R$ 363 mil/ano vs despesa Água ≈ R$ 366 mil/ano).
+  Por isso a despesa fica acima o ano todo. A mesma exclusão infla o déficit da previsão (cópia local da sessão: 61%).
+  O PDF do José (22/10) ainda tinha o texto antigo ("Recomendamos um reajuste de 14,9%") → produção sem rebuild.
+- No GitHub em 23/10 (testes: só as 4 falhas conhecidas); **falta rebuild no EasyPanel** (inclui o trabalho de 21/10).
+
+## Trabalho de 21/10/2026
+
+- **Fundo de reserva "Não" no PDF:** o flag `com_fundo` só afetava o quadro de resultado. Agora também tira o fundo da tabela de
+  receitas, das opções de custeio e da consideração do reajuste (`relatorio_pdf.py`, vale p/ todos os sistemas).
+- **"Outras despesas" nunca é linha do relatório:** o resíduo sem categoria soma em "Gastos com conservação" (mantém o total;
+  `test_itens_manuais` exige isso). Se o José quiser o valor FORA do total, a mudança é no motor.
+- **Relatório em PDF ou Word (DOCX):** `relatorio_docx.py` (python-docx; gráficos como PNG via Pillow) consome
+  `montar_contexto_relatorio` (contexto único PDF/DOCX). Rota `POST /api/sessao/{sid}/relatorio-docx`; modal escolhe o formato.
+  DOCX nunca foi visto renderizado no Word (sem Word/LibreOffice no Mac) → conferir.
+- **Tela de revisão:** removidos "pago/deduzido/dedução mensal equivalente" dos grupos e classes (confundiam o José).
+- **Aldeia das Asas (sessão `0112033b4f75`, ano completo reexportado):** 42 lançamentos em revisão, todos da IA, ~R$ 40 mil;
+  33 por descrição fraca (só nome do favorecido), resto reparo pontual vs rotina. Honorários (9 itens, ~R$ 16 mil) e a parte
+  Fundo de Reserva (R$ 2.084,83) de extintores precisam de decisão do José — não confirmado se o fundo entra no total.
+  Ideia pendente: regra de recorrência por favorecido / dar histórico do favorecido à IA.
+- Acesso ao banco prod pelo agente funcionou em 21/10 (leitura via `tmp/baixar_sessao.py`) quando a usuária pediu explicitamente.
+- Tudo no GitHub; **falta rebuild no EasyPanel** (instala `python-docx`).
+
+## Trabalho de 19/10/2026
 
 - **Bug Forte Way (Condo21 + Alma):** upload travava com "Há meses com movimentação nos dois sistemas: 10/2025 … 08/2026".
   Causa: o demonstrativo Alma exportado para o ano todo lista zerados os meses antes da migração, e
@@ -92,12 +135,12 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-1. Reenviar Forte Way e Aldeia das Asas (despesas reexportadas sem filtro de competência) após o rebuild.\n   Avaliar com o José: bloquear quando as despesas detalhadas cobrem muito menos que o balancete (hoje só avisa). Se ainda acusar sobreposição, pedir os arquivos
+1. Forte Way: José reexporta o Contas a receber Alma com um único mês de vencimento e reenvia (após rebuild).
+   Reenviar Aldeia das Asas (despesas reexportadas sem filtro de competência) após o rebuild.\n   Avaliar com o José: bloquear quando as despesas detalhadas cobrem muito menos que o balancete (hoje só avisa). Se ainda acusar sobreposição, pedir os arquivos
    (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.
-3. R4 ainda gera "Provisão para Laudo de Autovistoria" para contas não genéricas de Despesas Diversas
-   (aparece no Berlin) — nome que o José não usa; avaliar com ele.
+3. Decidir com o José como a água rateada às unidades entra na receita (gráfico e previsão).
 4. Santorini: R$ 9.000 de caminhões-pipa deduzidos pela estatística precisam de validação humana.
    FIN do Alma não traz tarifas bancárias (aviso de diferença aparece; o demonstrativo Alma cobre).
 5. Segurança: revisar credenciais do banco e autenticação da API (pendência registrada fora do repo).

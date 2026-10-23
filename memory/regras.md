@@ -8,7 +8,7 @@
 | **R1** Obras/Benfeitorias | Grupo inteiro fora da previsão, mesmo se a revisão marcar "manter". |
 | **R2** Pessoal pontual | Rescisão/indenização: deduz os lançamentos marcados como extraordinários; folha e pensão alimentícia recorrente ficam. |
 | **R3** Manutenções irregulares | Outliers estatísticos (MAD) + IA marcam lançamentos extraordinários; humano confirma na revisão. |
-| **R4** Despesas Diversas | Seguro tem regra própria. Manutenções (reparo, conserto, bomba, portão, elevador) e contas genéricas ("Outras despesas", "Outros", "Estorno", "Diversas") ficam, menos extraordinários. **Demais contas** viram "Provisão para Laudo de Autovistoria" (somada em Conservação no PDF). |
+| **R4** Despesas Diversas | Seguro tem regra própria. Todas as demais contas ficam na própria linha, menos extraordinários. **Não existe provisão** (laudo/incêndio) desde 23/10/2026 — nem nome, nem valor. |
 | **R5** Cartoriais e Honorários | **Desligada em 18/10/2026.** Fica na linha própria "Despesas Cartoriais e Honorários", menos extraordinários. |
 | **R6** Contratos / pró-labore / taxa de administração | Último valor pago × 12. A 13ª taxa não usa essa regra. |
 | **Seguro** | Apólice vigente: última parcela × total de parcelas (coluna Parcela do Alma ou "Parcela N/M" na descrição). Sem essa informação, conta pagamentos mensais seguidos de mesmo valor (pagamento único = 1). |
@@ -21,3 +21,5 @@ Exceções fixas: `PONTUAL_FORA` (combate a incêndio — gasto pontual, fora); 
 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; 13ª taxa de administração omitida do texto.
+Avisos de importação (mês não fechado, receita fixa, diferenças balancete × pagamentos) **nunca** entram nas
+considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).

@@ -19,9 +19,8 @@ REGRAS APRENDIDAS DO HISTORICO (2022-2026, 4 condominios):
      fossa) -> deduzir a parcela extraordinaria. Calculo: soma dos lancamentos
      do desbai06 classificados como extraordinarios; fallback = fator mediano
      historico de deducao da conta.
- R4. Grupo "Despesas Diversas": seguro tem regra propria; manutencoes e contas
-     genericas ficam (menos extraordinarios); demais contas viram provisao para
-     Laudo de Autovistoria Predial (mesmo valor).
+ R4. Grupo "Despesas Diversas": seguro tem regra propria; as demais contas ficam
+     na propria linha, menos extraordinarios (nao existe provisao).
  R5. DESLIGADA (10/2026): "Despesas Cartoriais e Honorarios" fica na linha propria.
  R6. Contratos, Pro-labore e Taxa de Administracao -> previsao = ultimo valor
      mensal vigente x 12 (anualizacao da tarifa atual, nao a soma historica).
@@ -443,8 +442,6 @@ def ia_parecer(R, nome_condo):
         f"Receita total 12 meses: R${bal['total_receitas'] or 0:,.2f}\n"
         f"Saldo inicial: R${bal['saldo_inicial'] or 0:,.2f} | final: R${bal['saldo_final'] or 0:,.2f}\n"
         f"Desconsideracoes (obras): R${R['desconsideracoes']:,.2f}\n"
-        f"Provisao laudo autovistoria: R${R['prov_laudo']:,.2f}\n"
-        f"Provisao sist. incendio/registro: R${R['prov_incendio']:,.2f}\n"
         f"Base recorrente ajustada (subtotal): R${R['subtotal']:,.2f}\n"
         f"Previsao anual (+{float(R.get('inflacao_pct') or INFLACAO):.0%}): R${R['total_previsto']:,.2f} "
         f"(mensal R${R['total_previsto']/12:,.2f})\n"
@@ -457,7 +454,7 @@ def ia_parecer(R, nome_condo):
         'em portugues do Brasil (350-500 palavras), claro para sindicos leigos, sobre a '
         'previsao orcamentaria a seguir. Estruture em: 1) Situacao atual; 2) O que foi '
         'ajustado e por que; 3) Riscos (inadimplencia, deficit, despesas volateis); '
-        '4) Recomendacoes praticas (taxa condominial, fundo de reserva, provisoes). '
+        '4) Recomendacoes praticas (taxa condominial, fundo de reserva). '
         'Use os numeros fornecidos; nao invente valores. Responda apenas com o texto '
         'do parecer, sem markdown.',
         resumo, max_tokens=2000)
@@ -832,8 +829,8 @@ RECORRENTE_HINTS = [
     'servico de faxina',
 ]
 GENERIC_CLASSES = ['outras despesas', 'outros materiais', 'outros', 'estorno']
-# Baldes genéricos no grupo Despesas Diversas que NÃO devem virar provisão de
-# Laudo (R4): são heterogêneos e a decisão de manter/excluir é humana (revisão).
+# Baldes genéricos no grupo Despesas Diversas: heterogêneos, a decisão de
+# manter/excluir é humana (revisão).
 DIVERSAS_GENERICAS = ['outras despesa', 'outros', 'estorno', 'diversas']
 # Termos inequivocamente de CAPITAL/obra (nunca aparecem em compras rotineiras de consumo)
 CAPITAL_KW = ['reforma', 'benfeitoria', 'laudo', 'projeto',
@@ -1713,8 +1710,6 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('Passo 6/6: Aplicando regras R1-R8...')
     linhas = []          # uma por classe do balanual
     desconsider = 0.0    # R1 (obras)
-    prov_laudo = 0.0     # R4
-    prov_incendio = 0.0  # R5
     for l in bal['despesas']:
         g, c = l['grupo'] or '', l['classe']
         ng, nc = _norm(g), _norm(c)
@@ -1746,9 +1741,9 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                 regra = ('R4: lançamentos extraordinários identificados e removidos'
                          if ded > 0.005 else
                          'Recorrente: manutencao em grupo Diversas — mantida integral')
-            elif any(k in nc for k in DIVERSAS_GENERICAS):
-                # Somente lançamentos efetivamente marcados como extraordinários
-                # saem da previsão; uma dedução nunca volta como provisão.
+            else:
+                # Demais contas (genéricas ou não) ficam na própria linha: só os
+                # lançamentos marcados como extraordinários saem (José, 22/10/2026).
                 ex = extra_por_classe.get((ng, nc), 0.0)
                 if ex > 0:
                     ded = min(ex, base)
@@ -1757,15 +1752,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                     ded = 0.0
                     regra = 'R4: sem itens extraordinarios — mantido integral'
                 final = base - ded
-            else:
-                ex = min(extra_por_classe.get((ng, nc), 0.0), base)
-                ded, final = ex, 0.0
-                prov_laudo += base - ex
-                regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
-                         if ex > 0.005 else
-                         'R4: Diversas -> provisao Laudo Autovistoria')
         # R5 desligada (José 10/2026): cartório/honorários ficam na própria linha
-        # "Despesas Cartoriais e Honorários", como no modelo dele; prov_incendio fica 0.
+        # "Despesas Cartoriais e Honorários", como no modelo dele.
         elif 'cartoriais' in ng or 'honorarios' in ng:
             ded = min(extra_por_classe.get((ng, nc), 0.0), base)
             final = base - ded
@@ -1813,7 +1801,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                        'monthly': l['monthly']})
 
     base_total = sum(l['base'] for l in linhas)
-    subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
+    subtotal = sum(l['final'] for l in linhas)
     total_previsto = subtotal * (1 + inflacao_pct)
 
     # Log R1-R8 summary
@@ -1821,7 +1809,6 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     r2 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R2')]
     r3 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R3')]
     r4 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R4')]
-    r5 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R5')]
     r6 = [(l['classe'], l['deducao']) for l in linhas if l['regra'].startswith('R6')]
     if r1:
         logger.info('  R1 (Obras): %d classes, R$ %.2f desconsiderados', len(r1), sum(v for _, v in r1))
@@ -1830,9 +1817,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     if r3:
         logger.info('  R3 (Manutencao): %d classes, R$ %.2f deduzidos', len(r3), sum(v for _, v in r3))
     if r4:
-        logger.info('  R4 (Diversas/Laudo): R$ %.2f provisionados', prov_laudo)
-    if r5:
-        logger.info('  R5 (Cartoriais/SCIP): R$ %.2f provisionados', prov_incendio)
+        logger.info('  R4 (Diversas): %d classes, R$ %.2f deduzidos', len(r4), sum(v for _, v in r4))
     if r6:
         logger.info('  R6 (Anualizacao): %d contratos anualizados', len(r6))
 
@@ -1842,8 +1827,6 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('  Subtotal:      R$ %12.2f', subtotal)
     logger.info('  Inflacao (%.1f%%): R$ %10.2f', inflacao_pct * 100, subtotal * inflacao_pct)
     logger.info('  Total previsto: R$ %12.2f', total_previsto)
-    logger.info('  Provisao Laudo:  R$ %10.2f', prov_laudo)
-    logger.info('  Provisao SCIP:   R$ %10.2f', prov_incendio)
     if divergencias:
         for d in divergencias:
             logger.warning('  %s', d)
@@ -1935,8 +1918,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
 
     return {'bal': bal, 'des': des, 'sin': sin, 'inad': inad_res,
             'manual': manual, 'linhas': linhas, 'sugestoes_ia': sugestoes_ia,
-            'desconsideracoes': desconsider, 'prov_laudo': prov_laudo,
-            'prov_incendio': prov_incendio, 'base_total': base_total,
+            'desconsideracoes': desconsider, 'base_total': base_total,
             'subtotal': subtotal, 'total_previsto': total_previsto,
             'inflacao_pct': inflacao_pct,
             'rec': rec_doc, 'receita_anual': receita_anual,
@@ -1984,7 +1966,7 @@ def recalcular(R, inflacao_pct=None):
         else:
             media_ult[_norm(l['classe'])] = 0.0
 
-    linhas, desconsider, prov_laudo, prov_incendio = [], 0.0, 0.0, 0.0
+    linhas, desconsider = [], 0.0
     for l in bal['despesas']:
         g, c = l['grupo'] or '', l['classe']
         ng, nc = _norm(g), _norm(c)
@@ -2008,15 +1990,14 @@ def recalcular(R, inflacao_pct=None):
             ded = base - final
         elif 'diversas' in ng and 'seguro' not in nc:
             # Mesma lógica do analisar(): manutenção mal-classificada fica na base;
-            # balde genérico ("Outras Despesas") NÃO vira provisão (revisar); o
-            # resto vira provisão de Laudo (R4).
+            # demais contas ficam na própria linha, menos extraordinários (sem provisão).
             if any(k in nc for k in ('reparo', 'conserto', 'manutencao', 'bomba', 'portao', 'elevador')):
                 ex = min(extra_por_classe.get((ng, nc), 0.0), base)
                 ded, final = ex, base - ex
                 regra = ('R4: lançamentos extraordinários identificados e removidos'
                          if ex > 0.005 else
                          'Recorrente: manutencao em grupo Diversas — mantida integral')
-            elif any(k in nc for k in DIVERSAS_GENERICAS):
+            else:
                 ex = extra_por_classe.get((ng, nc), 0.0)
                 if ex > 0:
                     ded = min(ex, base)
@@ -2024,12 +2005,6 @@ def recalcular(R, inflacao_pct=None):
                 else:
                     regra = 'R4: sem extraordinarios — mantido integral'
                 final = base - ded
-            else:
-                ex = min(extra_por_classe.get((ng, nc), 0.0), base)
-                ded, final = ex, 0.0
-                prov_laudo += base - ex
-                regra = ('R4: extraordinários removidos; saldo provisionado para Laudo'
-                         if ex > 0.005 else 'R4: Diversas -> provisao Laudo')
         elif 'cartoriais' in ng or 'honorarios' in ng:  # R5 desligada (ver acima)
             ded = min(extra_por_classe.get((ng, nc), 0.0), base)
             final = base - ded
@@ -2071,7 +2046,7 @@ def recalcular(R, inflacao_pct=None):
                        'monthly': l['monthly']})
 
     base_total = sum(l['base'] for l in linhas)
-    subtotal = sum(l['final'] for l in linhas) + prov_laudo + prov_incendio
+    subtotal = sum(l['final'] for l in linhas)
     total_previsto = subtotal * (1 + inflacao_pct)
     # Recompõe a receita do documento também em sessões com cache antigo.
     receita_anual = R.get('receita_anual')
@@ -2083,8 +2058,9 @@ def recalcular(R, inflacao_pct=None):
     if receita_anual is None:
         receita_anual, fundo_reserva_anual = _receita_fundo_do_balanual(R.get('bal'))
 
+    for chave in ('prov_laudo', 'prov_incendio'):  # caches antigos; provisão não existe mais
+        R.pop(chave, None)
     R.update({'linhas': linhas, 'desconsideracoes': desconsider,
-              'prov_laudo': prov_laudo, 'prov_incendio': prov_incendio,
               'base_total': base_total, 'subtotal': subtotal,
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,
@@ -2112,8 +2088,6 @@ def gerar_xlsx(folder, out_path=None):
         ('(-) Desconsideracoes — Obras/Benfeitorias (R1)', -R['desconsideracoes']),
         ('(-) Deducoes pontuais/extraordinarias (R2,R3,R4,R5)',
          -(sum(l['deducao'] for l in R['linhas']) - R['desconsideracoes'])),
-        ('(+) Provisao Laudo de Autovistoria (R4)', R['prov_laudo']),
-        ('(+) Provisao Sist. Incendio / Registro (R5)', R['prov_incendio']),
         ('(=) SUBTOTAL base recorrente ajustada', R['subtotal']),
         (f'(+) Inflacao {INFLACAO:.0%} (R7)', R['subtotal'] * INFLACAO),
         ('(=) PREVISAO ANUAL DE DESPESAS', R['total_previsto']),
@@ -2174,12 +2148,6 @@ def gerar_xlsx(folder, out_path=None):
             for j in range(1, 8):
                 ws.cell(r, j).fill = WARN_FILL if l['final'] > 0 else EXTRA_FILL
         r += 1
-    for label, val in [('(+) Provisao Laudo Autovistoria (R4)', R['prov_laudo']),
-                       ('(+) Provisao Sist. Incendio/Registro (R5)', R['prov_incendio'])]:
-        ws.cell(r, 2, label).font = Font(bold=True)
-        c = ws.cell(r, 5, round(val, 2)); c.number_format = MONEY; c.font = Font(bold=True)
-        for j in range(1, 8): ws.cell(r, j).fill = OK_FILL
-        r += 1
     ws.cell(r, 2, 'SUBTOTAL').font = Font(bold=True)
     c = ws.cell(r, 5, round(R['subtotal'], 2)); c.number_format = MONEY; c.font = Font(bold=True)
     for j in range(1, 8): ws.cell(r, j).fill = SUB_FILL
@@ -2204,7 +2172,7 @@ def gerar_xlsx(folder, out_path=None):
     ws.cell(r, 2, 'VALOR ANUAL').font = Font(bold=True); ws.cell(r, 2).fill = SUB_FILL
     ws.cell(r, 3, 'VALOR MENSAL').font = Font(bold=True); ws.cell(r, 3).fill = SUB_FILL
     r += 1
-    # agrupar previsao final por grupo (com provisoes destacadas)
+    # agrupar previsao final por grupo
     por_grupo = defaultdict(float)
     for l in R['linhas']:
         por_grupo[l['grupo']] += l['final']
@@ -2214,13 +2182,6 @@ def gerar_xlsx(folder, out_path=None):
         c = ws.cell(r, 2, round(v, 2)); c.number_format = MONEY
         c = ws.cell(r, 3, round(v / 12, 2)); c.number_format = MONEY
         r += 1
-    for label, val in [('Provisao Laudo de Autovistoria Predial', R['prov_laudo']),
-                       ('Provisao Sist. Combate Incendio / Registro', R['prov_incendio'])]:
-        if val > 0.005:
-            ws.cell(r, 1, label).fill = OK_FILL
-            c = ws.cell(r, 2, round(val, 2)); c.number_format = MONEY; c.fill = OK_FILL
-            c = ws.cell(r, 3, round(val / 12, 2)); c.number_format = MONEY; c.fill = OK_FILL
-            r += 1
     ws.cell(r, 1, 'SUBTOTAL').font = Font(bold=True)
     c = ws.cell(r, 2, round(R['subtotal'], 2)); c.number_format = MONEY; c.font = Font(bold=True)
     r += 1

@@ -59,7 +59,8 @@ class RecalculoDecisoesTest(unittest.TestCase):
             'Despesas Diversas', 'Compra de Equipamentos', 'Recorrente',
         ))
         self.assertAlmostEqual(resultado['subtotal'], 1200.0)
-        self.assertAlmostEqual(resultado['prov_laudo'], 1200.0)
+        self.assertNotIn('prov_laudo', resultado)
+        self.assertAlmostEqual(resultado['linhas'][0]['final'], 1200.0)
 
     def test_obras_ficam_fora_mesmo_mantidas_na_revisao(self):
         resultado = previsao.recalcular(montar_resultado(

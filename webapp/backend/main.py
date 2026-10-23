@@ -492,9 +492,10 @@ def _incluir_itens_manuais(R, itens):
 
 
 def _atualizar_resumo_calculado(estado, R, impacto):
-    for campo in ('subtotal', 'total_previsto', 'desconsideracoes', 'prov_laudo',
-                  'prov_incendio', 'receita_anual'):
+    for campo in ('subtotal', 'total_previsto', 'desconsideracoes', 'receita_anual'):
         estado['resumo'][campo] = round(R.get(campo) or 0, 2)
+    for campo in ('prov_laudo', 'prov_incendio'):  # resto de sessões antigas
+        estado['resumo'].pop(campo, None)
     estado['resumo'].update(receita_mensal=round((R.get('receita_anual') or 0) / 12, 2),
         impacto_receita_mensal=round(impacto, 2), cenarios=R.get('cenarios'), inflacao=R.get('inflacao_pct', core.INFLACAO))
     estado['linhas_contas'] = [{**l, 'monthly': []} for l in R['linhas']]
@@ -605,8 +606,6 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'resumo': {
             'base_total': round(R['base_total'], 2),
             'desconsideracoes': round(R['desconsideracoes'], 2),
-            'prov_laudo': round(R['prov_laudo'], 2),
-            'prov_incendio': round(R['prov_incendio'], 2),
             'subtotal': round(R['subtotal'], 2),
             'inflacao': core.INFLACAO,
             'total_previsto': round(R['total_previsto'], 2),

@@ -94,8 +94,9 @@ class GroupUploadTest(unittest.TestCase):
                 self.assertEqual(relatorio_pdf.gerar_relatorio_pdf(state), b'%PDF-test')
             html = render.call_args.kwargs['string']
             self.assertIn('não comprova ausência de inadimplência', html)
-            self.assertIn('meses sem movimentação: 09/2026', html.lower())
-            self.assertIn('receita fixa baseada em 06/2026', html.lower())
+            # Avisos de importação são conferência interna, nunca vão ao condomínio.
+            self.assertNotIn('meses sem movimentação', html.lower())
+            self.assertNotIn('receita fixa baseada', html.lower())
 
     @unittest.skipUnless(os.environ.get('GROUP_SAMPLE_DIR'), 'GROUP_SAMPLE_DIR não definido.')
     def test_new_system_selection_with_real_group_reports(self):

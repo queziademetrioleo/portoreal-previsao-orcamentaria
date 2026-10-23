@@ -12,7 +12,7 @@ class PdfExportTest(unittest.TestCase):
                  'extraordinarias': [{'id': 1, 'decisao': 'aprovada', 'motivo': 'IA: conserto pontual',
                                        'n_meses': 1, 'valor': 100}], 'lancamentos_contas': []}
         result = {'subtotal': 900, 'total_previsto': 990, 'desconsideracoes': 100,
-                  'prov_laudo': 0, 'prov_incendio': 0, 'linhas': []}
+                  'linhas': []}
         with patch.object(main, '_carregar_estado', return_value=state), \
              patch.object(main, '_registrar_aprendizado_decisoes'), \
              patch.object(main, '_aplicar_decisoes'), \

@@ -91,8 +91,6 @@ export interface Cenarios {
 export interface Resumo {
   base_total: number
   desconsideracoes: number
-  prov_laudo: number
-  prov_incendio: number
   subtotal: number
   inflacao: number
   total_previsto: number
