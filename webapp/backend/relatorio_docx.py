@@ -281,6 +281,8 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
         if g.get('pior_mes_txt'):
             _texto(p, '    ' + g['pior_mes_txt'], True, 9)
 
+    # Conclusão + Considerações juntas numa página nova, como no PDF.
+    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
     _titulo(doc, 'Conclusão')
     p = doc.add_paragraph()
     _texto(p, ctx['status_label'], True, 10, STATUS_COR[ctx['status_geral']])
@@ -288,8 +290,8 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
     p.paragraph_format.space_before = Pt(2)
     _texto(p, ctx['conclusao_texto'], False, 10)
 
-    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
     p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(14)
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_after = Pt(8)
     _texto(p, 'CONSIDERAÇÕES IMPORTANTES', True, 13, AZUL)

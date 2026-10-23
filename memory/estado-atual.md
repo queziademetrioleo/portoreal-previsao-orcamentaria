@@ -15,7 +15,8 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 - Motor: `previsao.py` (parsers, regras, IA, receitas, inadimplência, cenários).
   Adaptadores: `parsers_alma.py`, `parsers_group.py`, `parsers_sistemas.py`, `ia_parser.py`.
 - API: `webapp/backend/main.py` (FastAPI) + MySQL (`db.py`, sessões permanentes, arquivos em BLOB).
-- PDF: `webapp/backend/relatorio_pdf.py` (Jinja2 + WeasyPrint; não roda no macOS, testar via Docker).
+- PDF: `webapp/backend/relatorio_pdf.py` (Jinja2 + WeasyPrint; no Mac roda com `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` — pango/cairo do Homebrew;
+  conferir páginas com `pdftoppm -r 50 -png`).
   XLSX: `gerador_previsao.py` (legado; não recebe as mudanças recentes do PDF).
 - Frontend: React 19 + Vite + TS (`webapp/frontend/src`).
 - Deploy: push no GitHub → **rebuild manual no EasyPanel** (serviço previsao). Push ≠ deploy:
@@ -81,7 +82,11 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   R$ 123.417,79/mês, gráfico 6/12 meses com receita ≥ despesa (balancete real: 7/12), reajuste 61% → 20,0% / 11,8%.
   Santorini: água R$ 1.830,82/mês. Berlin e Forte Way sem receita de água (nada muda).
 - **Gráfico redesenhado (usuária 23/10, vale p/ todos os condomínios):** diferença por mês, verde acima / vermelho abaixo, rótulos com ≈ (ver `regras.md`).
-  Prévia DOCX conferida com o Aldeia; versão PDF (SVG/WeasyPrint) não renderizada no Mac → conferir no PDF real.
+  PDF real do Aldeia (sessão `8b5d1beb366a`, com 5 receitas manuais do José) renderizado e conferido: 3 páginas.
+- **Opções/quadro de leitura com nomes curtos:** "Receitas sem fundo de reserva" / "Receitas com fundo de reserva"
+  (antes listava Taxa + Água + cada receita manual).
+- **Conclusão + Considerações juntas numa página nova** (PDF e DOCX); antes a Conclusão ficava sozinha numa página.
+  Considerações longas podem continuar na página seguinte, mas nenhum item é partido.
 - No GitHub em 23/10 (testes: só as 4 falhas conhecidas); **falta rebuild no EasyPanel** (inclui o trabalho de 21/10).
 
 ## Trabalho de 21/10/2026

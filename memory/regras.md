@@ -26,6 +26,8 @@ juros, multa, taxa extra, rendimentos, créditos.
 `#0b6e4f` para cima = receita acima, vermelho `#e4572e` para baixo = despesa acima; valor aproximado (≈, arredondado ao real) com sinal em cada barra,
 resumo "N meses com receita acima / N com despesa acima" e "Maior diferença negativa". Receita atual = total da
 tabela de receitas do relatório. Mesmo desenho no PDF (SVG) e no DOCX (PNG).
+Opções de custeio: "Receitas sem fundo de reserva" / "Receitas com fundo de reserva" (+ aluguel, se houver).
+Páginas: Conclusão + Considerações sempre juntas, começando em página nova.
 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; 13ª taxa de administração omitida do texto.

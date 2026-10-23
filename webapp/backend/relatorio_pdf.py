@@ -75,7 +75,7 @@ def _reajuste_necessario(total_previsto, receita_total):
     return abs(float(total_previsto or 0) / receita_total - 1)
 
 
-def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto, outras_ordinarias=None):
+def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
     """Opções de receita para custear as despesas ordinárias (feedback José
     Henrique 09/2026): só taxa de condomínio; + Fundo de Reserva; + aluguel;
     + Fundo + aluguel. Cada condomínio mostra só as que tem.
@@ -86,18 +86,17 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto, 
                     else 'Aluguéis de espaço')
     tem_fundo = fundo_anual > 0.005
     tem_aluguel = aluguel_anual > 0.005
-    # A receita ordinária pode trazer outras receitas além da taxa (água cobrada
-    # das unidades, antena, receitas manuais): o nome da opção diz quais.
-    base = ' + '.join(['Taxa de Condomínio', *(outras_ordinarias or [])])
+    # Nomes curtos (usuária, 23/10/2026): a receita ordinária já traz taxa, água,
+    # recorrentes e receitas manuais; a tabela de receitas detalha cada uma.
+    sem, com = 'Receitas sem fundo de reserva', 'Receitas com fundo de reserva'
     candidatas = [
-        ('Só Taxa de Condomínio' if not outras_ordinarias else base, receita_anual, True),
-        (f'{base} + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
-        (f'{base} + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
-        (f'{base} + Fundo de Reserva + {nome_aluguel}',
-         receita_anual + fundo_anual + aluguel_anual, tem_fundo and tem_aluguel),
+        (sem, receita_anual, True, False),
+        (com, receita_anual + fundo_anual, tem_fundo, True),
+        (f'{sem} + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel, False),
+        (f'{com} + {nome_aluguel}', receita_anual + fundo_anual + aluguel_anual, tem_fundo and tem_aluguel, True),
     ]
     opcoes = []
-    for label, receita, aplica in candidatas:
+    for label, receita, aplica, usa_fundo in candidatas:
         if not aplica:
             continue
         resultado = receita - float(total_previsto or 0)
@@ -108,7 +107,7 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto, 
             'status': core._status_resultado(resultado),
             # com sobra não há reajuste; com falta, |TOTAL / RECEITA - 1|
             'reajuste': _reajuste_necessario(total_previsto, receita) if resultado < 0 else 0.0,
-            'usa_fundo': 'Fundo de Reserva' in label,
+            'usa_fundo': usa_fundo,
         })
     return opcoes
 
@@ -721,11 +720,7 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
     resultado_com = receita_anual_com - total_previsto
     resultado_sem = receita_anual_sem - total_previsto
-    outras_ordinarias = [str(i['classe']).strip() for i in ordinarias
-                         if abs(float(i.get('mensal') or 0)) > 0.005
-                         and _norm(i['classe']) not in (_norm('Taxas de Condomínio'), _norm('Taxa de Condomínio'))]
-    opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto,
-                             outras_ordinarias)
+    opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
 
     pizza = _grafico_pizza_svg(grupos, total_grupo)
     # Barra de receita = total da tabela de receitas (taxa, fundo se marcado,
@@ -895,6 +890,10 @@ _HTML_TEMPLATE = r"""
   .header .titulo h1 { font-size: 20px; color: #1c355e; }
   .header .titulo p { margin: 2px 0 0; color: #52514e; font-size: 12px; }
   .secao { margin-bottom: 20px; page-break-inside: avoid; }
+  /* Considerações longas podem continuar na página seguinte, mas nunca partem um item. */
+  .secao.consideracoes { page-break-inside: auto; }
+  .secao.consideracoes p { page-break-inside: avoid; }
+  h2 { page-break-after: avoid; }
   .secao h2 { font-size: 14px; color: #1c355e; border-bottom: 1px solid #e1e0d9; padding-bottom: 4px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
   th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #e1e0d9; }
@@ -918,10 +917,10 @@ _HTML_TEMPLATE = r"""
   .mensal-legenda { display: flex; align-items: center; gap: 16px; font-size: 10px; color: #52514e; margin-top: 4px; }
   .mensal-legenda span { display: flex; align-items: center; gap: 5px; }
   .mensal-legenda i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-  .mensal-legenda strong { color: #14110c; margin-left: auto; }
+  .mensal-legenda strong { color: #14110c; margin-left: auto; white-space: nowrap; }
   .mensal-resumo { display: flex; gap: 22px; font-size: 11px; font-weight: 700; color: #14110c; margin: 2px 0 8px; }
-  .mensal-resumo span { display: flex; align-items: center; gap: 6px; }
-  .mensal-resumo i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .mensal-resumo span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .mensal-resumo i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
   .conclusao-box { border-left: 3px solid #1c355e; padding-left: 10px; }
   .conclusao-box.superavit_insuficiente { border-left-color: #c98500; }
   .conclusao-box.deficit { border-left-color: #a12626; }
@@ -1011,7 +1010,9 @@ _HTML_TEMPLATE = r"""
   </div>
   {% endif %}
 
-  <div class="secao">
+  <!-- Conclusão + Considerações sempre juntas numa página nova (usuária, 23/10/2026):
+       antes a Conclusão ficava sozinha numa página e as Considerações na seguinte. -->
+  <div class="secao" style="page-break-before: always;">
     <h2>Conclusão</h2>
     <div class="conclusao-box {{ status_geral }}">
       <strong>{{ status_label }}</strong>
@@ -1019,7 +1020,7 @@ _HTML_TEMPLATE = r"""
     </div>
   </div>
 
-  <div class="secao consideracoes" style="page-break-before: always;">
+  <div class="secao consideracoes">
     <h2 style="text-align:center;">CONSIDERAÇÕES IMPORTANTES</h2>
     {% for c in consideracoes %}<p>{{ c }}</p>{% endfor %}
     <div class="assinatura">

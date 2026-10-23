@@ -94,10 +94,10 @@ class ReceitasNoGraficoTest(unittest.TestCase):
         self.assertEqual({m['receita'] for m in ctx['fluxo_mensal']}, {3100})
         self.assertEqual({m['saldo'] for m in ctx['fluxo_mensal']}, {1800})
 
-    def test_opcoes_dizem_quais_receitas_entram(self):
+    def test_opcoes_tem_nomes_curtos(self):
         ctx = relatorio_pdf.montar_contexto_relatorio(self._estado_com_agua_e_manual())
-        self.assertEqual(ctx['opcoes'][0]['label'], 'Taxa de Condomínio + Água + Aluguel do quiosque')
-        self.assertNotIn('Só Taxa de Condomínio', [o['label'] for o in ctx['opcoes']])
+        self.assertEqual([o['label'] for o in ctx['opcoes']],
+                         ['Receitas sem fundo de reserva', 'Receitas com fundo de reserva'])
 
 
 class GraficoDiferencaTest(unittest.TestCase):
