@@ -26,7 +26,7 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
   `ANTHROPIC_API_KEY`). ID certo é `claude-opus-5-5` (com ponto dá 404 e, sem provedor fixado, cai silenciosamente na OpenAI `gpt-6.1-sol`).
   `_anthropic_chat` não usa thinking (OpenAI usava reasoning high). Conferir `modelo_ia` da sessão nova. Defaults de `.env.example`/compose/README ainda dizem OpenAI.
 - Testes: `cd webapp/backend && PYTHONPATH=../.. ../../.venv/bin/python -m unittest discover -p 'test_*.py'`
-  (4 falhas conhecidas em `test_classificacao_capital` — caso "projetor", pré-existentes).
+  (4 falhas conhecidas em `test_classificacao_capital` — 'projetor' voltou a CAPITAL_KW em 07/10; ver próximos passos).
 
 ## Sistemas e documentos aceitos hoje
 
@@ -44,7 +44,8 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 Resumo em `regras.md`. Decisões que não podem regredir:
 - Aumento previsto fixo 10%; superávit mínimo R$ 2.000/mês (R$ 24.000/ano).
 - Receita ordinária = taxa condominial (com desconto embutido) + fundo de reserva + receitas recorrentes
-  identificadas (ex.: aluguel de antena). Fora: complemento, juros, multa, taxa extra, rendimentos, repasses.
+  identificadas (ex.: aluguel de antena). **Água cobrada das unidades sempre entra** (média
+  dos meses com receita no balancete; usuária 23/10/2026), assim como receitas adicionadas à mão. Fora: complemento, juros, multa, taxa extra, rendimentos, repasses.
 - Seguro: última parcela da apólice vigente × total de parcelas ("Parcela N/M"), ÷12 no mensal.
 - 13ª taxa de administração nunca aparece no texto público (valor continua no cálculo).
 - Nome do condomínio é informado pela operação; nunca substituir pelo extraído do REC.
@@ -71,10 +72,16 @@ Resumo em `regras.md`. Decisões que não podem regredir:
     `read_receivables` reconhece pelo conteúdo, `read_unit_apportionment` lê o XML direto porque o openpyxl recusa os
     estilos do arquivo). Forte Way: totais idênticos ao PDF (taxa 38.377,18; fundo 3.978,85; chamada de capital
     4.401,60 fica fora da receita ordinária). Análise completa local passou (receita ordinária R$ 42.356,03/mês).
-- **Gráfico mensal (NÃO corrigido, aguarda decisão):** barra de despesa = despesa total do balancete; barra de receita =
-  receita atual SEM a água cobrada das unidades (Group 1.1.36 Água ≈ R$ 363 mil/ano vs despesa Água ≈ R$ 366 mil/ano).
-  Por isso a despesa fica acima o ano todo. A mesma exclusão infla o déficit da previsão (cópia local da sessão: 61%).
-  O PDF do José (22/10) ainda tinha o texto antigo ("Recomendamos um reajuste de 14,9%") → produção sem rebuild.
+- **Gráfico mensal + água na receita (decisão da usuária 23/10: "água é receita, sempre conta"):** a receita deixava
+  de fora a água cobrada das unidades (Aldeia: Group 1.1.36 Água ≈ R$ 363 mil/ano vs despesa ≈ R$ 366 mil/ano), então
+  a despesa ficava acima o ano todo e o déficit inflava. Agora `receitas_consumo` soma a água (média dos meses com
+  receita) em `analisar`, `recalcular` e no fallback do balanço; a barra de receita do gráfico (PDF/DOCX) = total da
+  tabela de receitas (taxa, fundo se marcado, água, recorrentes, **receitas manuais**, menos inadimplência); opções de
+  custeio nomeiam as receitas ("Taxa de Condomínio + Água + …", não "Só Taxa"). Aldeia (cópia local, sem IA): receita
+  R$ 123.417,79/mês, gráfico 6/12 meses com receita ≥ despesa (balancete real: 7/12), reajuste 61% → 20,0% / 11,8%.
+  Santorini: água R$ 1.830,82/mês. Berlin e Forte Way sem receita de água (nada muda).
+- **Gráfico redesenhado (usuária 23/10, vale p/ todos os condomínios):** diferença por mês, verde acima / vermelho abaixo, rótulos com ≈ (ver `regras.md`).
+  Prévia DOCX conferida com o Aldeia; versão PDF (SVG/WeasyPrint) não renderizada no Mac → conferir no PDF real.
 - No GitHub em 23/10 (testes: só as 4 falhas conhecidas); **falta rebuild no EasyPanel** (inclui o trabalho de 21/10).
 
 ## Trabalho de 21/10/2026
@@ -144,7 +151,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
    (o desbai06 teria pagamentos em meses que já são do Alma). Regerar PDFs (Berlin `b633bf8000b5`, Atlântico,
    Santorini) — sessões antigas mantêm o gráfico antigo até reanalisar.
 2. Pedir ao José um caso real com inadimplente nos 2 últimos meses para validar o abatimento do boleto.
-3. Decidir com o José como a água rateada às unidades entra na receita (gráfico e previsão).
+3. Confirmar com o José: "projetor" (refletor LED) é despesa normal? `previsao.py` CAPITAL_KW tem 'projetor' desde
+   07/10 (261ec09), contrariando a correção de 05/10 (b26c1db) — são as 4 falhas de `test_classificacao_capital`.
 4. Santorini: R$ 9.000 de caminhões-pipa deduzidos pela estatística precisam de validação humana.
    FIN do Alma não traz tarifas bancárias (aviso de diferença aparece; o demonstrativo Alma cobre).
 5. Segurança: revisar credenciais do banco e autenticação da API (pendência registrada fora do repo).

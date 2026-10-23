@@ -75,7 +75,7 @@ def _reajuste_necessario(total_previsto, receita_total):
     return abs(float(total_previsto or 0) / receita_total - 1)
 
 
-def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
+def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto, outras_ordinarias=None):
     """Opções de receita para custear as despesas ordinárias (feedback José
     Henrique 09/2026): só taxa de condomínio; + Fundo de Reserva; + aluguel;
     + Fundo + aluguel. Cada condomínio mostra só as que tem.
@@ -86,11 +86,14 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
                     else 'Aluguéis de espaço')
     tem_fundo = fundo_anual > 0.005
     tem_aluguel = aluguel_anual > 0.005
+    # A receita ordinária pode trazer outras receitas além da taxa (água cobrada
+    # das unidades, antena, receitas manuais): o nome da opção diz quais.
+    base = ' + '.join(['Taxa de Condomínio', *(outras_ordinarias or [])])
     candidatas = [
-        ('Só Taxa de Condomínio', receita_anual, True),
-        ('Taxa de Condomínio + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
-        (f'Taxa de Condomínio + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
-        (f'Taxa de Condomínio + Fundo de Reserva + {nome_aluguel}',
+        ('Só Taxa de Condomínio' if not outras_ordinarias else base, receita_anual, True),
+        (f'{base} + Fundo de Reserva', receita_anual + fundo_anual, tem_fundo),
+        (f'{base} + {nome_aluguel}', receita_anual + aluguel_anual, tem_aluguel),
+        (f'{base} + Fundo de Reserva + {nome_aluguel}',
          receita_anual + fundo_anual + aluguel_anual, tem_fundo and tem_aluguel),
     ]
     opcoes = []
@@ -502,45 +505,80 @@ def _grafico_pizza_svg(grupos, total):
 
 
 # ---------------------------------------------------------------------------
-# Grafico de evolucao mensal (SVG, barras) — espelha MonthlyChart.tsx
+# Grafico de evolucao mensal — diferença receita atual − despesa de cada mês
 # ---------------------------------------------------------------------------
+# Pedido da usuária (23/10/2026): o síndico precisa ver de cara os meses em que
+# a receita ficou acima (verde, barra para cima) e os que ficaram abaixo
+# (vermelho, barra para baixo). Par validado p/ daltonismo (ΔE 7,1 protan, faixa
+# que exige codificação extra: direção da barra + sinal escrito em cada valor).
+COR_RECEITA_ACIMA = '#0b6e4f'
+COR_DESPESA_ACIMA = '#e4572e'
+
+
+def _money_curto(v):
+    """Valor arredondado ao real, com ≈ e sinal explícito, para os rótulos do gráfico."""
+    v = float(v or 0)
+    txt = f'{abs(v):,.0f}'.replace(',', '.')
+    return f'≈ {"+" if v >= 0 else "−"}R$ {txt}'
+
+
+def _geometria_mensal(fluxo_mensal, altura_util):
+    """Barras da diferença a partir da linha zero, em unidades de altura_util."""
+    saldos = [float(m.get('saldo') or 0) for m in fluxo_mensal]
+    acima = max([s for s in saldos if s > 0], default=0)
+    abaixo = max([-s for s in saldos if s < 0], default=0)
+    escala = altura_util / ((acima + abaixo) or 1)
+    zero = acima * escala
+    barras = []
+    for m, s in zip(fluxo_mensal, saldos):
+        h = max(2, abs(s) * escala)
+        barras.append({'mes': m.get('mes') or '', 'saldo': s, 'positivo': s >= 0,
+                       'y': zero - h if s >= 0 else zero, 'h': h})
+    return zero, barras
+
+
+def resumo_mensal(fluxo_mensal):
+    positivos = sum(1 for m in fluxo_mensal if float(m.get('saldo') or 0) >= 0)
+    negativos = len(fluxo_mensal) - positivos
+    plural = lambda n: 'mês' if n == 1 else 'meses'
+    return {
+        'acima_txt': f'{positivos} {plural(positivos)} com receita acima da despesa',
+        'abaixo_txt': f'{negativos} {plural(negativos)} com despesa acima da receita',
+        'receita_txt': (f'Diferença entre a receita atual ({_money(fluxo_mensal[0].get("receita"))} por mês) '
+                        'e a despesa de cada mês. Valores aproximados, arredondados ao real.') if fluxo_mensal else '',
+    }
+
+
 def _grafico_mensal_svg(fluxo_mensal):
     if not fluxo_mensal:
         return None
-    max_val = max((max(m.get('receita') or 0, m.get('despesa') or 0) for m in fluxo_mensal), default=1)
-    max_val = max_val or 1
-    largura_total, altura = 640, 160
-    n = len(fluxo_mensal)
-    col_w = largura_total / n
-    barras = []
-    for i, m in enumerate(fluxo_mensal):
-        x0 = i * col_w
-        h_rec = max(4, (m.get('receita') or 0) / max_val * altura)
-        h_desp = max(4, (m.get('despesa') or 0) / max_val * altura)
-        bw = col_w * 0.32
-        x_rec = x0 + col_w * 0.14
-        x_desp = x0 + col_w * 0.54
-        barras.append({
-            'x_rec': round(x_rec, 1), 'y_rec': round(altura - h_rec, 1), 'h_rec': round(h_rec, 1),
-            'x_desp': round(x_desp, 1), 'y_desp': round(altura - h_desp, 1), 'h_desp': round(h_desp, 1),
-            'bw': round(bw, 1), 'mes': m.get('mes') or '',
-            'label_x': round(x0 + col_w / 2, 1),
-        })
-    pior_mes = min(fluxo_mensal, key=lambda m: m.get('saldo') or 0) if fluxo_mensal else None
-
-    rects = ''.join(
-        f'<rect x="{b["x_rec"]}" y="{b["y_rec"]}" width="{b["bw"]}" height="{b["h_rec"]}" '
-        f'fill="#1c355e" rx="1.5"/>'
-        f'<rect x="{b["x_desp"]}" y="{b["y_desp"]}" width="{b["bw"]}" height="{b["h_desp"]}" '
-        f'fill="#c3c2b7" rx="1.5"/>'
-        f'<text x="{b["label_x"]}" y="{altura + 14}" text-anchor="middle" font-size="9" fill="#52514e">{b["mes"]}</text>'
-        for b in barras
-    )
-    svg = f'<svg viewBox="0 0 {largura_total} {altura + 20}" width="100%" height="140">{rects}</svg>'
-    pior_mes_txt = None
-    if pior_mes:
-        pior_mes_txt = f'Maior pressão: {pior_mes.get("mes")} ({_money(pior_mes.get("saldo") or 0)})'
-    return {'svg': svg, 'pior_mes_txt': pior_mes_txt}
+    largura, topo, util, rodape = 640, 18, 150, 34
+    zero, barras = _geometria_mensal(fluxo_mensal, util)
+    col = largura / len(barras)
+    bw = col * 0.56
+    partes = []
+    for i, b in enumerate(barras):
+        x = i * col + (col - bw) / 2
+        y = topo + b['y']
+        cor = COR_RECEITA_ACIMA if b['positivo'] else COR_DESPESA_ACIMA
+        partes.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{b["h"]:.1f}" fill="{cor}" rx="2"/>')
+        # rótulo do valor na ponta da barra, em tinta de texto (não na cor da série)
+        ly = y - 4 if b['positivo'] else y + b['h'] + 10
+        partes.append(f'<text x="{i * col + col / 2:.1f}" y="{ly:.1f}" text-anchor="middle" font-size="7.6" '
+                      f'font-weight="700" fill="#14110c">{_money_curto(b["saldo"])}</text>')
+        partes.append(f'<text x="{i * col + col / 2:.1f}" y="{topo + util + rodape - 6:.1f}" text-anchor="middle" '
+                      f'font-size="9" fill="#52514e">{b["mes"]}</text>')
+    linha_zero = (f'<line x1="0" x2="{largura}" y1="{topo + zero:.1f}" y2="{topo + zero:.1f}" '
+                  f'stroke="#8a8984" stroke-width="1"/>')
+    altura = topo + util + rodape
+    svg = (f'<svg viewBox="0 0 {largura} {altura}" width="100%" height="190">'
+           f'{linha_zero}{"".join(partes)}</svg>')
+    pior = min(fluxo_mensal, key=lambda m: m.get('saldo') or 0)
+    pior_txt = None
+    if float(pior.get('saldo') or 0) < 0:
+        pior_txt = f'Maior diferença negativa: {pior.get("mes")} ({_money(pior.get("saldo"))})'
+    return {'svg': svg, 'pior_mes_txt': pior_txt, **resumo_mensal(fluxo_mensal),
+            'cor_acima': COR_RECEITA_ACIMA, 'cor_abaixo': COR_DESPESA_ACIMA}
 
 
 # ---------------------------------------------------------------------------
@@ -683,9 +721,21 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
     resultado_com = receita_anual_com - total_previsto
     resultado_sem = receita_anual_sem - total_previsto
-    opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
+    outras_ordinarias = [str(i['classe']).strip() for i in ordinarias
+                         if abs(float(i.get('mensal') or 0)) > 0.005
+                         and _norm(i['classe']) not in (_norm('Taxas de Condomínio'), _norm('Taxa de Condomínio'))]
+    opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto,
+                             outras_ordinarias)
 
     pizza = _grafico_pizza_svg(grupos, total_grupo)
+    # Barra de receita = total da tabela de receitas (taxa, fundo se marcado,
+    # água cobrada das unidades, recorrentes e receitas adicionadas à mão,
+    # menos a inadimplência). A receita salva na análise não via os itens
+    # manuais nem a água (José Henrique, 22/10/2026: "não corresponde à realidade").
+    receita_grafico = round(sum(v for _, v in receitas), 2)
+    fluxo_mensal = [{**m, 'receita': receita_grafico,
+                     'saldo': round(receita_grafico - float(m.get('despesa') or 0), 2)}
+                    for m in fluxo_mensal]
     grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
 
     # --- Considerações Importantes (numeradas sequencialmente ao final —
@@ -869,6 +919,9 @@ _HTML_TEMPLATE = r"""
   .mensal-legenda span { display: flex; align-items: center; gap: 5px; }
   .mensal-legenda i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
   .mensal-legenda strong { color: #14110c; margin-left: auto; }
+  .mensal-resumo { display: flex; gap: 22px; font-size: 11px; font-weight: 700; color: #14110c; margin: 2px 0 8px; }
+  .mensal-resumo span { display: flex; align-items: center; gap: 6px; }
+  .mensal-resumo i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .conclusao-box { border-left: 3px solid #1c355e; padding-left: 10px; }
   .conclusao-box.superavit_insuficiente { border-left-color: #c98500; }
   .conclusao-box.deficit { border-left-color: #a12626; }
@@ -946,10 +999,13 @@ _HTML_TEMPLATE = r"""
   {% if grafico_mensal %}
   <div class="secao">
     <h2>Evolução mensal</h2>
+    <div class="mensal-resumo">
+      <span><i style="background:{{ grafico_mensal.cor_acima }}"></i>▲ {{ grafico_mensal.acima_txt }}</span>
+      <span><i style="background:{{ grafico_mensal.cor_abaixo }}"></i>▼ {{ grafico_mensal.abaixo_txt }}</span>
+    </div>
     {{ grafico_mensal.svg|safe }}
     <div class="mensal-legenda">
-      <span><i style="background:#1c355e"></i>Receita atual</span>
-      <span><i style="background:#c3c2b7"></i>Despesa</span>
+      <span>{{ grafico_mensal.receita_txt }}</span>
       {% if grafico_mensal.pior_mes_txt %}<strong>{{ grafico_mensal.pior_mes_txt }}</strong>{% endif %}
     </div>
   </div>

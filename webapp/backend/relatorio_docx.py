@@ -19,7 +19,8 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
-from relatorio_pdf import montar_contexto_relatorio
+from relatorio_pdf import (COR_DESPESA_ACIMA, COR_RECEITA_ACIMA, _geometria_mensal, _money_curto,
+                           montar_contexto_relatorio)
 
 AZUL = RGBColor(0x1C, 0x35, 0x5E)
 CINZA = RGBColor(0x52, 0x51, 0x4E)
@@ -29,6 +30,16 @@ STATUS_TXT = {'superavit': 'Superávit', 'superavit_insuficiente': 'Superávit i
 STATUS_COR = {'superavit': RGBColor(0x0F, 0x6B, 0x2B),
               'superavit_insuficiente': RGBColor(0x8A, 0x63, 0x00),
               'deficit': RGBColor(0xA1, 0x26, 0x26)}
+
+
+def _fonte_img_negrito(tamanho):
+    for caminho in ('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                    '/System/Library/Fonts/Supplemental/Arial Bold.ttf'):
+        try:
+            return ImageFont.truetype(caminho, tamanho)
+        except OSError:
+            continue
+    return _fonte_img(tamanho)
 
 
 def _fonte_img(tamanho):
@@ -68,23 +79,24 @@ def _png_pizza(fatias, lado=600):
     return _png_bytes(img)
 
 
-def _png_mensal(fluxo, largura=1600, altura=460):
+def _png_mensal(fluxo, largura=1600, altura=480):
+    """Mesmo desenho do PDF: diferença receita atual − despesa a partir do zero."""
     img = Image.new('RGB', (largura, altura), 'white')
     d = ImageDraw.Draw(img)
-    topo, base = 20, altura - 50
-    maximo = max((max(m.get('receita') or 0, m.get('despesa') or 0) for m in fluxo), default=1) or 1
-    col = largura / len(fluxo)
-    fonte = _fonte_img(26)
-    for i, m in enumerate(fluxo):
-        x0 = i * col
-        bw = col * 0.32
-        for desloc, chave, cor in ((0.14, 'receita', (0x1C, 0x35, 0x5E)),
-                                   (0.54, 'despesa', (0xC3, 0xC2, 0xB7))):
-            h = max(6, (m.get(chave) or 0) / maximo * (base - topo))
-            x = x0 + col * desloc
-            d.rounded_rectangle((x, base - h, x + bw, base), radius=3, fill=cor)
-        d.text((x0 + col / 2, base + 24), str(m.get('mes') or ''), font=fonte,
-               fill=(0x52, 0x51, 0x4E), anchor='mm')
+    topo, util = 46, altura - 46 - 86
+    zero, barras = _geometria_mensal(fluxo, util)
+    col = largura / len(barras)
+    bw = col * 0.56
+    fonte, valor = _fonte_img(25), _fonte_img_negrito(20)
+    d.line((0, topo + zero, largura, topo + zero), fill=(0x8A, 0x89, 0x84), width=2)
+    for i, b in enumerate(barras):
+        x = i * col + (col - bw) / 2
+        y = topo + b['y']
+        cor = _hex(COR_RECEITA_ACIMA if b['positivo'] else COR_DESPESA_ACIMA)
+        d.rounded_rectangle((x, y, x + bw, y + b['h']), radius=5, fill=cor)
+        ly = y - 18 if b['positivo'] else y + b['h'] + 18
+        d.text((i * col + col / 2, ly), _money_curto(b['saldo']), font=valor, fill=(0x14, 0x11, 0x0C), anchor='mm')
+        d.text((i * col + col / 2, altura - 30), str(b['mes']), font=fonte, fill=(0x52, 0x51, 0x4E), anchor='mm')
     return _png_bytes(img)
 
 
@@ -259,12 +271,15 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
 
     if ctx.get('grafico_mensal') and ctx.get('fluxo_mensal'):
         _titulo(doc, 'Evolução mensal')
+        g = ctx['grafico_mensal']
+        p = doc.add_paragraph()
+        _texto(p, '▲ ', True, 11, RGBColor(*_hex(COR_RECEITA_ACIMA))); _texto(p, g['acima_txt'] + '     ', True, 10)
+        _texto(p, '▼ ', True, 11, RGBColor(*_hex(COR_DESPESA_ACIMA))); _texto(p, g['abaixo_txt'], True, 10)
         doc.add_paragraph().add_run().add_picture(_png_mensal(ctx['fluxo_mensal']), width=Cm(17))
         p = doc.add_paragraph()
-        _texto(p, '■ ', True, 10, AZUL); _texto(p, 'Receita atual   ', False, 9, CINZA)
-        _texto(p, '■ ', True, 10, RGBColor(0xC3, 0xC2, 0xB7)); _texto(p, 'Despesa', False, 9, CINZA)
-        if ctx['grafico_mensal'].get('pior_mes_txt'):
-            _texto(p, '    ' + ctx['grafico_mensal']['pior_mes_txt'], True, 9)
+        _texto(p, g['receita_txt'], False, 9, CINZA)
+        if g.get('pior_mes_txt'):
+            _texto(p, '    ' + g['pior_mes_txt'], True, 9)
 
     _titulo(doc, 'Conclusão')
     p = doc.add_paragraph()

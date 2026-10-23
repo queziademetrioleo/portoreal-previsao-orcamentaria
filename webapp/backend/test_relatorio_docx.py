@@ -73,3 +73,49 @@ class RelatorioDocxTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReceitasNoGraficoTest(unittest.TestCase):
+    """Água cobrada das unidades e receitas manuais contam em tudo (usuária, 23/10/2026)."""
+
+    def _estado_com_agua_e_manual(self):
+        estado = _estado()
+        estado['resumo']['cenarios']['receitas_ordinarias'] = [
+            {'classe': 'Taxas de Condomínio', 'mensal': 2250},
+            {'classe': 'Água', 'mensal': 500},
+            {'classe': 'Aluguel do quiosque', 'mensal': 100},  # adicionada à mão na revisão
+        ]
+        estado['itens_manuais'] = [{'tipo': 'receita', 'nome': 'Aluguel do quiosque', 'valor': 100}]
+        return estado
+
+    def test_barra_de_receita_do_grafico_e_o_total_da_tabela(self):
+        ctx = relatorio_pdf.montar_contexto_relatorio(self._estado_com_agua_e_manual())
+        self.assertEqual(ctx['total_receitas'], 'R$ 3.100,00')  # 2250 + 250 fundo + 500 água + 100 manual
+        self.assertEqual({m['receita'] for m in ctx['fluxo_mensal']}, {3100})
+        self.assertEqual({m['saldo'] for m in ctx['fluxo_mensal']}, {1800})
+
+    def test_opcoes_dizem_quais_receitas_entram(self):
+        ctx = relatorio_pdf.montar_contexto_relatorio(self._estado_com_agua_e_manual())
+        self.assertEqual(ctx['opcoes'][0]['label'], 'Taxa de Condomínio + Água + Aluguel do quiosque')
+        self.assertNotIn('Só Taxa de Condomínio', [o['label'] for o in ctx['opcoes']])
+
+
+class GraficoDiferencaTest(unittest.TestCase):
+    """Síndico vê de cara os meses acima (verde, para cima) e abaixo (vermelho, para baixo)."""
+
+    def test_barras_partem_do_zero_com_cor_e_resumo(self):
+        fluxo = [{'mes': '01/2026', 'receita': 1000, 'despesa': 800, 'saldo': 200},
+                 {'mes': '02/2026', 'receita': 1000, 'despesa': 1300, 'saldo': -300},
+                 {'mes': '03/2026', 'receita': 1000, 'despesa': 900, 'saldo': 100}]
+        g = relatorio_pdf._grafico_mensal_svg(fluxo)
+        self.assertEqual(g['acima_txt'], '2 meses com receita acima da despesa')
+        self.assertEqual(g['abaixo_txt'], '1 mês com despesa acima da receita')
+        self.assertEqual(g['pior_mes_txt'], 'Maior diferença negativa: 02/2026 (-R$ 300,00)')
+        self.assertEqual(g['svg'].count(relatorio_pdf.COR_RECEITA_ACIMA), 2)
+        self.assertEqual(g['svg'].count(relatorio_pdf.COR_DESPESA_ACIMA), 1)
+        self.assertIn('≈ +R$ 200', g['svg']); self.assertIn('≈ −R$ 300', g['svg'])
+        zero, barras = relatorio_pdf._geometria_mensal(fluxo, 100)
+        self.assertAlmostEqual(zero, 40)  # 200 acima / 300 abaixo
+        self.assertAlmostEqual(barras[0]['y'] + barras[0]['h'], zero)  # positiva termina no zero
+        self.assertAlmostEqual(barras[1]['y'], zero)  # negativa começa no zero
+        self.assertTrue(relatorio_docx._png_mensal(fluxo).getvalue().startswith(b'\x89PNG'))

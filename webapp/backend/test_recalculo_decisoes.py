@@ -102,3 +102,20 @@ class ReceitaNaoOrdinariaTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReceitaAguaTest(unittest.TestCase):
+    def test_agua_cobrada_das_unidades_entra_pela_media_dos_meses_com_receita(self):
+        bal = {'receitas': [
+            {'classe': 'Tx. Condomínio', 'monthly': [0, 1000, 1000, 1000], 'total': 3000},
+            {'classe': 'Água', 'monthly': [0, 300, 600, 300], 'total': 1200},
+            {'classe': 'Juros', 'monthly': [0, 5, 0, 0], 'total': 5},
+        ]}
+        # 1º mês sem nenhuma receita (fora da cobertura) não dilui a média.
+        self.assertEqual(previsao.receitas_consumo(bal), [{'classe': 'Água', 'mensal': 400.0}])
+        self.assertEqual(previsao.receitas_ordinarias(bal, {'por_classe': {
+            'TAXA DE CONDOMÍNIO': {'lancado': 1000, 'liquidado': 0}}})[-1], {'classe': 'Água', 'mensal': 400.0})
+
+    def test_sem_receita_de_agua_nada_muda(self):
+        self.assertEqual(previsao.receitas_consumo({'receitas': [
+            {'classe': 'Tx. Condomínio', 'monthly': [1000], 'total': 1000}]}), [])

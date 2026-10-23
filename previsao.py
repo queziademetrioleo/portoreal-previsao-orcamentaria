@@ -1257,7 +1257,7 @@ def _receita_fundo_do_balanual(bal):
     existe para manter o motor utilizavel em scripts/analise avulsa)."""
     receitas = _receitas_previstas_balanco(bal)
     fundo = sum(l['mensal'] for l in receitas if _eh_fundo_reserva(l['classe']))
-    receita_total = sum(l['mensal'] for l in receitas)
+    receita_total = sum(l['mensal'] for l in receitas) + receita_consumo_mensal(bal) * 12
     return receita_total, fundo
 
 
@@ -1273,13 +1273,44 @@ def _fundo_reserva_documento(rec_doc):
                      if _eh_fundo_reserva(l['classe'])) * 12, 2)
 
 
+def _eh_receita_agua(classe):
+    """Água cobrada das unidades (rateio de consumo)."""
+    nc = re.sub(r'[^a-z0-9]+', ' ', _norm(classe)).strip()
+    return 'agua' in nc.split() and not any(t in nc for t in _REC_CLASSES_EXCLUIDAS)
+
+
+def receitas_consumo(bal):
+    """Água cobrada das unidades: é receita e sempre entra (usuária, 23/10/2026).
+    Valor varia mês a mês com o consumo → média dos meses com receita no
+    balancete (mesma conclusão de _eh_utilidade_repasse, conferida em 07/2026)."""
+    receitas = (bal or {}).get('receitas') or []
+    n = max((len(l.get('monthly') or []) for l in receitas), default=0)
+    meses = [i for i in range(n) if any(abs((l.get('monthly') or [0] * n)[i] or 0) > 0.005
+                                        for l in receitas if i < len(l.get('monthly') or []))]
+    itens = []
+    for l in receitas:
+        if not _eh_receita_agua(l.get('classe')) or not meses:
+            continue
+        monthly = l.get('monthly') or []
+        media = sum(monthly[i] for i in meses if i < len(monthly)) / len(meses)
+        if abs(media) > 0.005:
+            itens.append({'classe': str(l.get('classe')).strip(), 'mensal': round(media, 2)})
+    return itens
+
+
+def receita_consumo_mensal(bal):
+    return round(sum(i['mensal'] for i in receitas_consumo(bal)), 2)
+
+
 def receitas_ordinarias(bal, rec_doc):
-    """Composição mensal do documento de receita vigente, sem médias do balanual."""
+    """Composição mensal do documento de receita vigente (sem médias do
+    balanual), mais a água cobrada das unidades (média do balancete)."""
     if not rec_doc:
         return [{'classe': l['classe'], 'mensal': round(l['mensal'] / 12, 2)}
-                for l in _receitas_previstas_balanco(bal) if not _eh_fundo_reserva(l['classe'])]
+                for l in _receitas_previstas_balanco(bal) if not _eh_fundo_reserva(l['classe'])
+                ] + receitas_consumo(bal)
     return [l for l in _receitas_previstas_documento(rec_doc)
-            if not _eh_fundo_reserva(l['classe'])]
+            if not _eh_fundo_reserva(l['classe'])] + receitas_consumo(bal)
 
 
 def calcular_cenarios(receita_anual, fundo_reserva_anual, total_previsto,
@@ -1567,7 +1598,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
         except Exception as e:
             logger.warning('Falha ao parsear REC (%s) — usando balanual para receita', e)
     if rec_doc:
-        receita_mensal_documento = _total_receita_documento(rec_doc)
+        receita_mensal_documento = _total_receita_documento(rec_doc) + receita_consumo_mensal(bal)
         receita_anual = round(receita_mensal_documento * 12, 2)
         fundo_reserva_anual = _fundo_reserva_documento(rec_doc)
         logger.info('Receita ordinária do documento %s R$ %.2f × 12 = R$ %.2f',
@@ -2052,7 +2083,7 @@ def recalcular(R, inflacao_pct=None):
     receita_anual = R.get('receita_anual')
     fundo_reserva_anual = R.get('fundo_reserva_anual')
     if R.get('rec'):
-        receita_anual = round(_total_receita_documento(R['rec']) * 12, 2)
+        receita_anual = round((_total_receita_documento(R['rec']) + receita_consumo_mensal(bal)) * 12, 2)
         fundo_reserva_anual = _fundo_reserva_documento(R['rec'])
         R.update(receita_anual=receita_anual, fundo_reserva_anual=fundo_reserva_anual)
     if receita_anual is None:
