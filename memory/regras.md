@@ -33,3 +33,5 @@ PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; comp
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; 13ª taxa de administração omitida do texto.
 Avisos de importação (mês não fechado, receita fixa, diferenças balancete × pagamentos) **nunca** entram nas
 considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).
+
+Sem aprendizado entre análises (retirado em 23/10/2026): cada análise usa só regras + IA; decisões valem só na sessão.

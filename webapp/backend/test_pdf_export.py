@@ -14,7 +14,6 @@ class PdfExportTest(unittest.TestCase):
         result = {'subtotal': 900, 'total_previsto': 990, 'desconsideracoes': 100,
                   'linhas': []}
         with patch.object(main, '_carregar_estado', return_value=state), \
-             patch.object(main, '_registrar_aprendizado_decisoes'), \
              patch.object(main, '_aplicar_decisoes'), \
              patch.object(main, '_recalcular_com_decisoes', return_value=(result, 0)), \
              patch.object(main.db, 'salvar_estado'), \

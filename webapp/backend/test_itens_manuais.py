@@ -32,7 +32,6 @@ class ItensManuaisTest(unittest.TestCase):
         def persistir(_, texto): salvo.clear(); salvo.update(json.loads(texto))
         with patch.object(main, '_carregar_estado', side_effect=carregar), \
              patch.object(main, '_obter_R', side_effect=lambda _: resultado()), \
-             patch.object(main, '_registrar_aprendizado_decisoes'), \
              patch.object(main.db, 'salvar_estado', side_effect=persistir):
             client = TestClient(main.app)
             itens = [{'id': 'r', 'tipo': 'receita', 'nome': 'Locação', 'valor': 50},
@@ -66,7 +65,6 @@ class ItensManuaisTest(unittest.TestCase):
                              {'id': 'd', 'tipo': 'despesa', 'nome': 'Internet extra', 'valor': 100}]
         with patch.object(main, '_carregar_estado', return_value=s), \
              patch.object(main, '_obter_R', return_value=resultado()), \
-             patch.object(main, '_registrar_aprendizado_decisoes'), \
              patch.object(main.db, 'salvar_estado'), \
              patch.object(main, 'gerar_relatorio_pdf', return_value=b'%PDF-test') as render:
             r = main.relatorio_pdf('manual', main.Decisoes())
@@ -85,7 +83,6 @@ class ItensManuaisTest(unittest.TestCase):
         with patch.object(main.db, 'carregar_sessao', return_value=row), \
              patch.object(main, '_restaurar_arquivos'), \
              patch.object(main.core, 'analisar', return_value=resultado()), \
-             patch.object(main, '_aplicar_aprendizado_resultado', side_effect=lambda r: r), \
              patch.object(main.db, 'salvar_cache_analise'), \
              patch.object(main.db, 'marcar_etapa') as etapa, \
              patch.object(main, '_montar_estado', return_value=estado()), \
@@ -104,7 +101,6 @@ class ItensManuaisTest(unittest.TestCase):
         s = estado(); s.update(nome_condominio='Teste', ano_previsao=2027)
         with patch.object(main, '_carregar_estado', return_value=s), \
              patch.object(main, '_obter_R', return_value=R), \
-             patch.object(main, '_registrar_aprendizado_decisoes'), \
              patch.object(main.db, 'salvar_estado'), \
              patch.object(main, 'gerar_relatorio_pdf', return_value=b'%PDF-test') as render:
             client = TestClient(main.app)

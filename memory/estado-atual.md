@@ -91,6 +91,12 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **Topo da aplicação:** logo branca (`public/assets/logo-branca.png`; azul virou branco, amarelo mantido) e botão
   branco "← Menu principal" no cabeçalho (upload e revisão), no lugar do "Voltar" cinza que não aparecia.
   `logo.png` (azul) continua sendo a do PDF — não trocar.
+- **Aprendizado REMOVIDO (usuária 23/10: "só nos trouxe problema"):** memórias da revisão generalizavam
+  entre condomínios (Nautillus XIV → Forte Way: PartnerBank, água Prolagos, gás CEG excluídos). `aprendizado.py`,
+  gravação, aplicação e importação no startup saíram; tabela `aprendizado_despesas` ficou no banco, sem uso
+  (nada apagado). Sessões já analisadas guardam o que ele marcou: Aldeia `8b5d1beb366a` 55 exclusões, Forte Way 6
+  → decidir com o José (revisar na tela ou reanalisar, que perde as decisões já feitas na sessão).
+  Scripts só leitura: `tmp/consultar_aprendizado.py <texto>`, `tmp/simular_aprendizado.py`.
 - No GitHub em 23/10 (testes: só as 4 falhas conhecidas); **falta rebuild no EasyPanel** (inclui o trabalho de 21/10).
 
 ## Trabalho de 21/10/2026

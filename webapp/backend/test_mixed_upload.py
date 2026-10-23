@@ -97,11 +97,3 @@ class MixedUploadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             main._restaurar_arquivos({'arquivo_plano_alma': b'legacy chart'}, folder)
             self.assertFalse((Path(folder) / 'plano_alma.xlsx').exists())
-
-    def test_unmapped_classes_are_not_automatically_resolved_by_learning(self):
-        pending = {'classificacao_pendente': True, 'cat': 'Revisar'}
-        result = {'des': {'itens': [pending]}}
-        with patch.object(main.db, 'listar_aprendizados', return_value=[]), \
-             patch.object(main.aprendizado, 'aplicar_memorias', return_value=0) as apply:
-            main._aplicar_aprendizado_resultado(result)
-        apply.assert_called_once_with([], [])
