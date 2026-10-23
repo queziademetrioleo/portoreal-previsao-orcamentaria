@@ -316,11 +316,7 @@ export default function TelaRevisao({
 
   return (
     <>
-      <Header onHome={onVoltar}>
-        <Button variant="ghost" onClick={onVoltar}>
-          Voltar
-        </Button>
-      </Header>
+      <Header onHome={onVoltar} />
 
       <div className="page page-wide">
         {/* hero */}

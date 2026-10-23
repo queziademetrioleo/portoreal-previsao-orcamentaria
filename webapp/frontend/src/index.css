@@ -99,6 +99,17 @@ body {
   gap: var(--s-sm);
 }
 
+/* Botão do cabeçalho azul: branco para ficar visível (o ghost cinza sumia). */
+.btn.btn-header {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+}
+.btn.btn-header:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fff;
+}
+
 /* ── LAYOUT ────────────────────────────── */
 .page {
   max-width: 960px;

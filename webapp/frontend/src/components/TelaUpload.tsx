@@ -168,11 +168,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
   if (loading) {
     return (
       <>
-        <Header onHome={onVoltar}>
-          <Button variant="ghost" onClick={onVoltar}>
-            ← Voltar
-          </Button>
-        </Header>
+        <Header onHome={onVoltar} />
         <div className="page">
           <div className="upload-card">
             <Card>
@@ -195,11 +191,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
 
   return (
     <>
-      <Header onHome={onVoltar}>
-        <Button variant="ghost" onClick={onVoltar}>
-          ← Voltar
-        </Button>
-      </Header>
+      <Header onHome={onVoltar} />
 
       <div className="page">
         <div className="upload-card">
