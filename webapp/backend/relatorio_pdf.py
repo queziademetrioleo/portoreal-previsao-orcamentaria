@@ -862,6 +862,14 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
         ),
         'consideracoes': consideracoes,
         'fluxo_mensal': fluxo_mensal,
+        # Valores numéricos para o XLSX, que refaz as somas com fórmulas.
+        'valores': {
+            'receitas': receitas,
+            'despesas': despesas,
+            'inflacao': inflacao,
+            'aluguel': {_norm(i['classe']) for i in nao_ordinarias},
+            'opcoes': [o['label'] for o in opcoes],
+        },
     }
     return ctx
 

@@ -35,3 +35,9 @@ Avisos de importação (mês não fechado, receita fixa, diferenças balancete �
 considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).
 
 Sem aprendizado entre análises (retirado em 23/10/2026): cada análise usa só regras + IA; decisões valem só na sessão.
+
+## Relatório XLSX
+
+Mesmos números do PDF, com fórmulas. Opções: sem fundo = total de receitas − Fundo − Aluguel; com fundo soma o
+Fundo; "+ aluguel" soma o Aluguel. Reajuste = |TOTAL / RECEITA − 1| só com resultado negativo. Situação:
+Superávit ≥ R$ 2.000/mês, Superávit insuficiente ≥ 0, senão Déficit.

@@ -53,7 +53,16 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (23/10/2026) — feedback José 22/10 (Aldeia das Asas, vale p/ todos)
+## Último trabalho (26/10/2026) — relatório em Excel com fórmulas
+
+- **Terceiro formato: XLSX** (`relatorio_xlsx.py`, rota `POST /api/sessao/{sid}/relatorio-xlsx`, opção "Excel" no modal).
+  Mesmo contexto do PDF/DOCX (`montar_contexto_relatorio` agora expõe `valores` numéricos). No DOCX os totais são texto
+  fixo; no XLSX total de receitas, SUBTOTAL, aumento (% editável), TOTAL, opções de custeio, reajuste, situação e gráfico
+  mensal são fórmulas. Receita tem coluna Tipo (Ordinária / Fundo de reserva / Aluguel de espaço); linha sem tipo conta
+  como ordinária. 3 linhas em branco dentro de cada tabela. Conclusão/considerações NÃO entram (texto ficaria velho).
+  Conferido com `formulas` (Python) na Santorini: bate com o PDF. Nunca aberto no Excel de verdade → conferir.
+
+## Trabalho de 23/10/2026 — feedback José 22/10 (Aldeia das Asas, vale p/ todos)
 
 - **Considerações:** avisos de importação (mês não fechado, receita fixa baseada em, diferenças balancete × pagamentos)
   saíram do PDF/DOCX — documento vai ao condomínio. Ficam só na tela de análise.
@@ -114,7 +123,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   Fundo de Reserva (R$ 2.084,83) de extintores precisam de decisão do José — não confirmado se o fundo entra no total.
   Ideia pendente: regra de recorrência por favorecido / dar histórico do favorecido à IA.
 - Acesso ao banco prod pelo agente funcionou em 21/10 (leitura via `tmp/baixar_sessao.py`) quando a usuária pediu explicitamente.
-- Tudo no GitHub; **falta rebuild no EasyPanel** (instala `python-docx`).
+- Tudo no GitHub; **falta rebuild no EasyPanel** (instala `python-docx`; o XLSX usa openpyxl, já instalado).
 
 ## Trabalho de 19/10/2026
 

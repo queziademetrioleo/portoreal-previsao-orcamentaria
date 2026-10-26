@@ -36,6 +36,7 @@ import db
 import previsao as core
 from relatorio_pdf import gerar_relatorio_pdf
 from relatorio_docx import gerar_relatorio_docx
+from relatorio_xlsx import gerar_relatorio_xlsx
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -1152,6 +1153,22 @@ def relatorio_docx(sid: str, dec: Decisoes):
     return Response(
         content=docx_bytes,
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Cache-Control': 'no-store, max-age=0',
+        },
+    )
+
+
+@app.post('/api/sessao/{sid}/relatorio-xlsx')
+def relatorio_xlsx(sid: str, dec: Decisoes):
+    """Mesmos números do PDF, com as somas em fórmulas do Excel."""
+    estado, _, _ = _preparar_estado_relatorio(sid, dec)
+    xlsx_bytes = gerar_relatorio_xlsx(estado)
+    filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         headers={
             'Content-Disposition': f'attachment; filename="{filename}"',
             'Cache-Control': 'no-store, max-age=0',

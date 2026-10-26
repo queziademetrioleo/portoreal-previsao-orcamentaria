@@ -150,7 +150,7 @@ export async function criarSessao(form: {
   return r.json()
 }
 
-export type FormatoRelatorio = 'pdf' | 'docx'
+export type FormatoRelatorio = 'pdf' | 'docx' | 'xlsx'
 
 export async function gerarRelatorio(
   sid: string,

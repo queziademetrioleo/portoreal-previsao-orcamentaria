@@ -626,10 +626,11 @@ export default function TelaRevisao({
               <legend>Formato do relatório</legend>
               <label><input type="radio" name="formato-relatorio" checked={formato === 'pdf'} onChange={() => setFormato('pdf')} /> PDF</label>
               <label><input type="radio" name="formato-relatorio" checked={formato === 'docx'} onChange={() => setFormato('docx')} /> Word (DOCX, editável)</label>
+              <label><input type="radio" name="formato-relatorio" checked={formato === 'xlsx'} onChange={() => setFormato('xlsx')} /> Excel (XLSX, cálculos automáticos)</label>
             </fieldset>
             <div className="gerar-modal-actions">
               <Button variant="secondary" onClick={() => setModalGerarAberto(false)} disabled={gerando}>Cancelar</Button>
-              <Button variant="primary" onClick={handleGerar} disabled={gerando}>{gerando ? 'Gerando...' : `Confirmar e baixar ${formato === 'pdf' ? 'PDF' : 'Word'}`}</Button>
+              <Button variant="primary" onClick={handleGerar} disabled={gerando}>{gerando ? 'Gerando...' : `Confirmar e baixar ${{ pdf: 'PDF', docx: 'Word', xlsx: 'Excel' }[formato]}`}</Button>
             </div>
           </div>
         </div>,
