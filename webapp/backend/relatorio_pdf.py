@@ -778,6 +778,7 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             + _lista_portugues(administrativas_itens) + '.'
         )
 
+    idx_suficiencia = len(consideracoes)
     consideracoes.append(_consideracao_suficiencia_receita(resultado_sem))
 
     ultimo_reajuste_raw = resumo.get('ultimo_reajuste')
@@ -790,6 +791,7 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             f'ou seja, há {tempo_passado} sem aumento.'
         )
 
+    idx_opcoes = len(consideracoes)
     consideracoes.append(_consideracao_opcoes(opcoes))
     if fundo_reserva_anual > 0.005:
         consideracoes.append(
@@ -868,7 +870,12 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             'despesas': despesas,
             'inflacao': inflacao,
             'aluguel': {_norm(i['classe']) for i in nao_ordinarias},
-            'opcoes': [o['label'] for o in opcoes],
+            'opcoes': [{'label': o['label'], 'usa_fundo': o['usa_fundo']} for o in opcoes],
+            'com_fundo_pref': com_fundo_pref,
+            'n_meses_balanco': n_meses_balanco,
+            # Considerações que dependem dos números; o XLSX as refaz em fórmula.
+            'idx_suficiencia': idx_suficiencia,
+            'idx_opcoes': idx_opcoes,
         },
     }
     return ctx

@@ -15,36 +15,50 @@ from test_relatorio_docx import _estado
 
 
 def _linha(ws, texto):
-    return next(r for r in range(1, ws.max_row + 1) if ws[f'A{r}'].value == texto)
+    return next(r for r in range(1, ws.max_row + 1) if ws[f'B{r}'].value == texto)
+
+
+def _todas(ws):
+    return [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
 
 
 class RelatorioXlsxTest(unittest.TestCase):
     def setUp(self):
-        self.wb = load_workbook(io.BytesIO(relatorio_xlsx.gerar_relatorio_xlsx(_estado())))
-        self.ws = self.wb['Previsão']
+        self.bytes = relatorio_xlsx.gerar_relatorio_xlsx(_estado())
+        self.ws = load_workbook(io.BytesIO(self.bytes))['Previsão']
 
-    def test_totais_sao_formulas_com_linhas_livres(self):
+    def test_mesmas_secoes_do_pdf(self):
+        textos = _todas(self.ws)
+        for trecho in ('Aldeia das Asas — 2027', 'Receitas', 'Despesas', 'Quadro de leitura',
+                       'Composição das despesas', 'Evolução mensal', 'Conclusão',
+                       'CONSIDERAÇÕES IMPORTANTES', 'TOTAL PREVISTO', 'PORTO REAL IMÓVEIS'):
+            self.assertIn(trecho, textos)
+
+    def test_totais_sao_formulas_com_linha_livre(self):
         ws = self.ws
         tot_rec = _linha(ws, 'Total mensal')
-        self.assertTrue(ws[f'C{tot_rec}'].value.startswith('=SUM(C'))
-        # Linhas em branco dentro do intervalo somado, para incluir contas novas.
-        self.assertIsNone(ws[f'A{tot_rec - 1}'].value)
+        self.assertTrue(ws[f'F{tot_rec}'].value.startswith('=SUM(F'))
+        # Linha em branco dentro do intervalo somado, para incluir conta nova.
+        self.assertIsNone(ws[f'B{tot_rec - 1}'].value)
         sub = _linha(ws, 'SUBTOTAL')
-        self.assertIsNone(ws[f'A{sub - 1}'].value)
-        self.assertEqual(ws[f'C{sub + 1}'].value, f'=C{sub}*B{sub + 1}')
-        self.assertAlmostEqual(ws[f'B{sub + 1}'].value, 0.10)
-        self.assertEqual(_linha(ws, 'TOTAL PREVISTO'), sub + 2)
+        self.assertIsNone(ws[f'B{sub - 1}'].value)
+        self.assertEqual(ws[f'F{sub + 1}'].value, f'=ROUND(F{sub}*E{sub + 1},2)')
+        self.assertAlmostEqual(ws[f'E{sub + 1}'].value, 0.10)
+        self.assertEqual(ws[f'F{sub + 2}'].value, f'=F{sub}+F{sub + 1}')
 
     def test_fundo_separado_nas_opcoes(self):
         ws = self.ws
-        fundo = _linha(ws, 'Fundo de reserva')
-        self.assertEqual(ws[f'B{fundo}'].value, 'Fundo de reserva')
         sem = _linha(ws, 'Receitas sem fundo de reserva')
-        com = _linha(ws, 'Receitas com fundo de reserva')
-        self.assertNotIn('"Fundo de reserva"', ws[f'B{sem}'].value.split('-', 1)[0])
-        self.assertTrue(ws[f'B{com}'].value.count('"Fundo de reserva"') == 2)
+        self.assertIn('-SUMIF(', ws[f'C{sem + 1}'].value)
+        self.assertNotIn('+SUMIF(', ws[f'C{sem + 1}'].value)
+        self.assertIn('+SUMIF(', ws[f'F{sem + 1}'].value)
 
-    def test_grafico_mensal_ligado_a_receita(self):
-        ws = self.wb['Evolução mensal']
-        self.assertEqual(ws['B5'].value, "='Previsão'!$C$" + str(_linha(self.ws, 'Total mensal')))
-        self.assertEqual(len(ws._charts), 1)
+    def test_formulas_levam_resultado_em_cache(self):
+        # Prévias (Finder, WhatsApp) não calculam: o valor tem de vir gravado.
+        cache = load_workbook(io.BytesIO(self.bytes), data_only=True)['Previsão']
+        tot_rec = _linha(self.ws, 'Total mensal')
+        self.assertAlmostEqual(cache[f'F{tot_rec}'].value, 2250 + 250)
+        self.assertTrue(any('Opções para o custeio' in t for t in _todas(cache)))
+
+    def test_graficos(self):
+        self.assertEqual(len(self.ws._charts), 2)

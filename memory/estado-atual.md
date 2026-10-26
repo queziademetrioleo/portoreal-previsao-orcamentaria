@@ -53,14 +53,18 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (26/10/2026) — relatório em Excel com fórmulas
+## Último trabalho (26/10/2026) — relatório em Excel com fórmulas, mesmo desenho do PDF
 
-- **Terceiro formato: XLSX** (`relatorio_xlsx.py`, rota `POST /api/sessao/{sid}/relatorio-xlsx`, opção "Excel" no modal).
-  Mesmo contexto do PDF/DOCX (`montar_contexto_relatorio` agora expõe `valores` numéricos). No DOCX os totais são texto
-  fixo; no XLSX total de receitas, SUBTOTAL, aumento (% editável), TOTAL, opções de custeio, reajuste, situação e gráfico
-  mensal são fórmulas. Receita tem coluna Tipo (Ordinária / Fundo de reserva / Aluguel de espaço); linha sem tipo conta
-  como ordinária. 3 linhas em branco dentro de cada tabela. Conclusão/considerações NÃO entram (texto ficaria velho).
-  Conferido com `formulas` (Python) na Santorini: bate com o PDF. Nunca aberto no Excel de verdade → conferir.
+- **Terceiro formato: XLSX** (`relatorio_xlsx.py`, XlsxWriter; rota `POST /api/sessao/{sid}/relatorio-xlsx`; opção
+  "Excel" no modal). Usuária: "tem que ser no MESMO design do DOCX e do PDF, o intuito é EXPORTAR". Uma aba, A4, mesma
+  ordem/cores/logo do PDF, quebras antes dos gráficos e da conclusão; dados dos gráficos à direita, fora da área de
+  impressão. Contas são células; total, SUBTOTAL, aumento (% editável), TOTAL, quadro de leitura, gráficos, conclusão e
+  considerações de suficiência/opções são fórmulas. Fundo = `SUMIF(..,"*fundo de reserva*")` (SUMPRODUCT/SEARCH não
+  calcula no Numbers). Cada fórmula leva o resultado em cache (prévia do Finder/WhatsApp mostrava R$ 0,00 com openpyxl).
+- `montar_contexto_relatorio` agora expõe `valores` (números crus + índices das considerações dinâmicas).
+- Conferido: Santorini e Berlin exportados pelo Numbers (gráficos e valores batem com o PDF). Numbers ignora a área de
+  impressão/quebras; Excel de verdade ainda não foi aberto → conferir.
+- **Rebuild do EasyPanel instala `xlsxwriter`** (novo no requirements).
 
 ## Trabalho de 23/10/2026 — feedback José 22/10 (Aldeia das Asas, vale p/ todos)
 

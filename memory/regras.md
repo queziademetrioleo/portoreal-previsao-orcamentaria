@@ -38,6 +38,6 @@ Sem aprendizado entre análises (retirado em 23/10/2026): cada análise usa só 
 
 ## Relatório XLSX
 
-Mesmos números do PDF, com fórmulas. Opções: sem fundo = total de receitas − Fundo − Aluguel; com fundo soma o
+Mesmo desenho e números do PDF, com fórmulas (linha nova com "fundo de reserva" no nome conta como fundo). Opções: sem fundo = total de receitas − Fundo − Aluguel; com fundo soma o
 Fundo; "+ aluguel" soma o Aluguel. Reajuste = |TOTAL / RECEITA − 1| só com resultado negativo. Situação:
 Superávit ≥ R$ 2.000/mês, Superávit insuficiente ≥ 0, senão Déficit.

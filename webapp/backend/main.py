@@ -1162,9 +1162,9 @@ def relatorio_docx(sid: str, dec: Decisoes):
 
 @app.post('/api/sessao/{sid}/relatorio-xlsx')
 def relatorio_xlsx(sid: str, dec: Decisoes):
-    """Mesmos números do PDF, com as somas em fórmulas do Excel."""
+    """Mesmo relatório do PDF, com as somas em fórmulas do Excel."""
     estado, _, _ = _preparar_estado_relatorio(sid, dec)
-    xlsx_bytes = gerar_relatorio_xlsx(estado)
+    xlsx_bytes = gerar_relatorio_xlsx(estado, logo_path=_logo_relatorio())
     filename = f"Relatorio {estado['ano_previsao']} - {estado['nome_condominio']}.xlsx"
     return Response(
         content=xlsx_bytes,
