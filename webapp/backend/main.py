@@ -321,28 +321,6 @@ def _preparar_explicacoes(estado):
         item['explicacao'] = _explicacao_deterministica_inad(item)
 
 
-def _fluxo_mensal_balanco(bal, receita_mensal):
-    """Despesa de cada mês do período × receita ATUAL: a previsão parte da
-    cobrança vigente, não da receita histórica (José Henrique, 10/2026)."""
-    meses = bal.get('meses') or []
-    n = len(meses)
-    out = []
-    receita = float(receita_mensal or 0)
-    for i in range(n):
-        despesa = sum(
-            float((ln.get('monthly') or [0] * n)[i] or 0)
-            for ln in bal.get('despesas', [])
-            if i < len(ln.get('monthly') or [])
-        )
-        out.append({
-            'mes': str(meses[i]),
-            'receita': round(receita, 2),
-            'despesa': round(despesa, 2),
-            'saldo': round(receita - despesa, 2),
-        })
-    return out
-
-
 def _aplicar_decisoes(estado, dec):
     """Aplica as decisoes humanas no estado (in-place)."""
     if dec.itens_manuais is not None:
@@ -567,7 +545,6 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'linhas_contas': linhas,
         'lancamentos_contas': lancamentos_contas,
         'previsao_final': [],
-        'fluxo_mensal': _fluxo_mensal_balanco(bal, (R.get('receita_anual') or 0) / 12),
         'status': 'em_revisao',
     }
 

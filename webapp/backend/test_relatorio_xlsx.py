@@ -30,7 +30,7 @@ class RelatorioXlsxTest(unittest.TestCase):
     def test_mesmas_secoes_do_pdf(self):
         textos = _todas(self.ws)
         for trecho in ('Aldeia das Asas — 2027', 'Receitas', 'Despesas', 'Quadro de leitura',
-                       'Composição das despesas', 'Evolução mensal', 'Conclusão',
+                       'Composição das despesas', 'Conclusão',
                        'CONSIDERAÇÕES IMPORTANTES', 'TOTAL PREVISTO', 'PORTO REAL IMÓVEIS'):
             self.assertIn(trecho, textos)
 
@@ -60,5 +60,5 @@ class RelatorioXlsxTest(unittest.TestCase):
         self.assertAlmostEqual(cache[f'F{tot_rec}'].value, 2250 + 250)
         self.assertTrue(any('Opções para o custeio' in t for t in _todas(cache)))
 
-    def test_graficos(self):
-        self.assertEqual(len(self.ws._charts), 2)
+    def test_grafico_de_pizza(self):
+        self.assertEqual(len(self.ws._charts), 1)

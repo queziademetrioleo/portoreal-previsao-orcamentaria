@@ -22,12 +22,11 @@ Exceções fixas: `PONTUAL_FORA` (combate a incêndio — gasto pontual, fora); 
 **Receita:** documento vigente (taxa com desconto + fundo + recorrentes identificadas) **+ água cobrada das unidades**
 (média dos meses com receita no balancete, `receitas_consumo`) + receitas manuais. Fora: complemento/chamada de capital,
 juros, multa, taxa extra, rendimentos, créditos.
-**Gráfico mensal (23/10/2026):** barras da DIFERENÇA receita atual − despesa do mês a partir da linha zero; verde
-`#0b6e4f` para cima = receita acima, vermelho `#e4572e` para baixo = despesa acima; valor aproximado (≈, arredondado ao real) com sinal em cada barra,
-resumo "N meses com receita acima / N com despesa acima" e "Maior diferença negativa". Receita atual = total da
-tabela de receitas do relatório. Mesmo desenho no PDF (SVG) e no DOCX (PNG).
+**Sem gráfico de evolução mensal (retirado em 26/10/2026, pedido da usuária: "não será mais preciso"):** nem no
+PDF, nem no DOCX, nem no XLSX; o estado da sessão também não calcula mais `fluxo_mensal`. Único gráfico: pizza.
 Opções de custeio: "Receitas sem fundo de reserva" / "Receitas com fundo de reserva" (+ aluguel, se houver).
-Páginas: Conclusão + Considerações sempre juntas, começando em página nova.
+Páginas (26/10/2026, "sem espaçamentos muito longos"): sem página nova forçada — pizza e Conclusão seguem o
+fluxo (seção inteira pula de página só se não couber); assinatura presa ao último item das Considerações.
 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; 13ª taxa de administração omitida do texto.

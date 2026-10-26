@@ -14,7 +14,8 @@ Cada fórmula é gravada junto com o resultado já calculado (XlsxWriter), para
 prévias que não calculam (Finder, WhatsApp, e-mail) mostrarem os valores.
 Uma linha em branco dentro de cada tabela já entra na soma; linhas inseridas
 no meio da tabela também entram, porque o Excel estende o SUM sozinho.
-Os dados dos gráficos ficam à direita, fora da área de impressão.
+Os dados do gráfico ficam numa aba à parte, para não entrarem na impressão
+(o Numbers ignora a área de impressão e imprimiria tudo o que há na aba).
 """
 import io
 import math
@@ -23,7 +24,7 @@ import os
 import xlsxwriter
 
 import previsao as core
-from relatorio_pdf import (COR_DESPESA_ACIMA, COR_RECEITA_ACIMA, _money, _norm, _pct,
+from relatorio_pdf import (_money, _norm, _pct,
                            montar_contexto_relatorio)
 
 # Paleta do PDF (relatorio_pdf._HTML_TEMPLATE)
@@ -47,6 +48,10 @@ CONCLUSAO = {
     'deficit': 'Atenção: orçamento em déficit',
 }
 MINIMO = core.SUPERAVIT_MINIMO_MENSAL
+ABA = 'Previsão'
+ABA_DADOS = 'Dados do gráfico'
+P = f"'{ABA}'!"
+D = f"'{ABA_DADOS}'!"
 
 
 def _status(resultado_mensal):
@@ -68,7 +73,7 @@ def _str_f(txt):
     return '"' + txt.replace('"', '""') + '"'
 
 
-def _altura(texto, chars_linha=135, pt=13):
+def _altura(texto, chars_linha=150, pt=13):
     linhas = sum(max(1, math.ceil(len(p) / chars_linha)) for p in (texto or '').split('\n'))
     return linhas * pt + 4
 
@@ -84,8 +89,8 @@ def _borda(**lados):
 class _Folha:
     """Escreve o relatório de cima para baixo nas colunas B:F (linhas 1-based)."""
 
-    def __init__(self, wb, ws):
-        self.wb, self.ws = wb, ws
+    def __init__(self, wb, ws, dados):
+        self.wb, self.ws, self.dados = wb, ws, dados
         self.lin = 1
         self._formatos = {}
         for i, larg in enumerate((2, 40, 17, 3, 40, 17)):
@@ -103,14 +108,15 @@ class _Folha:
     def altura(self, linha, pt):
         self.ws.set_row(linha - 1, pt)
 
-    def escreve(self, ref, valor, formato, cache=None):
+    def escreve(self, ref, valor, formato, cache=None, ws=None):
         """Fórmula ('=...') sai com o resultado em cache; o resto é valor."""
+        ws = ws or self.ws
         if isinstance(valor, str) and valor.startswith('='):
-            self.ws.write_formula(ref, valor, formato, cache if cache is not None else 0)
+            ws.write_formula(ref, valor, formato, cache if cache is not None else 0)
         elif valor is None:
-            self.ws.write_blank(ref, None, formato)
+            ws.write_blank(ref, None, formato)
         else:
-            self.ws.write(ref, valor, formato)
+            ws.write(ref, valor, formato)
 
     def mescla(self, rng, valor, formato, cache=None):
         self.ws.merge_range(rng, '', formato)
@@ -233,132 +239,44 @@ def _pizza(f, ctx, linhas_despesa, ref_subtotal, subtotal):
     if not pizza:
         return
     f.secao('Composição das despesas')
-    # Dados à direita (H:I), fora da área de impressão; cada fatia aponta para a conta.
-    ini = f.lin
-    f.ws.set_column('H:H', 34)
-    f.ws.set_column('I:I', 16)
-    cinza = f.fmt(font_size=9, font_color=CINZA_CLARO)
-    cinza_m = f.fmt(font_size=9, font_color=CINZA_CLARO, num_format=FMT_MOEDA)
-    f.escreve(f'H{ini - 1}', 'Dados do gráfico (não imprime)', f.fmt(bold=True, font_size=9, font_color=CINZA_CLARO))
+    # Dados na aba à parte (A:B); cada fatia aponta para a conta.
+    d = f.dados
+    d.set_column('A:A', 40)
+    d.set_column('B:B', 16)
+    cinza = f.fmt(font_size=9)
+    cinza_m = f.fmt(font_size=9, num_format=FMT_MOEDA)
+    f.escreve('A1', 'Composição das despesas', f.fmt(bold=True, font_color=AZUL), ws=d)
+    ini = 2
     refs, soma = [], 0.0
     for i, fatia in enumerate(pizza['fatias']):
         r = ini + i
         linha = linhas_despesa.get(_norm(fatia['label']))
         if linha:
             num, valor = linha
-            f.escreve(f'H{r}', f'=B{num}', cinza, fatia['label'])
-            f.escreve(f'I{r}', f'=F{num}', cinza_m, valor)
-            refs.append(f'I{r}')
+            f.escreve(f'A{r}', f'={P}B{num}', cinza, fatia['label'], ws=d)
+            f.escreve(f'B{r}', f'={P}F{num}', cinza_m, valor, ws=d)
+            refs.append(f'B{r}')
             soma += valor
         else:  # "Outros" = o que sobra do SUBTOTAL
-            f.escreve(f'H{r}', fatia['label'], cinza)
-            f.escreve(f'I{r}', f'={ref_subtotal}' + ''.join(f'-{x}' for x in refs), cinza_m,
-                      round(subtotal - soma, 2))
+            f.escreve(f'A{r}', fatia['label'], cinza, ws=d)
+            f.escreve(f'B{r}', f'={P}{ref_subtotal}' + ''.join(f'-{x}' for x in refs), cinza_m,
+                      round(subtotal - soma, 2), ws=d)
     fim = ini + len(pizza['fatias']) - 1
     g = f.wb.add_chart({'type': 'pie'})
     g.add_series({
-        'categories': f"='Previsão'!$H${ini}:$H${fim}",
-        'values': f"='Previsão'!$I${ini}:$I${fim}",
+        'categories': f"={D}$A${ini}:$A${fim}",
+        'values': f"={D}$B${ini}:$B${fim}",
         'points': [{'fill': {'color': fat['cor']}, 'border': {'color': '#FCFCFB', 'width': 1.5}}
                    for fat in pizza['fatias']],
         'data_labels': {'percentage': True, 'font': {'name': FONTE, 'size': 9, 'bold': True, 'color': TINTA}},
     })
     g.set_legend({'position': 'right', 'font': {'name': FONTE, 'size': 9}})
     g.set_chartarea({'border': {'none': True}})
-    g.set_size({'width': 820, 'height': 300})
+    g.set_size({'width': 820, 'height': 230})
     f.ws.insert_chart(f'B{f.lin}', g)
-    for r in range(f.lin, f.lin + 15):
+    for r in range(f.lin, f.lin + 12):
         f.altura(r, 15)
-    f.lin += 15
-
-
-def _mensal(f, ctx, ref_receita, receita):
-    fluxo = ctx.get('fluxo_mensal') or []
-    if not fluxo:
-        return
-    f.secao('Evolução mensal')
-    # Dados à direita (K:O), fora da área de impressão.
-    for col, larg in zip('KLMNO', (10, 15, 15, 15, 15)):
-        f.ws.set_column(f'{col}:{col}', larg)
-    cinza = f.fmt(font_size=9, font_color=CINZA_CLARO)
-    cinza_m = f.fmt(font_size=9, font_color=CINZA_CLARO, num_format=FMT_MOEDA)
-    cab = f.lin
-    f.escreve(f'K{cab - 1}', 'Dados do gráfico (não imprime) — a despesa de cada mês pode ser corrigida aqui',
-              f.fmt(bold=True, font_size=9, font_color=CINZA_CLARO))
-    for col, txt in zip('KLMNO', ('Mês', 'Receita', 'Despesa', 'Receita acima', 'Despesa acima')):
-        f.escreve(f'{col}{cab}', txt, f.fmt(bold=True, font_size=9, font_color=CINZA_CLARO))
-    ini = cab + 1
-    difs = []
-    for i, m in enumerate(fluxo):
-        r = ini + i
-        despesa = round(float(m.get('despesa') or 0), 2)
-        dif = round(receita - despesa, 2)
-        difs.append((m.get('mes'), dif))
-        f.escreve(f'K{r}', m.get('mes'), cinza)
-        f.escreve(f'L{r}', f'={ref_receita}', cinza_m, receita)
-        f.escreve(f'M{r}', despesa, cinza_m)
-        f.escreve(f'N{r}', f'=MAX(L{r}-M{r},0)', cinza_m, max(dif, 0))
-        f.escreve(f'O{r}', f'=MIN(L{r}-M{r},0)', cinza_m, min(dif, 0))
-    fim = ini + len(fluxo) - 1
-
-    r = f.lin
-    n_abaixo = sum(1 for _, d in difs if d < 0)
-    n_acima = len(difs) - n_abaixo  # empate conta como acima, como no PDF
-    abaixo = f'COUNTIF(O{ini}:O{fim},"<0")'
-    acima = f'(ROWS(K{ini}:K{fim})-{abaixo})'
-    plural = lambda n: 'mês' if n == 1 else 'meses'
-    meses = lambda n: f'IF({n}=1," mês"," meses")'
-    f.escreve(f'B{r}', f'="▲ "&{acima}&{meses(acima)}&" com receita acima da despesa"',
-              f.fmt(bold=True, font_color=COR_RECEITA_ACIMA),
-              f'▲ {n_acima} {plural(n_acima)} com receita acima da despesa')
-    f.mescla(f'E{r}:F{r}', f'="▼ "&{abaixo}&{meses(abaixo)}&" com despesa acima da receita"',
-             f.fmt(bold=True, font_color=COR_DESPESA_ACIMA),
-             f'▼ {n_abaixo} {plural(n_abaixo)} com despesa acima da receita')
-    f.altura(r, 18)
-    f.lin += 1
-
-    g = f.wb.add_chart({'type': 'column'})
-    for col, cor in (('N', COR_RECEITA_ACIMA), ('O', COR_DESPESA_ACIMA)):
-        g.add_series({
-            'name': f"='Previsão'!${col}${cab}",
-            'categories': f"='Previsão'!$K${ini}:$K${fim}",
-            'values': f"='Previsão'!${col}${ini}:${col}${fim}",
-            'fill': {'color': cor}, 'border': {'none': True},
-            'overlap': 100, 'gap': 70,
-            # ≈ e sinal como no PDF; o zero (a outra série do mês) fica sem rótulo.
-            'data_labels': {'value': True, 'position': 'outside_end',
-                            'num_format': '"≈ +R$ "#,##0;"≈ −R$ "#,##0;""',
-                            'font': {'name': FONTE, 'size': 8, 'bold': True, 'color': TINTA}},
-        })
-    g.set_legend({'none': True})
-    # Folga embaixo/em cima para o rótulo da maior barra não encostar nos meses.
-    menor, maior = min(min(d for _, d in difs), 0), max(max(d for _, d in difs), 0)
-    folga = (maior - menor) * 0.18 or 1
-    g.set_y_axis({'visible': False, 'major_gridlines': {'visible': False},
-                  'min': menor - folga if menor < 0 else 0, 'max': maior + folga})
-    g.set_x_axis({'label_position': 'low', 'num_font': {'name': FONTE, 'size': 8, 'color': CINZA},
-                  'line': {'color': CINZA_CLARO}})
-    g.set_chartarea({'border': {'none': True}})
-    g.set_size({'width': 820, 'height': 250})
-    f.ws.insert_chart(f'B{f.lin}', g)
-    for rr in range(f.lin, f.lin + 13):
-        f.altura(rr, 15)
-    f.lin += 13
-
-    r = f.lin
-    f.mescla(f'B{r}:C{r}', f'="Diferença entre a receita atual ("&{_money_f(ref_receita)}&" por mês) e a despesa '
-             f'de cada mês. Valores aproximados, arredondados ao real."',
-             f.fmt(font_size=9, font_color=CINZA, text_wrap=True, valign='top'),
-             f'Diferença entre a receita atual ({_money(receita)} por mês) e a despesa de cada mês. '
-             'Valores aproximados, arredondados ao real.')
-    pior = f'MIN(O{ini}:O{fim})'
-    mes_pior, val_pior = min(difs, key=lambda x: x[1])
-    f.mescla(f'E{r}:F{r}', f'=IF({pior}<0,"Maior diferença negativa: "&INDEX(K{ini}:K{fim},'
-             f'MATCH({pior},O{ini}:O{fim},0))&" ("&{_money_f(pior)}&")","")',
-             f.fmt(bold=True, font_size=9, text_wrap=True, valign='top', align='right'),
-             f'Maior diferença negativa: {mes_pior} ({_money(val_pior)})' if val_pior < 0 else '')
-    f.altura(r, 28)
-    f.lin += 1
+    f.lin += 12
 
 
 def _texto_opcoes(opcoes, refs):
@@ -440,7 +358,7 @@ def _consideracoes(f, ctx, refs):
             r = f.paragrafo(f'={_str_f(numero)}&{formula}', corpo, numero + atual)
         else:
             r = f.paragrafo(texto, corpo)
-        f.altura(r, _altura(texto) + 6)  # respiro entre itens, como no PDF
+        f.altura(r, _altura(texto) + 4)  # respiro entre itens, como no PDF
     f.lin += 2
     f.paragrafo(f'Cabo Frio, {ctx["data_extenso"]}', f.fmt(font_size=10.5, align='center'))
     f.paragrafo('PORTO REAL IMÓVEIS', f.fmt(bold=True, font_size=10.5, align='center'))
@@ -463,8 +381,11 @@ def gerar_relatorio_xlsx(estado, logo_path=None, com_fundo_override=None):
     v = ctx['valores']
     buf = io.BytesIO()
     wb = xlsxwriter.Workbook(buf, {'in_memory': True})
-    ws = wb.add_worksheet('Previsão')
-    f = _Folha(wb, ws)
+    ws = wb.add_worksheet(ABA)
+    dados = wb.add_worksheet(ABA_DADOS)
+    dados.hide_gridlines(2)
+    ws.activate()
+    f = _Folha(wb, ws, dados)
     _cabecalho(f, ctx, logo_path)
 
     # --- Receitas ---
@@ -514,15 +435,12 @@ def gerar_relatorio_xlsx(estado, logo_path=None, com_fundo_override=None):
         opcoes.append({'label': o['label'], 'formula': formula, 'receita': receita})
     refs = _quadro(f, opcoes, f'$F${tot}', total)
 
-    # --- Gráficos (página 2) ---
+    # --- Gráfico de pizza (página 2) ---
     f.lin += 1
     quebras = [f.lin]
     _pizza(f, ctx, linhas_despesa, f'$F${sub}', subtotal)
-    _mensal(f, ctx, f'$F${tot_rec}', total_rec)
 
-    # --- Conclusão + Considerações juntas numa página nova, como no PDF ---
-    f.lin += 1
-    quebras.append(f.lin)
+    # --- Conclusão logo depois da pizza, sem página nova, como no PDF ---
     no_quadro = 0
     if v['com_fundo_pref']:
         no_quadro = next((i for i, o in enumerate(v['opcoes']) if o['usa_fundo'] and '+' not in o['label']), 0)

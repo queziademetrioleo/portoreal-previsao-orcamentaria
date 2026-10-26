@@ -8,7 +8,7 @@ de uma sessao (mesmos dados exibidos na tela de resultado do webapp).
 
 Layout: logo Porto Real -> nome do condominio/ano -> Receitas -> Despesas ->
 Quadro de leitura (uma caixa por opção de receita) -> Composicao das despesas
-(pizza) -> Evolucao mensal -> Conclusao -> Considerações Importantes.
+(pizza) -> Conclusao -> Considerações Importantes.
 """
 import base64
 import math
@@ -499,85 +499,8 @@ def _grafico_pizza_svg(grupos, total):
         f'{round(f["frac"] * 100)}%</text>'
         for f in fatias if f['frac'] >= 0.08
     )
-    svg = (f'<svg viewBox="0 0 200 200" width="220" height="220">{paths_svg}{labels_svg}</svg>')
+    svg = (f'<svg viewBox="0 0 200 200" width="180" height="180">{paths_svg}{labels_svg}</svg>')
     return {'svg': svg, 'fatias': fatias}
-
-
-# ---------------------------------------------------------------------------
-# Grafico de evolucao mensal — diferença receita atual − despesa de cada mês
-# ---------------------------------------------------------------------------
-# Pedido da usuária (23/10/2026): o síndico precisa ver de cara os meses em que
-# a receita ficou acima (verde, barra para cima) e os que ficaram abaixo
-# (vermelho, barra para baixo). Par validado p/ daltonismo (ΔE 7,1 protan, faixa
-# que exige codificação extra: direção da barra + sinal escrito em cada valor).
-COR_RECEITA_ACIMA = '#0b6e4f'
-COR_DESPESA_ACIMA = '#e4572e'
-
-
-def _money_curto(v):
-    """Valor arredondado ao real, com ≈ e sinal explícito, para os rótulos do gráfico."""
-    v = float(v or 0)
-    txt = f'{abs(v):,.0f}'.replace(',', '.')
-    return f'≈ {"+" if v >= 0 else "−"}R$ {txt}'
-
-
-def _geometria_mensal(fluxo_mensal, altura_util):
-    """Barras da diferença a partir da linha zero, em unidades de altura_util."""
-    saldos = [float(m.get('saldo') or 0) for m in fluxo_mensal]
-    acima = max([s for s in saldos if s > 0], default=0)
-    abaixo = max([-s for s in saldos if s < 0], default=0)
-    escala = altura_util / ((acima + abaixo) or 1)
-    zero = acima * escala
-    barras = []
-    for m, s in zip(fluxo_mensal, saldos):
-        h = max(2, abs(s) * escala)
-        barras.append({'mes': m.get('mes') or '', 'saldo': s, 'positivo': s >= 0,
-                       'y': zero - h if s >= 0 else zero, 'h': h})
-    return zero, barras
-
-
-def resumo_mensal(fluxo_mensal):
-    positivos = sum(1 for m in fluxo_mensal if float(m.get('saldo') or 0) >= 0)
-    negativos = len(fluxo_mensal) - positivos
-    plural = lambda n: 'mês' if n == 1 else 'meses'
-    return {
-        'acima_txt': f'{positivos} {plural(positivos)} com receita acima da despesa',
-        'abaixo_txt': f'{negativos} {plural(negativos)} com despesa acima da receita',
-        'receita_txt': (f'Diferença entre a receita atual ({_money(fluxo_mensal[0].get("receita"))} por mês) '
-                        'e a despesa de cada mês. Valores aproximados, arredondados ao real.') if fluxo_mensal else '',
-    }
-
-
-def _grafico_mensal_svg(fluxo_mensal):
-    if not fluxo_mensal:
-        return None
-    largura, topo, util, rodape = 640, 18, 150, 34
-    zero, barras = _geometria_mensal(fluxo_mensal, util)
-    col = largura / len(barras)
-    bw = col * 0.56
-    partes = []
-    for i, b in enumerate(barras):
-        x = i * col + (col - bw) / 2
-        y = topo + b['y']
-        cor = COR_RECEITA_ACIMA if b['positivo'] else COR_DESPESA_ACIMA
-        partes.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{b["h"]:.1f}" fill="{cor}" rx="2"/>')
-        # rótulo do valor na ponta da barra, em tinta de texto (não na cor da série)
-        ly = y - 4 if b['positivo'] else y + b['h'] + 10
-        partes.append(f'<text x="{i * col + col / 2:.1f}" y="{ly:.1f}" text-anchor="middle" font-size="7.6" '
-                      f'font-weight="700" fill="#14110c">{_money_curto(b["saldo"])}</text>')
-        partes.append(f'<text x="{i * col + col / 2:.1f}" y="{topo + util + rodape - 6:.1f}" text-anchor="middle" '
-                      f'font-size="9" fill="#52514e">{b["mes"]}</text>')
-    linha_zero = (f'<line x1="0" x2="{largura}" y1="{topo + zero:.1f}" y2="{topo + zero:.1f}" '
-                  f'stroke="#8a8984" stroke-width="1"/>')
-    altura = topo + util + rodape
-    svg = (f'<svg viewBox="0 0 {largura} {altura}" width="100%" height="190">'
-           f'{linha_zero}{"".join(partes)}</svg>')
-    pior = min(fluxo_mensal, key=lambda m: m.get('saldo') or 0)
-    pior_txt = None
-    if float(pior.get('saldo') or 0) < 0:
-        pior_txt = f'Maior diferença negativa: {pior.get("mes")} ({_money(pior.get("saldo"))})'
-    return {'svg': svg, 'pior_mes_txt': pior_txt, **resumo_mensal(fluxo_mensal),
-            'cor_acima': COR_RECEITA_ACIMA, 'cor_abaixo': COR_DESPESA_ACIMA}
 
 
 # ---------------------------------------------------------------------------
@@ -659,7 +582,6 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     """Contexto único do relatório, compartilhado pelos formatos PDF e DOCX."""
     resumo = estado.get('resumo') or {}
     linhas = estado.get('linhas_contas') or []
-    fluxo_mensal = estado.get('fluxo_mensal') or []
     cenarios = resumo.get('cenarios') or {}
     com_fundo = cenarios.get('com_fundo') or {}
     sem_fundo = cenarios.get('sem_fundo') or {}
@@ -723,15 +645,6 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
 
     pizza = _grafico_pizza_svg(grupos, total_grupo)
-    # Barra de receita = total da tabela de receitas (taxa, fundo se marcado,
-    # água cobrada das unidades, recorrentes e receitas adicionadas à mão,
-    # menos a inadimplência). A receita salva na análise não via os itens
-    # manuais nem a água (José Henrique, 22/10/2026: "não corresponde à realidade").
-    receita_grafico = round(sum(v for _, v in receitas), 2)
-    fluxo_mensal = [{**m, 'receita': receita_grafico,
-                     'saldo': round(receita_grafico - float(m.get('despesa') or 0), 2)}
-                    for m in fluxo_mensal]
-    grafico_mensal = _grafico_mensal_svg(fluxo_mensal)
 
     # --- Considerações Importantes (numeradas sequencialmente ao final —
     # itens condicionais ausentes nao deixam buraco na numeracao) ---
@@ -839,7 +752,6 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
         'fundo_reserva_anual': _money(fundo_reserva_anual),
         'tem_fundo_reserva': abs(fundo_reserva_anual) > 0.005,
         'pizza': pizza,
-        'grafico_mensal': grafico_mensal,
         'status_geral': status_quadro,
         'status_label': {
             'superavit': 'Cenário com superávit',
@@ -863,7 +775,6 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             )
         ),
         'consideracoes': consideracoes,
-        'fluxo_mensal': fluxo_mensal,
         # Valores numéricos para o XLSX, que refaz as somas com fórmulas.
         'valores': {
             'receitas': receitas,
@@ -904,7 +815,7 @@ _HTML_TEMPLATE = r"""
   .header img { height: 56px; }
   .header .titulo h1 { font-size: 20px; color: #1c355e; }
   .header .titulo p { margin: 2px 0 0; color: #52514e; font-size: 12px; }
-  .secao { margin-bottom: 20px; page-break-inside: avoid; }
+  .secao { margin-bottom: 14px; page-break-inside: avoid; }
   /* Considerações longas podem continuar na página seguinte, mas nunca partem um item. */
   .secao.consideracoes { page-break-inside: auto; }
   .secao.consideracoes p { page-break-inside: avoid; }
@@ -929,19 +840,13 @@ _HTML_TEMPLATE = r"""
   .legenda { list-style: none; margin: 0; padding: 0; font-size: 10.5px; }
   .legenda li { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
   .legenda i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  .mensal-legenda { display: flex; align-items: center; gap: 16px; font-size: 10px; color: #52514e; margin-top: 4px; }
-  .mensal-legenda span { display: flex; align-items: center; gap: 5px; }
-  .mensal-legenda i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-  .mensal-legenda strong { color: #14110c; margin-left: auto; white-space: nowrap; }
-  .mensal-resumo { display: flex; gap: 22px; font-size: 11px; font-weight: 700; color: #14110c; margin: 2px 0 8px; }
-  .mensal-resumo span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .mensal-resumo i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
   .conclusao-box { border-left: 3px solid #1c355e; padding-left: 10px; }
   .conclusao-box.superavit_insuficiente { border-left-color: #c98500; }
   .conclusao-box.deficit { border-left-color: #a12626; }
   .consideracoes { font-size: 10px; color: #303030; }
-  .consideracoes p { margin: 0 0 8px; }
-  .assinatura { margin-top: 26px; text-align: center; font-size: 10.5px; }
+  .consideracoes p { margin: 0 0 6px; }
+  .fecho { page-break-inside: avoid; }
+  .assinatura { margin-top: 18px; text-align: center; font-size: 10.5px; }
 </style>
 </head>
 <body>
@@ -1010,24 +915,9 @@ _HTML_TEMPLATE = r"""
   </div>
   {% endif %}
 
-  {% if grafico_mensal %}
+  <!-- Conclusão logo depois da pizza, sem página nova (usuária, 26/10/2026: "sem espaçamentos muito
+       longos"); as Considerações vêm em seguida e podem quebrar entre itens. -->
   <div class="secao">
-    <h2>Evolução mensal</h2>
-    <div class="mensal-resumo">
-      <span><i style="background:{{ grafico_mensal.cor_acima }}"></i>▲ {{ grafico_mensal.acima_txt }}</span>
-      <span><i style="background:{{ grafico_mensal.cor_abaixo }}"></i>▼ {{ grafico_mensal.abaixo_txt }}</span>
-    </div>
-    {{ grafico_mensal.svg|safe }}
-    <div class="mensal-legenda">
-      <span>{{ grafico_mensal.receita_txt }}</span>
-      {% if grafico_mensal.pior_mes_txt %}<strong>{{ grafico_mensal.pior_mes_txt }}</strong>{% endif %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Conclusão + Considerações sempre juntas numa página nova (usuária, 23/10/2026):
-       antes a Conclusão ficava sozinha numa página e as Considerações na seguinte. -->
-  <div class="secao" style="page-break-before: always;">
     <h2>Conclusão</h2>
     <div class="conclusao-box {{ status_geral }}">
       <strong>{{ status_label }}</strong>
@@ -1037,10 +927,14 @@ _HTML_TEMPLATE = r"""
 
   <div class="secao consideracoes">
     <h2 style="text-align:center;">CONSIDERAÇÕES IMPORTANTES</h2>
-    {% for c in consideracoes %}<p>{{ c }}</p>{% endfor %}
-    <div class="assinatura">
-      <p>Cabo Frio, {{ data_extenso }}</p>
-      <p><strong>PORTO REAL IMÓVEIS</strong></p>
+    {% for c in consideracoes[:-1] %}<p>{{ c }}</p>{% endfor %}
+    <!-- Assinatura presa ao último item: nunca sozinha numa página. -->
+    <div class="fecho">
+      {% if consideracoes %}<p>{{ consideracoes[-1] }}</p>{% endif %}
+      <div class="assinatura">
+        <p>Cabo Frio, {{ data_extenso }}</p>
+        <p><strong>PORTO REAL IMÓVEIS</strong></p>
+      </div>
     </div>
   </div>
 

@@ -6,21 +6,20 @@ RELATORIO DOCX PARA O CONDOMINIO
 Mesmo conteúdo e ordem do PDF (relatorio_pdf), editável no Word. Consome o
 contexto de `montar_contexto_relatorio`, então toda regra do relatório
 (fundo de reserva, despesas, opções) vale igual nos dois formatos.
-Os gráficos entram como imagem PNG (desenhados com Pillow).
+O gráfico de pizza entra como imagem PNG (desenhados com Pillow).
 """
 import io
 import math
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
-from relatorio_pdf import (COR_DESPESA_ACIMA, COR_RECEITA_ACIMA, _geometria_mensal, _money_curto,
-                           montar_contexto_relatorio)
+from relatorio_pdf import montar_contexto_relatorio
 
 AZUL = RGBColor(0x1C, 0x35, 0x5E)
 CINZA = RGBColor(0x52, 0x51, 0x4E)
@@ -76,27 +75,6 @@ def _png_pizza(fatias, lado=600):
             d.text((centro + raio * math.cos(meio), centro + raio * math.sin(meio)),
                    f'{round(f["frac"] * 100)}%', font=fonte, fill=(20, 17, 12), anchor='mm')
         ini = fim
-    return _png_bytes(img)
-
-
-def _png_mensal(fluxo, largura=1600, altura=480):
-    """Mesmo desenho do PDF: diferença receita atual − despesa a partir do zero."""
-    img = Image.new('RGB', (largura, altura), 'white')
-    d = ImageDraw.Draw(img)
-    topo, util = 46, altura - 46 - 86
-    zero, barras = _geometria_mensal(fluxo, util)
-    col = largura / len(barras)
-    bw = col * 0.56
-    fonte, valor = _fonte_img(25), _fonte_img_negrito(20)
-    d.line((0, topo + zero, largura, topo + zero), fill=(0x8A, 0x89, 0x84), width=2)
-    for i, b in enumerate(barras):
-        x = i * col + (col - bw) / 2
-        y = topo + b['y']
-        cor = _hex(COR_RECEITA_ACIMA if b['positivo'] else COR_DESPESA_ACIMA)
-        d.rounded_rectangle((x, y, x + bw, y + b['h']), radius=5, fill=cor)
-        ly = y - 18 if b['positivo'] else y + b['h'] + 18
-        d.text((i * col + col / 2, ly), _money_curto(b['saldo']), font=valor, fill=(0x14, 0x11, 0x0C), anchor='mm')
-        d.text((i * col + col / 2, altura - 30), str(b['mes']), font=fonte, fill=(0x52, 0x51, 0x4E), anchor='mm')
     return _png_bytes(img)
 
 
@@ -269,20 +247,8 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
             _texto(par, '■ ', True, 11, RGBColor(*_hex(f['cor'])))
             _texto(par, f'{f["label"]} — {f["frac"] * 100:.1f}%'.replace('.', ','), False, 10)
 
-    if ctx.get('grafico_mensal') and ctx.get('fluxo_mensal'):
-        _titulo(doc, 'Evolução mensal')
-        g = ctx['grafico_mensal']
-        p = doc.add_paragraph()
-        _texto(p, '▲ ', True, 11, RGBColor(*_hex(COR_RECEITA_ACIMA))); _texto(p, g['acima_txt'] + '     ', True, 10)
-        _texto(p, '▼ ', True, 11, RGBColor(*_hex(COR_DESPESA_ACIMA))); _texto(p, g['abaixo_txt'], True, 10)
-        doc.add_paragraph().add_run().add_picture(_png_mensal(ctx['fluxo_mensal']), width=Cm(17))
-        p = doc.add_paragraph()
-        _texto(p, g['receita_txt'], False, 9, CINZA)
-        if g.get('pior_mes_txt'):
-            _texto(p, '    ' + g['pior_mes_txt'], True, 9)
 
-    # Conclusão + Considerações juntas numa página nova, como no PDF.
-    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+    # Conclusão logo depois da pizza, sem página nova, como no PDF.
     _titulo(doc, 'Conclusão')
     p = doc.add_paragraph()
     _texto(p, ctx['status_label'], True, 10, STATUS_COR[ctx['status_geral']])
@@ -295,12 +261,15 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_after = Pt(8)
     _texto(p, 'CONSIDERAÇÕES IMPORTANTES', True, 13, AZUL)
-    for texto in ctx['consideracoes']:
+    for i, texto in enumerate(ctx['consideracoes']):
         p = doc.add_paragraph()
         p.paragraph_format.space_after = Pt(8)
+        # Último item preso à assinatura: ela nunca fica sozinha numa página.
+        p.paragraph_format.keep_with_next = i == len(ctx['consideracoes']) - 1
         _texto(p, texto, False, 10)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.keep_with_next = True
     p.paragraph_format.space_before = Pt(24)
     _texto(p, f'Cabo Frio, {ctx["data_extenso"]}', False, 10.5)
     p = doc.add_paragraph()

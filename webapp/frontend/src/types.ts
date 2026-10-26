@@ -66,13 +66,6 @@ export interface LinhaPrevisaoFinal {
   mensal: number | string | null
 }
 
-export interface FluxoMensal {
-  mes: string
-  receita: number
-  despesa: number
-  saldo: number
-}
-
 export type StatusResultado = 'superavit' | 'superavit_insuficiente' | 'deficit'
 
 export interface Cenario {
@@ -127,7 +120,6 @@ export interface Sessao {
   linhas_contas: LinhaConta[]
   lancamentos_contas?: LancamentoConta[]
   previsao_final?: LinhaPrevisaoFinal[]
-  fluxo_mensal?: FluxoMensal[]
   status: 'em_revisao' | 'gerado'
 }
 
