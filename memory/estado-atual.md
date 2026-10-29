@@ -55,6 +55,11 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Último trabalho (29/10/2026) — feedback José 28/10 (vale p/ todos, PDF/DOCX/XLSX)
 
+- **Bug seguro Alma (Chateau Canões `0973588a1d80`):** relatório saiu com Seguro de Incêndio R$ 68,89/mês
+  (826,67 × 1 ÷ 12). A coluna Parcela do FIN Alma vem "01/01" (lançamento sem parcelamento), e a apólice está na
+  descrição ("PARCELA 04/06", Allianz). `_total_parcelas_seguro` agora ignora coluna 1/1 → 826,67 × 6 = R$ 4.960,02/ano
+  = R$ 413,34/mês. Vale p/ qualquer Alma. Após o rebuild: abrir a sessão e salvar a revisão (recalcula do cache) ou
+  reanalisar; regerar o relatório. Conferir outras sessões Alma (Forte Way, Santorini, Berlin) com o mesmo padrão.
 - **Conclusão sem a frase "O resultado mensal é de … (DÉFICIT/SUPERÁVIT)"**: fica só média dos N meses + inadimplência
   como redução da receita. O título colorido (superávit/déficit) continua. No XLSX a conclusão virou texto fixo.
 - **Gás unificado nas considerações:** "Manutenção do Sistema de Gás" (Alma) e "Manutenção de Gás" (Condo21) saem

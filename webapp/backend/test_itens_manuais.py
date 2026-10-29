@@ -223,6 +223,19 @@ class UltimoPagamentoTest(unittest.TestCase):
         r = self.projetar('Seguro Incêndio', [{'data': '2026-09-10', 'valor_pago': 200, 'descricao': 'Parcela 2/8'}])
         self.assertEqual(r['subtotal'], 1600)
 
+    def test_seguro_alma_coluna_01_01_usa_parcela_da_descricao(self):
+        # Chateau Canões (10/2026): coluna Parcela "01/01", descrição "PARCELA 04/06".
+        r = self.projetar('SEGURO CONDOMINIAL OBRIGATÓRIO', [
+            {'data': '2026-09-15', 'valor_pago': 826.67, 'parcela': '01/01', 'descricao': 'PARCELA 04/06'},
+            {'data': '2026-08-06', 'valor_pago': 826.67, 'parcela': '01/01', 'descricao': 'PARCELA 03/06'}])
+        self.assertEqual(r['subtotal'], 4960.02)
+        self.assertAlmostEqual(r['subtotal'] / 12, 413.335)
+
+    def test_seguro_alma_coluna_01_01_sem_descricao_conta_pagamentos(self):
+        r = self.projetar('SEGURO CONDOMINIAL OBRIGATÓRIO', [
+            {'data': f'2026-{m:02d}-10', 'valor_pago': 300, 'parcela': '01/01'} for m in range(6, 10)])
+        self.assertEqual(r['subtotal'], 1200)
+
     def test_seguro_sem_parcela_conta_pagamentos_mensais_seguidos(self):
         r = self.projetar('Seguro Incêndio', [
             {'data': f'2026-{m:02d}-10', 'valor_pago': 300} for m in range(4, 10)])

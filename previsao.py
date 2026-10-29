@@ -983,9 +983,13 @@ def _total_parcelas_seguro(ultimo, pagos):
     desc = str(ultimo.get('descricao') or '')
     if 'parcela' in _norm(desc):
         candidatos.append(desc)
-    for texto in candidatos:
+    for i, texto in enumerate(candidatos):
         m = _RE_PARCELA.search(texto)
         if m and 1 <= int(m.group(1)) <= int(m.group(2)) <= 12:
+            # Coluna "01/01" do Alma é o lançamento sem parcelamento, não a
+            # apólice: Chateau Canões (10/2026) tinha "PARCELA 03/06" na descrição.
+            if i == 0 and int(m.group(2)) == 1:
+                continue
             return int(m.group(2))
 
     valor = float(ultimo['valor_pago'])
