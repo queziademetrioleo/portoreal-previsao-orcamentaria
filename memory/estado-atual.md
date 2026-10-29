@@ -65,7 +65,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   12 meses." X = receitas com fundo, Y = sem fundo; percentuais só em número. Sem fundo (ex.: Berlin) X = Y (5,9% e
   5,9%); com aluguel o texto usa só as 2 opções sem aluguel (lista a)/b)/c) acabou); sem reajuste a parte diz "não é
   necessário reajuste da taxa condominial".
-- Commit local; falta push + rebuild no EasyPanel.
+- No GitHub em 29/10 (5adfa30); **falta rebuild no EasyPanel** (inclui 21–26/10).
 
 ## Trabalho de 26/10/2026 — relatório em Excel com fórmulas, mesmo desenho do PDF
 
