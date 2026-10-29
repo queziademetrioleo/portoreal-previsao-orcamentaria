@@ -140,6 +140,26 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
             'Recomendamos um reajuste de 16,7% na taxa condominial para os próximos 12 meses.',
         )
 
+    def test_consideracao_com_fundo_usa_texto_do_jose(self):
+        opcoes = relatorio_pdf._opcoes_receita(24000, 6000, [], 35000)
+        self.assertEqual(
+            relatorio_pdf._consideracao_opcoes(opcoes),
+            'Caso os valores arrecadados para a constituição do Fundo de Reserva sejam utilizados para o '
+            'custeio de despesas ordinárias — prática não recomendada —, sugerimos um reajuste de 16,7% na '
+            'taxa condominial. No entanto, caso os recursos do Fundo de Reserva sejam preservados para sua '
+            'finalidade original, recomendamos um reajuste de 45,8% na taxa condominial para os próximos 12 meses.',
+        )
+
+    def test_consideracao_com_fundo_sem_reajuste_quando_fundo_cobre(self):
+        texto = relatorio_pdf._consideracao_opcoes(relatorio_pdf._opcoes_receita(24000, 6000, [], 28000))
+        self.assertIn('prática não recomendada —, não é necessário reajuste da taxa condominial.', texto)
+        self.assertIn('recomendamos um reajuste de 16,7%', texto)
+
+    def test_gas_do_alma_e_do_condo21_aparece_uma_vez(self):
+        self.assertEqual(relatorio_pdf._nome_na_composicao('MANUTENÇÃO DO SISTEMA DE GÁS'), 'Manutenção de Gás')
+        self.assertEqual(relatorio_pdf._nome_na_composicao('Manutenção de Gás'), 'Manutenção de Gás')
+        self.assertEqual(relatorio_pdf._nome_na_composicao('Consumo de Gás'), 'Consumo de Gás')
+
     def test_tempo_desde_reajuste_usa_meses_antes_de_um_ano(self):
         self.assertEqual(
             relatorio_pdf._tempo_desde_reajuste(2025, 10, date(2026, 8, 10)),

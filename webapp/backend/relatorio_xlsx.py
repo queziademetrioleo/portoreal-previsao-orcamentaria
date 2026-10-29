@@ -24,7 +24,7 @@ import os
 import xlsxwriter
 
 import previsao as core
-from relatorio_pdf import (_money, _norm, _pct,
+from relatorio_pdf import (FUNDO_PRESERVADO, SEM_REAJUSTE_SEM_FUNDO, USO_DO_FUNDO, _money, _norm, _pct,
                            montar_contexto_relatorio)
 
 # Paleta do PDF (relatorio_pdf._HTML_TEMPLATE)
@@ -290,6 +290,8 @@ def _texto_opcoes(opcoes, refs):
                 f'Recomendamos um reajuste de {_pct(r["reajuste"])}% na taxa condominial para os próximos 12 meses.'
                 if r['reajuste'] > 0 else
                 'A receita atual cobre as despesas previstas; não é necessário reajuste da taxa condominial.')
+    if len(opcoes) == 2 and opcoes[1]['usa_fundo']:
+        return _texto_reajuste_fundo(*refs)
     partes, textos = [], []
     for letra, o, r in zip('abcd', opcoes, refs):
         frase = (f'IF({r["res"]}<0,"faltam "&{_money_f("-" + r["res"])}&" por mês — reajuste necessário de "'
@@ -309,6 +311,24 @@ def _texto_opcoes(opcoes, refs):
                 'ordinárias não é recomendada.')
         formula += '&' + _str_f(nota)
         texto += nota
+    return formula, texto
+
+
+def _texto_reajuste_fundo(sem, com):
+    """Mesmo texto de relatorio_pdf._consideracao_reajuste_fundo, em fórmula."""
+    ok = SEM_REAJUSTE_SEM_FUNDO.replace('Fundo de Reserva', 'fundo de reserva')
+    uso = USO_DO_FUNDO.replace('Fundo de Reserva', 'fundo de reserva')
+    meio = FUNDO_PRESERVADO.replace('Fundo de Reserva', 'fundo de reserva')
+    fim = '% na taxa condominial para os próximos 12 meses.'
+    sugere, dispensa = 'sugerimos um reajuste de ', 'não é necessário reajuste da taxa condominial.'
+    formula = (f'IF({sem["res"]}>=0,{_str_f(ok)},{_str_f(uso)}&IF({com["res"]}<0,{_str_f(sugere)}&'
+               f'{_pct_f(com["reaj"])}&"% na taxa condominial.",{_str_f(dispensa)})&{_str_f(meio)}&'
+               f'{_pct_f(sem["reaj"])}&{_str_f(fim)})')
+    if sem['resultado'] >= 0:
+        texto = ok
+    else:
+        texto = (uso + (f'{sugere}{_pct(com["reajuste"])}% na taxa condominial.' if com['resultado'] < 0
+                        else dispensa) + meio + _pct(sem['reajuste']) + fim)
     return formula, texto
 
 
@@ -334,12 +354,7 @@ def _conclusao(f, ctx, ref):
     for chave in STATUS:
         f.ws.conditional_format(f'B{r}', {'type': 'cell', 'criteria': '==', 'value': _str_f(CONCLUSAO[chave]),
                                           'format': f.wb.add_format({'font_color': STATUS[chave][2], 'bold': True})})
-    prefixo = ctx['conclusao_texto'].split('O resultado mensal é de')[0]
-    insuf = (' — positivo, mas abaixo dos R$ 2.000 por mês (R$ 24.000 no ano) considerados margem de '
-             'segurança suficiente.')
-    formula = (f'={_str_f(prefixo)}&"O resultado mensal é de "&{_money_f(res)}&IF(AND({res}>=0,{res}<{MINIMO:g}),'
-               f'{_str_f(insuf)}," ("&IF({res}<0,"DÉFICIT","SUPERÁVIT")&").")')
-    f.paragrafo(formula, f.fmt(text_wrap=True, valign='top', **barra), ctx['conclusao_texto'])
+    f.paragrafo(ctx['conclusao_texto'], f.fmt(text_wrap=True, valign='top', **barra))
 
 
 def _consideracoes(f, ctx, refs):

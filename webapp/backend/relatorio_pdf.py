@@ -132,6 +132,24 @@ def _consideracao_suficiencia_receita(resultado_anual):
     return texto
 
 
+SEM_REAJUSTE_SEM_FUNDO = ('A receita atual cobre as despesas previstas sem utilizar o Fundo de Reserva; '
+                          'não é necessário reajuste da taxa condominial.')
+USO_DO_FUNDO = ('Caso os valores arrecadados para a constituição do Fundo de Reserva sejam utilizados para o '
+                'custeio de despesas ordinárias — prática não recomendada —, ')
+FUNDO_PRESERVADO = (' No entanto, caso os recursos do Fundo de Reserva sejam preservados para sua finalidade '
+                    'original, recomendamos um reajuste de ')
+
+
+def _consideracao_reajuste_fundo(sem, com):
+    """Texto do José Henrique (28/10/2026) para as duas opções, com e sem fundo."""
+    if sem['reajuste'] <= 0:
+        return SEM_REAJUSTE_SEM_FUNDO
+    uso = (f'sugerimos um reajuste de {_pct(com["reajuste"])}% na taxa condominial.' if com['reajuste'] > 0
+           else 'não é necessário reajuste da taxa condominial.')
+    return (USO_DO_FUNDO + uso + FUNDO_PRESERVADO
+            + f'{_pct(sem["reajuste"])}% na taxa condominial para os próximos 12 meses.')
+
+
 def _consideracao_opcoes(opcoes):
     if len(opcoes) == 1:
         opcao = opcoes[0]
@@ -139,6 +157,8 @@ def _consideracao_opcoes(opcoes):
             return (f'Recomendamos um reajuste de {_pct(opcao["reajuste"])}% na taxa condominial '
                     'para os próximos 12 meses.')
         return 'A receita atual cobre as despesas previstas; não é necessário reajuste da taxa condominial.'
+    if len(opcoes) == 2 and opcoes[1]['usa_fundo']:
+        return _consideracao_reajuste_fundo(*opcoes)
     letras = 'abcd'
     itens = '; '.join(f'{letras[i]}) {o["label"]}: {_frase_opcao(o)}'
                       for i, o in enumerate(opcoes))
@@ -527,6 +547,10 @@ def _nome_na_composicao(classe):
         return None  # genéricos, não dizem nada ao síndico; o "etc." do texto os cobre
     if 'extintor' in nc:
         return 'Recarga de Extintores'
+    if 'manut' in nc and re.search(r'\bgas\b', nc):
+        # "Manutenção do Sistema de Gás" (Alma) e "Manutenção de Gás" (Condo21)
+        # são a mesma despesa (José Henrique, 28/10/2026).
+        return 'Manutenção de Gás'
     return classe
 
 
@@ -758,21 +782,14 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             'superavit_insuficiente': 'Superávit insuficiente — atenção',
             'deficit': 'Atenção: orçamento em déficit',
         }[status_quadro],
+        # Sem a frase do resultado mensal (José Henrique, 28/10/2026).
         'conclusao_texto': (
             f'A previsão usa a média dos últimos {n_meses_balanco} meses, separa eventos pontuais da '
             'rotina. '
             + ('A inadimplência não foi apurada. Confirme a cobertura dos meses e a vigência '
-               'da receita antes de adotar os valores desta previsão. '
+               'da receita antes de adotar os valores desta previsão.'
                if estado.get('inadimplencia_apurada') is False else
-               'A inadimplência é tratada como redução de receita disponível. ')
-            + (
-                f'O resultado mensal é de {_money(resultado_quadro / 12)} — '
-                'positivo, mas abaixo dos R$ 2.000 por mês (R$ 24.000 no ano) considerados margem de '
-                'segurança suficiente.'
-                if status_quadro == 'superavit_insuficiente' else
-                f'O resultado mensal é de {_money(resultado_quadro / 12)} '
-                f'({"DÉFICIT" if status_quadro == "deficit" else "SUPERÁVIT"}).'
-            )
+               'A inadimplência é tratada como redução de receita disponível.')
         ),
         'consideracoes': consideracoes,
         # Valores numéricos para o XLSX, que refaz as somas com fórmulas.

@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 23/10/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 29/10/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -53,7 +53,21 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (26/10/2026) — relatório em Excel com fórmulas, mesmo desenho do PDF
+## Último trabalho (29/10/2026) — feedback José 28/10 (vale p/ todos, PDF/DOCX/XLSX)
+
+- **Conclusão sem a frase "O resultado mensal é de … (DÉFICIT/SUPERÁVIT)"**: fica só média dos N meses + inadimplência
+  como redução da receita. O título colorido (superávit/déficit) continua. No XLSX a conclusão virou texto fixo.
+- **Gás unificado nas considerações:** "Manutenção do Sistema de Gás" (Alma) e "Manutenção de Gás" (Condo21) saem
+  como um item só, "Manutenção de Gás" (`_nome_na_composicao`). Berlin conferido. Só o texto muda; valores não.
+- **Reajuste com fundo = texto do José:** com as 2 opções (sem/com fundo) a consideração vira "Caso os valores
+  arrecadados para a constituição do Fundo de Reserva sejam utilizados… — prática não recomendada —, sugerimos um
+  reajuste de X% … No entanto, caso os recursos do Fundo de Reserva sejam preservados…, recomendamos um reajuste de Y%
+  … para os próximos 12 meses." X = com fundo, Y = sem fundo; percentuais só em número (sem por extenso).
+  Fundo cobrindo: 1ª parte diz "não é necessário reajuste"; receita sem fundo cobrindo: frase curta sem reajuste.
+  **Com aluguel (3–4 opções) continua a lista a)/b)/c)** — perguntar ao José como quer esse caso.
+- Commit local; falta push + rebuild no EasyPanel.
+
+## Trabalho de 26/10/2026 — relatório em Excel com fórmulas, mesmo desenho do PDF
 
 - **Gráfico de evolução mensal retirado dos 3 formatos** (usuária: "tire o gráfico de evolução mensal… de todos, não
   será mais preciso"), junto com o cálculo (`_fluxo_mensal_balanco`, `fluxo_mensal` no estado, SVG/PNG/série do Excel).

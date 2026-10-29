@@ -1,7 +1,7 @@
 # Regras do motor (`previsao.py`) — como estão no código
 
 > Fonte da verdade é o código; atualizar este resumo junto com qualquer mudança de regra.
-> Última revisão: 18/10/2026.
+> Última revisão: 29/10/2026.
 
 | Regra | O que faz hoje |
 |---|---|
@@ -29,7 +29,10 @@ Páginas (26/10/2026, "sem espaçamentos muito longos"): sem página nova força
 fluxo (seção inteira pula de página só se não couber); assinatura presa ao último item das Considerações.
 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
-omite "Outros Materiais"/"Outras despesas" e termina com "etc."; 13ª taxa de administração omitida do texto.
+omite "Outros Materiais"/"Outras despesas" e termina com "etc."; gás do Alma e do Condo21 vira um item só
+"Manutenção de Gás"; 13ª taxa de administração omitida do texto.
+Reajuste com fundo (2 opções): texto do José 28/10/2026 ("Caso os valores arrecadados… prática não recomendada —,
+sugerimos X%… No entanto… recomendamos Y%…"). Conclusão sem frase de resultado mensal (José 28/10/2026).
 Avisos de importação (mês não fechado, receita fixa, diferenças balancete × pagamentos) **nunca** entram nas
 considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).
 
