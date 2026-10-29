@@ -199,6 +199,13 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
+0. **Rebuild no EasyPanel** (tudo de 21–29/10 está no GitHub, `7cc31b3`). Depois: gerar de novo o relatório do Chateau
+   Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
+   Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
+   Propostas em aberto (usuária ainda não decidiu): alerta na revisão quando seguro previsto ficar muito abaixo do pago
+   nos últimos 12 meses; conferir seguro das outras sessões Alma no banco. Perguntar ao José: texto do reajuste em
+   condomínio sem fundo (sai X = Y) e se dedetização/câmeras com dois nomes devem ser unificadas como o gás.
+
 1. Forte Way (`9e46c8126497`): sessão preparada no banco com o Rateio; após o rebuild, abrir na lista → a aplicação
    reanalisa sozinha (IA de produção). Conferir números e `modelo_ia`.
    Reenviar Aldeia das Asas (despesas reexportadas sem filtro de competência) após o rebuild.\n   Avaliar com o José: bloquear quando as despesas detalhadas cobrem muito menos que o balancete (hoje só avisa). Se ainda acusar sobreposição, pedir os arquivos
