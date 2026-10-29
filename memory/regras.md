@@ -31,7 +31,7 @@ fluxo (seção inteira pula de página só se não couber); assinatura presa ao 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; gás do Alma e do Condo21 vira um item só
 "Manutenção de Gás"; 13ª taxa de administração omitida do texto.
-Reajuste com fundo (2 opções): texto do José 28/10/2026 ("Caso os valores arrecadados… prática não recomendada —,
+Reajuste: SEMPRE o texto do José 28/10/2026 (sem fundo X = Y; aluguel fora do texto) ("Caso os valores arrecadados… prática não recomendada —,
 sugerimos X%… No entanto… recomendamos Y%…"). Conclusão sem frase de resultado mensal (José 28/10/2026).
 Avisos de importação (mês não fechado, receita fixa, diferenças balancete × pagamentos) **nunca** entram nas
 considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).

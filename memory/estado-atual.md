@@ -59,12 +59,12 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   como redução da receita. O título colorido (superávit/déficit) continua. No XLSX a conclusão virou texto fixo.
 - **Gás unificado nas considerações:** "Manutenção do Sistema de Gás" (Alma) e "Manutenção de Gás" (Condo21) saem
   como um item só, "Manutenção de Gás" (`_nome_na_composicao`). Berlin conferido. Só o texto muda; valores não.
-- **Reajuste com fundo = texto do José:** com as 2 opções (sem/com fundo) a consideração vira "Caso os valores
-  arrecadados para a constituição do Fundo de Reserva sejam utilizados… — prática não recomendada —, sugerimos um
-  reajuste de X% … No entanto, caso os recursos do Fundo de Reserva sejam preservados…, recomendamos um reajuste de Y%
-  … para os próximos 12 meses." X = com fundo, Y = sem fundo; percentuais só em número (sem por extenso).
-  Fundo cobrindo: 1ª parte diz "não é necessário reajuste"; receita sem fundo cobrindo: frase curta sem reajuste.
-  **Com aluguel (3–4 opções) continua a lista a)/b)/c)** — perguntar ao José como quer esse caso.
+- **Reajuste = texto do José, SEMPRE (usuária 29/10: "em ambos casos, sempre"):** "Caso os valores arrecadados para a
+  constituição do Fundo de Reserva sejam utilizados… — prática não recomendada —, sugerimos um reajuste de X% … No
+  entanto, caso os recursos do Fundo de Reserva sejam preservados…, recomendamos um reajuste de Y% … para os próximos
+  12 meses." X = receitas com fundo, Y = sem fundo; percentuais só em número. Sem fundo (ex.: Berlin) X = Y (5,9% e
+  5,9%); com aluguel o texto usa só as 2 opções sem aluguel (lista a)/b)/c) acabou); sem reajuste a parte diz "não é
+  necessário reajuste da taxa condominial".
 - Commit local; falta push + rebuild no EasyPanel.
 
 ## Trabalho de 26/10/2026 — relatório em Excel com fórmulas, mesmo desenho do PDF

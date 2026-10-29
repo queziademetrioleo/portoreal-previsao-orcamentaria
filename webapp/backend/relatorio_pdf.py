@@ -112,14 +112,6 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
     return opcoes
 
 
-def _frase_opcao(opcao):
-    resultado_mensal = opcao['resultado'] / 12
-    if resultado_mensal < 0:
-        return (f'faltam {_money(-resultado_mensal)} por mês — reajuste necessário de '
-                f'{_pct(opcao["reajuste"])}% na taxa condominial')
-    return f'sobram {_money(resultado_mensal)} por mês — não é necessário reajuste'
-
-
 def _consideracao_suficiencia_receita(resultado_anual):
     """Conclusão baseada na receita ordinária, sem usar o Fundo de Reserva."""
     if resultado_anual < 0:
@@ -132,41 +124,24 @@ def _consideracao_suficiencia_receita(resultado_anual):
     return texto
 
 
-SEM_REAJUSTE_SEM_FUNDO = ('A receita atual cobre as despesas previstas sem utilizar o Fundo de Reserva; '
-                          'não é necessário reajuste da taxa condominial.')
 USO_DO_FUNDO = ('Caso os valores arrecadados para a constituição do Fundo de Reserva sejam utilizados para o '
                 'custeio de despesas ordinárias — prática não recomendada —, ')
 FUNDO_PRESERVADO = (' No entanto, caso os recursos do Fundo de Reserva sejam preservados para sua finalidade '
-                    'original, recomendamos um reajuste de ')
-
-
-def _consideracao_reajuste_fundo(sem, com):
-    """Texto do José Henrique (28/10/2026) para as duas opções, com e sem fundo."""
-    if sem['reajuste'] <= 0:
-        return SEM_REAJUSTE_SEM_FUNDO
-    uso = (f'sugerimos um reajuste de {_pct(com["reajuste"])}% na taxa condominial.' if com['reajuste'] > 0
-           else 'não é necessário reajuste da taxa condominial.')
-    return (USO_DO_FUNDO + uso + FUNDO_PRESERVADO
-            + f'{_pct(sem["reajuste"])}% na taxa condominial para os próximos 12 meses.')
+                    'original, ')
+SEM_REAJUSTE = 'não é necessário reajuste da taxa condominial'
 
 
 def _consideracao_opcoes(opcoes):
-    if len(opcoes) == 1:
-        opcao = opcoes[0]
-        if opcao['reajuste'] > 0:
-            return (f'Recomendamos um reajuste de {_pct(opcao["reajuste"])}% na taxa condominial '
-                    'para os próximos 12 meses.')
-        return 'A receita atual cobre as despesas previstas; não é necessário reajuste da taxa condominial.'
-    if len(opcoes) == 2 and opcoes[1]['usa_fundo']:
-        return _consideracao_reajuste_fundo(*opcoes)
-    letras = 'abcd'
-    itens = '; '.join(f'{letras[i]}) {o["label"]}: {_frase_opcao(o)}'
-                      for i, o in enumerate(opcoes))
-    texto = f'Opções para o custeio das despesas ordinárias nos próximos 12 meses: {itens}.'
-    if any(o['usa_fundo'] for o in opcoes):
-        texto += (' A utilização dos valores arrecadados para o Fundo de Reserva no custeio das '
-                  'despesas ordinárias não é recomendada.')
-    return texto
+    """Texto do José Henrique (28/10/2026), sempre: X = receitas com fundo,
+    Y = receitas sem fundo. Sem fundo de reserva, X = Y; opções com aluguel não
+    entram no texto (continuam no quadro de leitura)."""
+    sem = opcoes[0]
+    com = opcoes[1] if len(opcoes) > 1 and opcoes[1]['usa_fundo'] else sem
+    uso = (f'sugerimos um reajuste de {_pct(com["reajuste"])}% na taxa condominial.' if com['reajuste'] > 0
+           else f'{SEM_REAJUSTE}.')
+    preservado = (f'recomendamos um reajuste de {_pct(sem["reajuste"])}% na taxa condominial' if sem['reajuste'] > 0
+                  else SEM_REAJUSTE)
+    return USO_DO_FUNDO + uso + FUNDO_PRESERVADO + preservado + ' para os próximos 12 meses.'
 
 
 def _logo_base64(logo_path):

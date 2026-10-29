@@ -59,20 +59,23 @@ class RelatorioXlsxTest(unittest.TestCase):
         cache = load_workbook(io.BytesIO(self.bytes), data_only=True)['Previsão']
         tot_rec = _linha(self.ws, 'Total mensal')
         self.assertAlmostEqual(cache[f'F{tot_rec}'].value, 2250 + 250)
-        self.assertTrue(any('cobre as despesas previstas sem utilizar o fundo de reserva' in t
+        self.assertTrue(any('prática não recomendada' in t
                             for t in _todas(cache)))
 
     def test_conclusao_sem_resultado_mensal(self):
         self.assertFalse(any('O resultado mensal é de' in t for t in _todas(self.ws)))
 
-    def test_texto_do_reajuste_com_fundo_igual_ao_pdf(self):
-        sem = {'res': 'F1', 'reaj': 'F2', 'resultado': -1000.0, 'reajuste': 0.13}
-        com = {'res': 'F3', 'reaj': 'F4', 'resultado': -500.0, 'reajuste': 0.10}
-        formula, texto = relatorio_xlsx._texto_reajuste_fundo(sem, com)
-        pdf = relatorio_pdf._texto_consideracao(relatorio_pdf._consideracao_reajuste_fundo(
-            {'reajuste': 0.13}, {'reajuste': 0.10}))
-        self.assertEqual(texto, pdf)
-        self.assertIn('FIXED(F4*100,1)', formula)
+    def test_texto_do_reajuste_igual_ao_pdf(self):
+        opcoes = [{'label': 'sem', 'usa_fundo': False}, {'label': 'com', 'usa_fundo': True}]
+        for res_sem, reaj_sem, res_com, reaj_com in ((-1000.0, 0.13, -500.0, 0.10), (-1000.0, 0.13, 200.0, 0.0),
+                                                     (300.0, 0.0, 800.0, 0.0)):
+            refs = [{'res': 'F1', 'reaj': 'F2', 'resultado': res_sem, 'reajuste': reaj_sem},
+                    {'res': 'F3', 'reaj': 'F4', 'resultado': res_com, 'reajuste': reaj_com}]
+            formula, texto = relatorio_xlsx._texto_opcoes(opcoes, refs)
+            pdf = relatorio_pdf._texto_consideracao(relatorio_pdf._consideracao_opcoes(
+                [dict(o, reajuste=r['reajuste']) for o, r in zip(opcoes, refs)]))
+            self.assertEqual(texto, pdf)
+            self.assertIn('FIXED(F4*100,1)', formula)
 
     def test_grafico_de_pizza(self):
         self.assertEqual(len(self.ws._charts), 1)

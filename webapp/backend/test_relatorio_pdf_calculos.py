@@ -125,20 +125,26 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
             'Receitas com fundo de reserva + Aluguel de Espaço',
         ])
 
-    def test_consideracao_lista_as_opcoes_com_falta_e_sobra(self):
+    def test_consideracao_com_aluguel_usa_texto_do_jose_sem_o_aluguel(self):
         aluguel = [{'classe': 'Aluguel de Espaço p/ Antena de Telefonia', 'mensal': 9268.95}]
-        opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 0, aluguel, 27408.72 * 12)
+        opcoes = relatorio_pdf._opcoes_receita(22631.19 * 12, 1000 * 12, aluguel, 27408.72 * 12)
         texto = relatorio_pdf._consideracao_opcoes(opcoes)
-        self.assertIn('a) Receitas sem fundo de reserva: faltam R$ 4.777,53 por mês — reajuste necessário de 21,1%', texto)
-        self.assertIn('sobram R$ 4.491,42 por mês — não é necessário reajuste', texto)
-        self.assertNotIn('Fundo de Reserva', texto)
+        self.assertIn('sugerimos um reajuste de 16,0% na taxa condominial.', texto)
+        self.assertIn('recomendamos um reajuste de 21,1% na taxa condominial para os próximos 12 meses.', texto)
+        self.assertNotIn('a)', texto)
 
-    def test_consideracao_com_uma_opcao_e_curta(self):
+    def test_consideracao_sem_fundo_tambem_usa_texto_do_jose(self):
         opcoes = relatorio_pdf._opcoes_receita(30000, 0, [], 35000)
-        self.assertEqual(
-            relatorio_pdf._consideracao_opcoes(opcoes),
-            'Recomendamos um reajuste de 16,7% na taxa condominial para os próximos 12 meses.',
-        )
+        texto = relatorio_pdf._consideracao_opcoes(opcoes)
+        self.assertTrue(texto.startswith('Caso os valores arrecadados para a constituição do Fundo de Reserva'))
+        self.assertIn('sugerimos um reajuste de 16,7% na taxa condominial.', texto)
+        self.assertIn('recomendamos um reajuste de 16,7% na taxa condominial para os próximos 12 meses.', texto)
+
+    def test_consideracao_sem_reajuste_nas_duas_partes(self):
+        texto = relatorio_pdf._consideracao_opcoes(relatorio_pdf._opcoes_receita(36000, 6000, [], 30000))
+        self.assertIn('prática não recomendada —, não é necessário reajuste da taxa condominial.', texto)
+        self.assertIn('finalidade original, não é necessário reajuste da taxa condominial para os próximos 12 meses.',
+                      texto)
 
     def test_consideracao_com_fundo_usa_texto_do_jose(self):
         opcoes = relatorio_pdf._opcoes_receita(24000, 6000, [], 35000)

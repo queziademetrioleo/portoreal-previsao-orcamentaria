@@ -24,7 +24,7 @@ import os
 import xlsxwriter
 
 import previsao as core
-from relatorio_pdf import (FUNDO_PRESERVADO, SEM_REAJUSTE_SEM_FUNDO, USO_DO_FUNDO, _money, _norm, _pct,
+from relatorio_pdf import (FUNDO_PRESERVADO, SEM_REAJUSTE, USO_DO_FUNDO, _money, _norm, _pct,
                            montar_contexto_relatorio)
 
 # Paleta do PDF (relatorio_pdf._HTML_TEMPLATE)
@@ -58,11 +58,6 @@ def _status(resultado_mensal):
     if resultado_mensal >= MINIMO:
         return 'superavit'
     return 'superavit_insuficiente' if resultado_mensal >= 0 else 'deficit'
-
-
-def _money_f(ref):
-    """R$ em texto dentro de fórmula; FIXED usa o separador do Excel do usuário."""
-    return f'IF({ref}<0,"-R$ ","R$ ")&FIXED(ABS({ref}),2)'
 
 
 def _pct_f(ref):
@@ -282,53 +277,17 @@ def _pizza(f, ctx, linhas_despesa, ref_subtotal, subtotal):
 def _texto_opcoes(opcoes, refs):
     """Mesmo texto de relatorio_pdf._consideracao_opcoes, já em minúsculas
     como sai de _texto_consideracao. Devolve (fórmula, texto atual)."""
-    if len(opcoes) == 1:
-        r = refs[0]
-        return (f'IF(ISNUMBER({r["reaj"]}),"Recomendamos um reajuste de "&{_pct_f(r["reaj"])}&"% na taxa '
-                f'condominial para os próximos 12 meses.","A receita atual cobre as despesas previstas; não é '
-                f'necessário reajuste da taxa condominial.")',
-                f'Recomendamos um reajuste de {_pct(r["reajuste"])}% na taxa condominial para os próximos 12 meses.'
-                if r['reajuste'] > 0 else
-                'A receita atual cobre as despesas previstas; não é necessário reajuste da taxa condominial.')
-    if len(opcoes) == 2 and opcoes[1]['usa_fundo']:
-        return _texto_reajuste_fundo(*refs)
-    partes, textos = [], []
-    for letra, o, r in zip('abcd', opcoes, refs):
-        frase = (f'IF({r["res"]}<0,"faltam "&{_money_f("-" + r["res"])}&" por mês — reajuste necessário de "'
-                 f'&{_pct_f(r["reaj"])}&"% na taxa condominial","sobram "&{_money_f(r["res"])}'
-                 f'&" por mês — não é necessário reajuste")')
-        prefixo = f'{letra}) {o["label"].lower()}: '
-        partes.append(f'{_str_f(prefixo)}&{frase}')
-        res = r['resultado']
-        textos.append(prefixo + (f'faltam {_money(-res)} por mês — reajuste necessário de {_pct(r["reajuste"])}% '
-                                 'na taxa condominial' if res < 0 else
-                                 f'sobram {_money(res)} por mês — não é necessário reajuste'))
-    abre = 'Opções para o custeio das despesas ordinárias nos próximos 12 meses: '
-    formula = _str_f(abre) + '&' + '&"; "&'.join(partes) + '&"."'
-    texto = abre + '; '.join(textos) + '.'
-    if any(o['usa_fundo'] for o in opcoes):
-        nota = (' A utilização dos valores arrecadados para o fundo de reserva no custeio das despesas '
-                'ordinárias não é recomendada.')
-        formula += '&' + _str_f(nota)
-        texto += nota
-    return formula, texto
-
-
-def _texto_reajuste_fundo(sem, com):
-    """Mesmo texto de relatorio_pdf._consideracao_reajuste_fundo, em fórmula."""
-    ok = SEM_REAJUSTE_SEM_FUNDO.replace('Fundo de Reserva', 'fundo de reserva')
+    sem = refs[0]
+    com = refs[1] if len(opcoes) > 1 and opcoes[1]['usa_fundo'] else sem
     uso = USO_DO_FUNDO.replace('Fundo de Reserva', 'fundo de reserva')
     meio = FUNDO_PRESERVADO.replace('Fundo de Reserva', 'fundo de reserva')
-    fim = '% na taxa condominial para os próximos 12 meses.'
-    sugere, dispensa = 'sugerimos um reajuste de ', 'não é necessário reajuste da taxa condominial.'
-    formula = (f'IF({sem["res"]}>=0,{_str_f(ok)},{_str_f(uso)}&IF({com["res"]}<0,{_str_f(sugere)}&'
-               f'{_pct_f(com["reaj"])}&"% na taxa condominial.",{_str_f(dispensa)})&{_str_f(meio)}&'
-               f'{_pct_f(sem["reaj"])}&{_str_f(fim)})')
-    if sem['resultado'] >= 0:
-        texto = ok
-    else:
-        texto = (uso + (f'{sugere}{_pct(com["reajuste"])}% na taxa condominial.' if com['resultado'] < 0
-                        else dispensa) + meio + _pct(sem['reajuste']) + fim)
+    sugere, recomenda, taxa = 'sugerimos um reajuste de ', 'recomendamos um reajuste de ', '% na taxa condominial'
+    fim = ' para os próximos 12 meses.'
+    formula = (f'{_str_f(uso)}&IF({com["res"]}<0,{_str_f(sugere)}&{_pct_f(com["reaj"])}&{_str_f(taxa + ".")},'
+               f'{_str_f(SEM_REAJUSTE + ".")})&{_str_f(meio)}&IF({sem["res"]}<0,{_str_f(recomenda)}&'
+               f'{_pct_f(sem["reaj"])}&{_str_f(taxa)},{_str_f(SEM_REAJUSTE)})&{_str_f(fim)}')
+    texto = (uso + (f'{sugere}{_pct(com["reajuste"])}{taxa}.' if com['resultado'] < 0 else f'{SEM_REAJUSTE}.')
+             + meio + (f'{recomenda}{_pct(sem["reajuste"])}{taxa}' if sem['resultado'] < 0 else SEM_REAJUSTE) + fim)
     return formula, texto
 
 
