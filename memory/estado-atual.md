@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 29/10/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 30/10/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -53,7 +53,25 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - Valores sempre rotulados como mensal ou anual.
 - Não ajustar valores para bater artificialmente com a planilha do José.
 
-## Último trabalho (29/10/2026) — feedback José 28/10 (vale p/ todos, PDF/DOCX/XLSX)
+## Gráfico de composição: barras horizontais (29/10/2026, usuária)
+
+- A pizza virou **barras horizontais estilo editorial** (cinza #4a4a4a c/ contorno, rótulo à esquerda em até 2 linhas,
+  % com vírgula na ponta, grade a cada 5%/10%, eixo até a dezena acima do maior valor). Top 5 + "Outros" por último.
+- PDF: SVG `_grafico_barras_svg`; DOCX: PNG `_png_barras` com a MESMA geometria (`_layout_barras`); XLSX: gráfico
+  nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
+- No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
+
+## Último trabalho (30/10/2026) — áudio José 29/10 (condomínio sem fundo de reserva)
+
+- **Sem fundo no relatório, nenhuma consideração cita o fundo** (PDF/DOCX/XLSX): sai a de suficiência ("sem utilizar o
+  Fundo de Reserva… suficiente") e o reajuste vira só "Recomendamos um reajuste de Y% na taxa condominial para os
+  próximos 12 meses." (ou "Não é necessário reajuste…"). Vale p/ condomínio sem fundo e p/ "fundo no relatório? Não".
+  Com fundo, nada muda. `idx_suficiencia` pode ser `None`. Conferido com Berlin (cópia local) nos 3 formatos.
+- Quadro de leitura sem fundo: rótulo só "Receitas" (e "Receitas + Aluguel…"), usuária 30/10. Com fundo segue
+  "Receitas sem/com fundo de reserva".
+- No GitHub em 30/10 junto com o gráfico de barras; **falta rebuild no EasyPanel** (inclui 21–29/10).
+
+## Trabalho de 29/10/2026 — feedback José 28/10 (vale p/ todos, PDF/DOCX/XLSX)
 
 - **Bug seguro Alma (Chateau Canões `0973588a1d80`):** relatório saiu com Seguro de Incêndio R$ 68,89/mês
   (826,67 × 1 ÷ 12). A coluna Parcela do FIN Alma vem "01/01" (lançamento sem parcelamento), e a apólice está na

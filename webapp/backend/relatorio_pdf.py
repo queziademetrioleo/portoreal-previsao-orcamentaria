@@ -8,14 +8,16 @@ de uma sessao (mesmos dados exibidos na tela de resultado do webapp).
 
 Layout: logo Porto Real -> nome do condominio/ano -> Receitas -> Despesas ->
 Quadro de leitura (uma caixa por opção de receita) -> Composicao das despesas
-(pizza) -> Conclusao -> Considerações Importantes.
+(barras) -> Conclusao -> Considerações Importantes.
 """
 import base64
 import math
 import os
 import re
+import textwrap
 import unicodedata
 from datetime import date
+from html import escape
 
 from jinja2 import Template
 from weasyprint import HTML
@@ -25,10 +27,7 @@ import previsao as core
 MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
             'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
-# Mesma paleta categorica validada (6 hues, ordem fixa) usada no grafico de
-# pizza do relatório — não ciclar, não gerar cores.
-PIE_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#e34948', '#eb6834']
-PIE_LIMITE_FATIAS = 5
+BARRAS_LIMITE = 5
 
 
 def _norm(s):
@@ -89,6 +88,8 @@ def _opcoes_receita(receita_anual, fundo_anual, nao_ordinarias, total_previsto):
     # Nomes curtos (usuária, 23/10/2026): a receita ordinária já traz taxa, água,
     # recorrentes e receitas manuais; a tabela de receitas detalha cada uma.
     sem, com = 'Receitas sem fundo de reserva', 'Receitas com fundo de reserva'
+    if not tem_fundo:  # sem fundo no relatório, só "Receitas" (usuária, 30/10/2026)
+        sem = 'Receitas'
     candidatas = [
         (sem, receita_anual, True, False),
         (com, receita_anual + fundo_anual, tem_fundo, True),
@@ -132,11 +133,16 @@ SEM_REAJUSTE = 'não é necessário reajuste da taxa condominial'
 
 
 def _consideracao_opcoes(opcoes):
-    """Texto do José Henrique (28/10/2026), sempre: X = receitas com fundo,
-    Y = receitas sem fundo. Sem fundo de reserva, X = Y; opções com aluguel não
-    entram no texto (continuam no quadro de leitura)."""
+    """Texto do José Henrique (28/10/2026): X = receitas com fundo, Y = receitas
+    sem fundo. Sem fundo de reserva no relatório, só a frase final com Y (José
+    29/10/2026). Opções com aluguel não entram no texto (continuam no quadro)."""
     sem = opcoes[0]
-    com = opcoes[1] if len(opcoes) > 1 and opcoes[1]['usa_fundo'] else sem
+    if not (len(opcoes) > 1 and opcoes[1]['usa_fundo']):
+        if sem['reajuste'] > 0:
+            return (f'Recomendamos um reajuste de {_pct(sem["reajuste"])}% na taxa condominial '
+                    'para os próximos 12 meses.')
+        return SEM_REAJUSTE[0].upper() + SEM_REAJUSTE[1:] + ' para os próximos 12 meses.'
+    com = opcoes[1]
     uso = (f'sugerimos um reajuste de {_pct(com["reajuste"])}% na taxa condominial.' if com['reajuste'] > 0
            else f'{SEM_REAJUSTE}.')
     preservado = (f'recomendamos um reajuste de {_pct(sem["reajuste"])}% na taxa condominial' if sem['reajuste'] > 0
@@ -440,62 +446,89 @@ def _grupos_despesas_relatorio(despesas):
 
 
 # ---------------------------------------------------------------------------
-# Grafico de pizza (SVG) — mesma matematica/paleta da tela de resultado
+# Grafico de barras horizontais (SVG) — composição das despesas
+# Estilo editorial: barras cinza-escuro com contorno, rótulo à esquerda (até 2
+# linhas), percentual na ponta, grade vertical a cada 5% (forte a cada 10%).
+# A geometria (`_layout_barras`) é a mesma usada no PNG do DOCX.
 # ---------------------------------------------------------------------------
-def _polar(cx, cy, r, angulo_deg):
-    rad = math.radians(angulo_deg - 90)
-    return cx + r * math.cos(rad), cy + r * math.sin(rad)
+BARRA_COR = '#4a4a4a'
+BARRA_CONTORNO = '#14110c'
+GRADE_FORTE = '#c9c8c3'
+GRADE_FRACA = '#e6e5e0'
 
 
-def _fatia_path(cx, cy, r, ini, fim):
-    if fim - ini >= 359.99:
-        meio_x, meio_y = _polar(cx, cy, r, ini + 180)
-        ini_x, ini_y = _polar(cx, cy, r, ini)
-        return (f'M {ini_x} {ini_y} A {r} {r} 0 1 1 {meio_x} {meio_y} '
-                f'A {r} {r} 0 1 1 {ini_x} {ini_y} Z')
-    ini_x, ini_y = _polar(cx, cy, r, fim)
-    fim_x, fim_y = _polar(cx, cy, r, ini)
-    large = 1 if fim - ini > 180 else 0
-    return f'M {cx} {cy} L {ini_x} {ini_y} A {r} {r} 0 {large} 0 {fim_x} {fim_y} Z'
+def _pct_br(frac):
+    return f'{frac * 100:.1f}%'.replace('.', ',')
 
 
-def _grafico_pizza_svg(grupos, total):
+def _quebrar_rotulo(texto, largura=24, max_linhas=2):
+    linhas = textwrap.wrap(str(texto), largura) or ['']
+    if len(linhas) > max_linhas:
+        resto = ' '.join(linhas[max_linhas - 1:])
+        linhas = linhas[:max_linhas - 1] + [textwrap.shorten(resto, largura, placeholder='…')]
+    return linhas
+
+
+def _layout_barras(barras, largura=680):
+    """Coordenadas do gráfico (unidades do SVG; o PNG multiplica por escala)."""
+    maior = max((b['frac'] for b in barras), default=0) * 100
+    eixo_max = max(10, math.ceil(maior / 10 - 1e-9) * 10)
+    passo = 10 if eixo_max <= 50 else 20
+    x0, x1 = 230, largura - 70
+    topo, altura_barra, passo_linha = 6, 32, 46
+    def x(frac):
+        return x0 + (x1 - x0) * min(max(frac, 0) * 100, eixo_max) / eixo_max
+    linhas = []
+    for i, b in enumerate(barras):
+        y = topo + i * passo_linha
+        linhas.append({'y': y, 'meio': y + altura_barra / 2, 'x_fim': x(b['frac']),
+                       'rotulo': _quebrar_rotulo(b['label']), 'pct': _pct_br(b['frac'])})
+    base = topo + len(barras) * passo_linha - (passo_linha - altura_barra) / 2
+    grade = []
+    sub = passo / 2
+    v = 0.0
+    while v <= eixo_max + 1e-9:
+        grade.append({'x': x(v / 100), 'forte': abs(v / passo - round(v / passo)) < 1e-9,
+                      'rotulo': f'{v:.0f}%'})
+        v += sub
+    return {'linhas': linhas, 'grade': grade, 'x0': x0, 'altura_barra': altura_barra,
+            'base': base, 'altura': base + 26, 'largura': largura}
+
+
+def _grafico_barras_svg(grupos, total):
     if not grupos or total <= 0:
         return None
     dados = grupos
-    if len(dados) > PIE_LIMITE_FATIAS + 1:
-        principais = dados[:PIE_LIMITE_FATIAS]
-        outros = sum(g['value'] for g in dados[PIE_LIMITE_FATIAS:])
+    if len(dados) > BARRAS_LIMITE + 1:
+        principais = dados[:BARRAS_LIMITE]
+        outros = sum(g['value'] for g in dados[BARRAS_LIMITE:])
         dados = principais + [{'label': 'Outros', 'value': outros}]
+    barras = [{'label': g['label'], 'value': g['value'], 'frac': g['value'] / total} for g in dados]
 
-    cx, cy, r = 100, 100, 90
-    cursor = 0.0
-    fatias = []
-    for i, g in enumerate(dados):
-        frac = g['value'] / total
-        ini, fim = cursor * 360, (cursor + frac) * 360
-        cursor += frac
-        meio = (ini + fim) / 2
-        lx, ly = _polar(cx, cy, r * 0.66, meio)
-        fatias.append({
-            'label': g['label'], 'value': g['value'], 'frac': frac,
-            'path': _fatia_path(cx, cy, r, ini, fim),
-            'cor': PIE_COLORS[i % len(PIE_COLORS)],
-            'label_x': round(lx, 1), 'label_y': round(ly, 1),
-        })
-
-    paths_svg = ''.join(
-        f'<path d="{f["path"]}" fill="{f["cor"]}" stroke="#fcfcfb" stroke-width="2" stroke-linejoin="round"/>'
-        for f in fatias
-    )
-    labels_svg = ''.join(
-        f'<text x="{f["label_x"]}" y="{f["label_y"]}" text-anchor="middle" '
-        f'dominant-baseline="middle" font-size="13" font-weight="700" fill="#14110c">'
-        f'{round(f["frac"] * 100)}%</text>'
-        for f in fatias if f['frac'] >= 0.08
-    )
-    svg = (f'<svg viewBox="0 0 200 200" width="180" height="180">{paths_svg}{labels_svg}</svg>')
-    return {'svg': svg, 'fatias': fatias}
+    lay = _layout_barras(barras)
+    partes = []
+    for g in lay['grade']:
+        cor = GRADE_FORTE if g['forte'] else GRADE_FRACA
+        partes.append(f'<line x1="{g["x"]:.1f}" y1="0" x2="{g["x"]:.1f}" y2="{lay["base"]:.1f}" '
+                      f'stroke="{cor}" stroke-width="1"/>')
+        if g['forte']:
+            partes.append(f'<text x="{g["x"]:.1f}" y="{lay["base"] + 18:.1f}" text-anchor="middle" '
+                          f'font-size="12" fill="#14110c">{g["rotulo"]}</text>')
+    for l in lay['linhas']:
+        largura = max(l['x_fim'] - lay['x0'], 0)
+        partes.append(f'<rect x="{lay["x0"]}" y="{l["y"]}" width="{largura:.1f}" height="{lay["altura_barra"]}" '
+                      f'fill="{BARRA_COR}" stroke="{BARRA_CONTORNO}" stroke-width="1.2"/>')
+        partes.append(f'<text x="{l["x_fim"] + 8:.1f}" y="{l["meio"]:.1f}" dominant-baseline="central" '
+                      f'font-size="13" fill="#14110c">{l["pct"]}</text>')
+        n = len(l['rotulo'])
+        spans = ''.join(
+            f'<tspan x="{lay["x0"] - 10}" y="{l["meio"] + (j - (n - 1) / 2) * 15:.1f}">{escape(t)}</tspan>'
+            for j, t in enumerate(l['rotulo']))
+        partes.append(f'<text text-anchor="end" dominant-baseline="central" font-size="12.5" '
+                      f'fill="#14110c">{spans}</text>')
+    svg = (f'<svg viewBox="0 0 {lay["largura"]} {lay["altura"]:.0f}" width="100%" '
+           f'xmlns="http://www.w3.org/2000/svg">{"".join(partes)}</svg>')
+    return {'svg': svg, 'barras': barras}
 
 
 # ---------------------------------------------------------------------------
@@ -643,7 +676,7 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     resultado_sem = receita_anual_sem - total_previsto
     opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
 
-    pizza = _grafico_pizza_svg(grupos, total_grupo)
+    grafico = _grafico_barras_svg(grupos, total_grupo)
 
     # --- Considerações Importantes (numeradas sequencialmente ao final —
     # itens condicionais ausentes nao deixam buraco na numeracao) ---
@@ -690,8 +723,12 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
             + _lista_portugues(administrativas_itens) + '.'
         )
 
-    idx_suficiencia = len(consideracoes)
-    consideracoes.append(_consideracao_suficiencia_receita(resultado_sem))
+    # Sem fundo de reserva no relatório a frase "sem utilizar o Fundo de
+    # Reserva" não faz sentido e sai (José Henrique, 29/10/2026).
+    idx_suficiencia = None
+    if fundo_reserva_anual > 0.005:
+        idx_suficiencia = len(consideracoes)
+        consideracoes.append(_consideracao_suficiencia_receita(resultado_sem))
 
     ultimo_reajuste_raw = resumo.get('ultimo_reajuste')
     if ultimo_reajuste_raw:
@@ -750,7 +787,7 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
         } for o in opcoes],
         'fundo_reserva_anual': _money(fundo_reserva_anual),
         'tem_fundo_reserva': abs(fundo_reserva_anual) > 0.005,
-        'pizza': pizza,
+        'grafico': grafico,
         'status_geral': status_quadro,
         'status_label': {
             'superavit': 'Cenário com superávit',
@@ -828,10 +865,7 @@ _HTML_TEMPLATE = r"""
   .badge.deficit { background: #fbe3e3; color: #a12626; }
   .badge.superavit_insuficiente { background: #fff3cd; color: #8a6300; }
   .badge.superavit { background: #dff3e3; color: #0f6b2b; }
-  .pizza-wrap { display: flex; align-items: center; gap: 18px; }
-  .legenda { list-style: none; margin: 0; padding: 0; font-size: 10.5px; }
-  .legenda li { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-  .legenda i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .grafico-barras svg { display: block; width: 100%; height: auto; }
   .conclusao-box { border-left: 3px solid #1c355e; padding-left: 10px; }
   .conclusao-box.superavit_insuficiente { border-left-color: #c98500; }
   .conclusao-box.deficit { border-left-color: #a12626; }
@@ -893,21 +927,14 @@ _HTML_TEMPLATE = r"""
     </div>
   </div>
 
-  {% if pizza %}
+  {% if grafico %}
   <div class="secao">
     <h2>Composição das despesas</h2>
-    <div class="pizza-wrap">
-      {{ pizza.svg|safe }}
-      <ul class="legenda">
-        {% for f in pizza.fatias %}
-        <li><i style="background:{{ f.cor }}"></i>{{ f.label }} — {{ '%.1f'|format(f.frac*100) }}%</li>
-        {% endfor %}
-      </ul>
-    </div>
+    <div class="grafico-barras">{{ grafico.svg|safe }}</div>
   </div>
   {% endif %}
 
-  <!-- Conclusão logo depois da pizza, sem página nova (usuária, 26/10/2026: "sem espaçamentos muito
+  <!-- Conclusão logo depois do gráfico, sem página nova (usuária, 26/10/2026: "sem espaçamentos muito
        longos"); as Considerações vêm em seguida e podem quebrar entre itens. -->
   <div class="secao">
     <h2>Conclusão</h2>

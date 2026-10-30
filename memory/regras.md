@@ -23,16 +23,18 @@ Exceções fixas: `PONTUAL_FORA` (combate a incêndio — gasto pontual, fora); 
 (média dos meses com receita no balancete, `receitas_consumo`) + receitas manuais. Fora: complemento/chamada de capital,
 juros, multa, taxa extra, rendimentos, créditos.
 **Sem gráfico de evolução mensal (retirado em 26/10/2026, pedido da usuária: "não será mais preciso"):** nem no
-PDF, nem no DOCX, nem no XLSX; o estado da sessão também não calcula mais `fluxo_mensal`. Único gráfico: pizza.
+PDF, nem no DOCX, nem no XLSX; o estado da sessão também não calcula mais `fluxo_mensal`. Único gráfico: barras horizontais de composição (era pizza até 29/10/2026).
 Opções de custeio: "Receitas sem fundo de reserva" / "Receitas com fundo de reserva" (+ aluguel, se houver).
-Páginas (26/10/2026, "sem espaçamentos muito longos"): sem página nova forçada — pizza e Conclusão seguem o
+Páginas (26/10/2026, "sem espaçamentos muito longos"): sem página nova forçada — gráfico e Conclusão seguem o
 fluxo (seção inteira pula de página só se não couber); assinatura presa ao último item das Considerações.
 
 PDF (`relatorio_pdf.py`): considerações com inicial maiúscula por frase; composição de conservação
 omite "Outros Materiais"/"Outras despesas" e termina com "etc."; gás do Alma e do Condo21 vira um item só
 "Manutenção de Gás"; 13ª taxa de administração omitida do texto.
-Reajuste: SEMPRE o texto do José 28/10/2026 (sem fundo X = Y; aluguel fora do texto) ("Caso os valores arrecadados… prática não recomendada —,
-sugerimos X%… No entanto… recomendamos Y%…"). Conclusão sem frase de resultado mensal (José 28/10/2026).
+Reajuste COM fundo no relatório: texto do José 28/10/2026 (aluguel fora do texto) ("Caso os valores arrecadados… prática não
+recomendada —, sugerimos X%… No entanto… recomendamos Y%…"). SEM fundo no relatório (condomínio sem fundo ou "fundo no
+relatório? Não"): só "Recomendamos um reajuste de Y% na taxa condominial para os próximos 12 meses." e a consideração
+"sem utilizar o Fundo de Reserva… suficiente" sai (José 29/10/2026). Conclusão sem frase de resultado mensal (José 28/10/2026).
 Avisos de importação (mês não fechado, receita fixa, diferenças balancete × pagamentos) **nunca** entram nas
 considerações: o documento vai ao condomínio; esses avisos ficam só na tela (José, 22/10/2026).
 

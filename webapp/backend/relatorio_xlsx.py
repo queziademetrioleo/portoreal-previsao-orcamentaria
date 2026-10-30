@@ -229,60 +229,80 @@ def _quadro(f, opcoes, ref_total, total):
     return refs
 
 
-def _pizza(f, ctx, linhas_despesa, ref_subtotal, subtotal):
-    pizza = ctx.get('pizza')
-    if not pizza:
+def _barras(f, ctx, linhas_despesa, ref_subtotal, subtotal):
+    grafico = ctx.get('grafico')
+    if not grafico:
         return
     f.secao('Composição das despesas')
-    # Dados na aba à parte (A:B); cada fatia aponta para a conta.
+    # Dados na aba à parte (A:C); cada barra aponta para a conta, C = participação.
     d = f.dados
     d.set_column('A:A', 40)
-    d.set_column('B:B', 16)
+    d.set_column('B:C', 16)
     cinza = f.fmt(font_size=9)
     cinza_m = f.fmt(font_size=9, num_format=FMT_MOEDA)
+    cinza_p = f.fmt(font_size=9, num_format='0.0%')
     f.escreve('A1', 'Composição das despesas', f.fmt(bold=True, font_color=AZUL), ws=d)
+    barras = grafico['barras']
     ini = 2
+    fim = ini + len(barras) - 1
     refs, soma = [], 0.0
-    for i, fatia in enumerate(pizza['fatias']):
+    for i, barra in enumerate(barras):
         r = ini + i
-        linha = linhas_despesa.get(_norm(fatia['label']))
+        linha = linhas_despesa.get(_norm(barra['label']))
         if linha:
             num, valor = linha
-            f.escreve(f'A{r}', f'={P}B{num}', cinza, fatia['label'], ws=d)
+            f.escreve(f'A{r}', f'={P}B{num}', cinza, barra['label'], ws=d)
             f.escreve(f'B{r}', f'={P}F{num}', cinza_m, valor, ws=d)
             refs.append(f'B{r}')
             soma += valor
         else:  # "Outros" = o que sobra do SUBTOTAL
-            f.escreve(f'A{r}', fatia['label'], cinza, ws=d)
+            f.escreve(f'A{r}', barra['label'], cinza, ws=d)
             f.escreve(f'B{r}', f'={P}{ref_subtotal}' + ''.join(f'-{x}' for x in refs), cinza_m,
                       round(subtotal - soma, 2), ws=d)
-    fim = ini + len(pizza['fatias']) - 1
-    g = f.wb.add_chart({'type': 'pie'})
+        f.escreve(f'C{r}', f'=B{r}/SUM($B${ini}:$B${fim})', cinza_p, barra['frac'], ws=d)
+    g = f.wb.add_chart({'type': 'bar'})
     g.add_series({
         'categories': f"={D}$A${ini}:$A${fim}",
-        'values': f"={D}$B${ini}:$B${fim}",
-        'points': [{'fill': {'color': fat['cor']}, 'border': {'color': '#FCFCFB', 'width': 1.5}}
-                   for fat in pizza['fatias']],
-        'data_labels': {'percentage': True, 'font': {'name': FONTE, 'size': 9, 'bold': True, 'color': TINTA}},
+        'values': f"={D}$C${ini}:$C${fim}",
+        'fill': {'color': '#4A4A4A'},
+        'border': {'color': TINTA, 'width': 1},
+        'gap': 45,
+        'data_labels': {'value': True, 'num_format': '0.0%',
+                        'font': {'name': FONTE, 'size': 9, 'color': TINTA}},
     })
-    g.set_legend({'position': 'right', 'font': {'name': FONTE, 'size': 9}})
+    # Em gráfico de barras o x_axis do xlsxwriter é o eixo das categorias (vertical).
+    g.set_x_axis({'reverse': True, 'num_font': {'name': FONTE, 'size': 9, 'color': TINTA},
+                  'line': {'color': TINTA}, 'major_tick_mark': 'none'})
+    g.set_y_axis({'min': 0, 'num_format': '0%', 'major_unit': 0.1, 'minor_unit': 0.05,
+                  'major_gridlines': {'visible': True, 'line': {'color': '#C9C8C3'}},
+                  'minor_gridlines': {'visible': True, 'line': {'color': '#E6E5E0'}},
+                  'num_font': {'name': FONTE, 'size': 9, 'color': TINTA}, 'line': {'none': True}})
+    g.set_legend({'none': True})
     g.set_chartarea({'border': {'none': True}})
-    g.set_size({'width': 820, 'height': 230})
+    g.set_size({'width': 820, 'height': 60 + 42 * len(barras)})
     f.ws.insert_chart(f'B{f.lin}', g)
-    for r in range(f.lin, f.lin + 12):
+    n = math.ceil((60 + 42 * len(barras)) / 15)
+    for r in range(f.lin, f.lin + n):
         f.altura(r, 15)
-    f.lin += 12
+    f.lin += n
 
 
 def _texto_opcoes(opcoes, refs):
     """Mesmo texto de relatorio_pdf._consideracao_opcoes, já em minúsculas
     como sai de _texto_consideracao. Devolve (fórmula, texto atual)."""
     sem = refs[0]
-    com = refs[1] if len(opcoes) > 1 and opcoes[1]['usa_fundo'] else sem
+    fim = ' para os próximos 12 meses.'
+    if not (len(opcoes) > 1 and opcoes[1]['usa_fundo']):  # sem fundo: só a frase final (José 29/10)
+        recomenda, taxa = 'Recomendamos um reajuste de ', '% na taxa condominial'
+        nada = SEM_REAJUSTE[0].upper() + SEM_REAJUSTE[1:]
+        formula = (f'IF({sem["res"]}<0,{_str_f(recomenda)}&{_pct_f(sem["reaj"])}&{_str_f(taxa)},'
+                   f'{_str_f(nada)})&{_str_f(fim)}')
+        texto = (f'{recomenda}{_pct(sem["reajuste"])}{taxa}' if sem['resultado'] < 0 else nada) + fim
+        return formula, texto
+    com = refs[1]
     uso = USO_DO_FUNDO.replace('Fundo de Reserva', 'fundo de reserva')
     meio = FUNDO_PRESERVADO.replace('Fundo de Reserva', 'fundo de reserva')
     sugere, recomenda, taxa = 'sugerimos um reajuste de ', 'recomendamos um reajuste de ', '% na taxa condominial'
-    fim = ' para os próximos 12 meses.'
     formula = (f'{_str_f(uso)}&IF({com["res"]}<0,{_str_f(sugere)}&{_pct_f(com["reaj"])}&{_str_f(taxa + ".")},'
                f'{_str_f(SEM_REAJUSTE + ".")})&{_str_f(meio)}&IF({sem["res"]}<0,{_str_f(recomenda)}&'
                f'{_pct_f(sem["reaj"])}&{_str_f(taxa)},{_str_f(SEM_REAJUSTE)})&{_str_f(fim)}')
@@ -409,12 +429,12 @@ def gerar_relatorio_xlsx(estado, logo_path=None, com_fundo_override=None):
         opcoes.append({'label': o['label'], 'formula': formula, 'receita': receita})
     refs = _quadro(f, opcoes, f'$F${tot}', total)
 
-    # --- Gráfico de pizza (página 2) ---
+    # --- Gráfico de barras (página 2) ---
     f.lin += 1
     quebras = [f.lin]
-    _pizza(f, ctx, linhas_despesa, f'$F${sub}', subtotal)
+    _barras(f, ctx, linhas_despesa, f'$F${sub}', subtotal)
 
-    # --- Conclusão logo depois da pizza, sem página nova, como no PDF ---
+    # --- Conclusão logo depois do gráfico, sem página nova, como no PDF ---
     no_quadro = 0
     if v['com_fundo_pref']:
         no_quadro = next((i for i, o in enumerate(v['opcoes']) if o['usa_fundo'] and '+' not in o['label']), 0)

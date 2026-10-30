@@ -6,10 +6,9 @@ RELATORIO DOCX PARA O CONDOMINIO
 Mesmo conteúdo e ordem do PDF (relatorio_pdf), editável no Word. Consome o
 contexto de `montar_contexto_relatorio`, então toda regra do relatório
 (fundo de reserva, despesas, opções) vale igual nos dois formatos.
-O gráfico de pizza entra como imagem PNG (desenhados com Pillow).
+O gráfico de barras entra como imagem PNG (desenhado com Pillow).
 """
 import io
-import math
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -19,7 +18,8 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
-from relatorio_pdf import montar_contexto_relatorio
+from relatorio_pdf import (BARRA_CONTORNO, BARRA_COR, GRADE_FORTE, GRADE_FRACA,
+                           _layout_barras, montar_contexto_relatorio)
 
 AZUL = RGBColor(0x1C, 0x35, 0x5E)
 CINZA = RGBColor(0x52, 0x51, 0x4E)
@@ -56,25 +56,28 @@ def _hex(cor):
     return tuple(int(cor[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def _png_pizza(fatias, lado=600):
-    img = Image.new('RGB', (lado, lado), 'white')
+def _png_barras(barras, escala=3):
+    """Mesmo desenho do SVG do PDF (relatorio_pdf._layout_barras)."""
+    lay = _layout_barras(barras)
+    k = lambda v: round(v * escala)
+    img = Image.new('RGB', (k(lay['largura']), k(lay['altura'])), 'white')
     d = ImageDraw.Draw(img)
-    caixa = (20, 20, lado - 20, lado - 20)
-    ini = -90.0
-    for f in fatias:
-        fim = ini + f['frac'] * 360
-        d.pieslice(caixa, ini, fim, fill=_hex(f['cor']), outline='white', width=4)
-        ini = fim
-    fonte = _fonte_img(36)
-    centro, raio = lado / 2, (lado - 40) / 2 * 0.66
-    ini = -90.0
-    for f in fatias:
-        fim = ini + f['frac'] * 360
-        if f['frac'] >= 0.08:
-            meio = math.radians((ini + fim) / 2)
-            d.text((centro + raio * math.cos(meio), centro + raio * math.sin(meio)),
-                   f'{round(f["frac"] * 100)}%', font=fonte, fill=(20, 17, 12), anchor='mm')
-        ini = fim
+    tinta = _hex('#14110c')
+    fonte, fonte_eixo = _fonte_img(k(12.5)), _fonte_img(k(12))
+    for g in lay['grade']:
+        cor = _hex(GRADE_FORTE if g['forte'] else GRADE_FRACA)
+        d.line([(k(g['x']), 0), (k(g['x']), k(lay['base']))], fill=cor, width=escala)
+        if g['forte']:
+            d.text((k(g['x']), k(lay['base'] + 18)), g['rotulo'], font=fonte_eixo, fill=tinta, anchor='mm')
+    for l in lay['linhas']:
+        if l['x_fim'] > lay['x0']:
+            d.rectangle([k(lay['x0']), k(l['y']), k(l['x_fim']), k(l['y'] + lay['altura_barra'])],
+                        fill=_hex(BARRA_COR), outline=_hex(BARRA_CONTORNO), width=max(1, k(1.2)))
+        d.text((k(l['x_fim'] + 8), k(l['meio'])), l['pct'], font=_fonte_img(k(13)), fill=tinta, anchor='lm')
+        n = len(l['rotulo'])
+        for j, t in enumerate(l['rotulo']):
+            d.text((k(lay['x0'] - 10), k(l['meio'] + (j - (n - 1) / 2) * 15)), t,
+                   font=fonte, fill=tinta, anchor='rm')
     return _png_bytes(img)
 
 
@@ -231,24 +234,12 @@ def gerar_relatorio_docx(estado, logo_path=None, com_fundo_override=None):
         c[0].merge(c[1])
         _texto(c[0].paragraphs[0], STATUS_TXT[o['status']], True, 10, STATUS_COR[o['status']])
 
-    pizza = ctx.get('pizza')
-    if pizza:
+    grafico = ctx.get('grafico')
+    if grafico:
         _titulo(doc, 'Composição das despesas')
-        t = doc.add_table(rows=1, cols=2)
-        t.autofit = False
-        a, b = t.rows[0].cells
-        a.width, b.width = Cm(6.5), Cm(10.5)
-        a.paragraphs[0].add_run().add_picture(_png_pizza(pizza['fatias']), width=Cm(5.8))
-        primeiro = True
-        for f in pizza['fatias']:
-            par = b.paragraphs[0] if primeiro else b.add_paragraph()
-            primeiro = False
-            par.paragraph_format.space_after = Pt(4)
-            _texto(par, '■ ', True, 11, RGBColor(*_hex(f['cor'])))
-            _texto(par, f'{f["label"]} — {f["frac"] * 100:.1f}%'.replace('.', ','), False, 10)
+        doc.add_paragraph().add_run().add_picture(_png_barras(grafico['barras']), width=Cm(17))
 
-
-    # Conclusão logo depois da pizza, sem página nova, como no PDF.
+    # Conclusão logo depois do gráfico, sem página nova, como no PDF.
     _titulo(doc, 'Conclusão')
     p = doc.add_paragraph()
     _texto(p, ctx['status_label'], True, 10, STATUS_COR[ctx['status_geral']])

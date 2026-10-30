@@ -76,6 +76,15 @@ class RelatorioXlsxTest(unittest.TestCase):
                 [dict(o, reajuste=r['reajuste']) for o, r in zip(opcoes, refs)]))
             self.assertEqual(texto, pdf)
             self.assertIn('FIXED(F4*100,1)', formula)
+        sem_fundo = [{'label': 'sem', 'usa_fundo': False}]
+        for res, reaj in ((-1000.0, 0.079), (300.0, 0.0)):
+            refs = [{'res': 'F1', 'reaj': 'F2', 'resultado': res, 'reajuste': reaj}]
+            formula, texto = relatorio_xlsx._texto_opcoes(sem_fundo, refs)
+            pdf = relatorio_pdf._texto_consideracao(relatorio_pdf._consideracao_opcoes(
+                [dict(sem_fundo[0], reajuste=reaj)]))
+            self.assertEqual(texto, pdf)
+            self.assertNotIn('fundo', formula)
 
-    def test_grafico_de_pizza(self):
+    def test_grafico_de_barras(self):
         self.assertEqual(len(self.ws._charts), 1)
+        self.assertEqual(self.ws._charts[0].type, 'bar')

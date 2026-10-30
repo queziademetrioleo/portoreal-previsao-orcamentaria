@@ -55,8 +55,11 @@ class RelatorioDocxTest(unittest.TestCase):
         ctx_nao = relatorio_pdf.montar_contexto_relatorio(_estado(), com_fundo_override=False)
         self.assertTrue(any('fundo de reserva' in l.lower() for l, _ in ctx_sim['receitas']))
         self.assertFalse(any('fundo de reserva' in l.lower() for l, _ in ctx_nao['receitas']))
-        self.assertFalse(any('Fundo de Reserva' in o['label'] for o in ctx_nao['opcoes']))
+        self.assertEqual([o['label'] for o in ctx_nao['opcoes']], ['Receitas'])
         self.assertFalse(any('Lembramos' in c for c in ctx_nao['consideracoes']))
+        # José 29/10/2026: sem fundo, nenhuma consideração cita o fundo de reserva
+        self.assertFalse(any('fundo de reserva' in c.lower() for c in ctx_nao['consideracoes']))
+        self.assertTrue(any('fundo de reserva' in c.lower() for c in ctx_sim['consideracoes']))
         texto = self._textos(relatorio_docx.gerar_relatorio_docx(_estado(), com_fundo_override=False))
         self.assertNotIn('Taxa de Condomínio + Fundo de Reserva', texto)
 
