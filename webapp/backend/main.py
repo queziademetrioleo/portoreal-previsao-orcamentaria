@@ -404,13 +404,39 @@ def _incluir_itens_manuais(R, itens):
         R['total_previsto'], (R.get('cenarios') or {}).get('receitas_nao_ordinarias') or [], ordinarias)
 
 
+def _impacto_partes(estado):
+    """Impacto mensal da inadimplência por receita ({'taxa', 'fundo', 'agua', 'gas'}).
+
+    Mesma conta de `impacto` (média por unidade dos valores revisados); item
+    sem partes (PDF, Condo21, Group) vai todo para a taxa. Valor editado na
+    revisão escala as partes na mesma proporção."""
+    unidades = {}
+    for item in estado.get('inadimplencia') or []:
+        if item.get('decisao') != 'abater':
+            continue
+        revisado = _valor_revisado(item)
+        partes = item.get('partes') or {'taxa': float(item.get('valor') or 0)}
+        original = sum(partes.values())
+        fator = revisado / original if abs(original) > 0.005 else 0.0
+        if abs(original) <= 0.005:
+            partes, fator = {'taxa': revisado}, 1.0
+        unidades.setdefault(item['unidade'], []).append({k: v * fator for k, v in partes.items()})
+    total = {}
+    for lista in unidades.values():
+        for partes in lista:
+            for k, v in partes.items():
+                total[k] = total.get(k, 0.0) + v / len(lista)
+    return {k: round(v, 2) for k, v in total.items() if abs(v) > 0.005}
+
+
 def _atualizar_resumo_calculado(estado, R, impacto):
     for campo in ('subtotal', 'total_previsto', 'desconsideracoes', 'receita_anual'):
         estado['resumo'][campo] = round(R.get(campo) or 0, 2)
     for campo in ('prov_laudo', 'prov_incendio'):  # resto de sessões antigas
         estado['resumo'].pop(campo, None)
     estado['resumo'].update(receita_mensal=round((R.get('receita_anual') or 0) / 12, 2),
-        impacto_receita_mensal=round(impacto, 2), cenarios=R.get('cenarios'), inflacao=R.get('inflacao_pct', core.INFLACAO))
+        impacto_receita_mensal=round(impacto, 2), impacto_receita_partes=_impacto_partes(estado),
+        cenarios=R.get('cenarios'), inflacao=R.get('inflacao_pct', core.INFLACAO))
     estado['linhas_contas'] = [{**l, 'monthly': []} for l in R['linhas']]
     estado['previsao_final'] = []
 
@@ -493,6 +519,10 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
                 'decisao': 'abater',
                 'ultima_parcela': it.get('mes_ref', ''),
                 'regra_inad': it.get('regra_inad'),
+                # FIN00801: valor por receita (taxa, fundo, água, gás), cada
+                # parte sai da sua linha no relatório (José Henrique, 04/11/2026).
+                **({'partes': it['partes'], 'fora_do_abatimento': it.get('fora_do_abatimento') or {}}
+                   if it.get('partes') else {}),
             })
 
     linhas = [{
@@ -800,8 +830,9 @@ async def _validar_e_registrar(
         extension = '.xlsx' if origem_sistema == 'group' and not selecionados else os.path.splitext(ARQUIVOS_ESPERADOS[chave])[1]
         group_file = chave.startswith('group_') or (origem_sistema == 'group' and not selecionados)
         extensions = ('.xls', '.xlsx') if group_file else (extension,)
-        if chave == 'alma_rec':
-            # Um OU outro: Contas a receber (PDF) ou Rateio por Unidade (XLSX).
+        if chave in ('alma_rec', 'alma_inad'):
+            # Um OU outro: Contas a receber (PDF) ou Rateio por Unidade (XLSX);
+            # inadimplência em PDF ou FIN00801 (XLSX). O conteúdo decide.
             extensions = ('.pdf', '.xlsx')
         if not up.filename or not up.filename.lower().endswith(extensions):
             if extension == '.xls' and up.filename and up.filename.lower().endswith('.xlsx'):

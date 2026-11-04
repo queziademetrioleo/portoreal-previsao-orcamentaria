@@ -77,8 +77,9 @@ def month(value):
 
 def read(path):
     rows = read_rows(path)
+    # "Cond. Ed. X", "Condomínio X" ou "COND X" (Cidade de Cabo Frio, 11/2026).
     names = [str(row[0]).strip() for row in rows if row and
-             norm(row[0]).startswith(('cond.', 'condominio '))]
+             re.match(r'(cond\.|cond |condominio )', norm(row[0]))]
     if not names:
         raise ValueError(f'Group: condomínio não identificado em {Path(path).name}.')
     return rows, names[0]

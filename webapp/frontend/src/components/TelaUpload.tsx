@@ -342,7 +342,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       <FileZone label="Por período agrupado por contas (PDF)" file={almaBal} setFile={setAlmaBal} accept=".pdf" required />
                       <FileZone label="FIN00601 — despesas detalhadas (XLSX)" file={almaFin} setFile={setAlmaFin} accept=".xlsx" required />
                       <FileZone label="Contas a receber agrupado por conta (PDF) ou Rateio por Unidade (XLSX)" file={almaRec} setFile={setAlmaRec} accept=".pdf,.xlsx" required />
-                      {!semInadAlma && <FileZone label="Inadimplência Alma (PDF)" file={almaInad} setFile={setAlmaInad} accept=".pdf" required />}
+                      {!semInadAlma && <FileZone label="Inadimplência Alma (FIN00801 XLSX)" file={almaInad} setFile={setAlmaInad} accept=".xlsx,.pdf" required />}
                     </div>
                     <label className="form-hint" style={{ display: 'flex', gap: 'var(--s-sm)', alignItems: 'center', marginTop: 'var(--s-md)' }}>
                       <input type="checkbox" checked={semInadAlma} onChange={(e) => {
@@ -351,7 +351,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       }} />
                       Não há inadimplência no Alma
                     </label>
-                    <p className="form-hint">Inadimplente é quem deve os dois meses anteriores ao do relatório do Alma (ex.: relatório de outubro → setembro e agosto); abatemos um boleto inteiro (taxa, fundo e água).</p>
+                    <p className="form-hint">Inadimplente é quem deve os dois meses anteriores ao do relatório do Alma (ex.: relatório de outubro → setembro e agosto); abatemos o boleto mais recente, cada receita da sua linha (taxa, fundo, água, gás; sem multa, juros, acordo ou taxa extra). Envie o FIN00801; o PDF antigo ainda é aceito, mas abate o boleto todo da taxa.</p>
                   </section>
               )}
               <Button

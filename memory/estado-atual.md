@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 03/11/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 04/11/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -34,7 +34,7 @@ IA classifica lançamentos ambíguos; aritmética é determinística; humano rev
 - **Condo21 sozinho**: `balanual.xls`, `desbai06.xls`, `rec02.xls` obrigatórios; `dessin02.xls`, `inad01.xls` opcionais.
 - **Group sozinho**: balancete anual, despesas detalhadas, receitas por unidade; inadimplência detalhada opcional.
 - **Alma**: FIN00601 (XLSX despesas; Status opcional), Por período agrupado por contas (PDF), Contas a receber agrupado
-  por conta (PDF) **ou** Rateio por Unidade (XLSX), Inadimplência (PDF) ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
+  por conta (PDF) **ou** Rateio por Unidade (XLSX), Inadimplência **FIN00801 (XLSX, preferido)** ou PDF antigo, ou checkbox "sem inadimplência". Plano de contas Alma é interno (`data/plano_contas_alma.json`).
 - **Com o Alma no conjunto, o Alma prevalece**: Condo21 envia só `desbai06`; Group só despesas detalhadas.
   Receita atual e inadimplência vêm só do Alma. Demonstrativo do sistema anterior = soma dos pagamentos
   (`parsers_alma.balance_from_payments`). Alma ocupa os meses recentes, o outro sistema os anteriores;
@@ -61,7 +61,20 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (03/11/2026) — áudio José 03/11 (Cidade de Cabo Frio, FIN Alma)
+## Último trabalho (04/11/2026) — áudios José 04/11 (Cidade de Cabo Frio, Group + Alma)
+
+- **Group recusado** "condomínio não identificado em group_des.xlsx" (protocolo `e6860cc7eaf2`): o arquivo traz
+  "COND CIDADE DE CABO FRIO" (sem ponto). `parsers_group.read` aceita `cond.`, `cond ` e `condominio `. Com os arquivos
+  reais: Group nov/25–abr/26, Alma mai–out/26 (o Alma já repete os pagamentos Group de mai–jul; divisão automática ok).
+- **Inadimplência por receita (FIN00801)**: José pediu parar de usar o PDF (soma taxa, fundo, taxa extra… num valor só e
+  tira tudo da receita). Novo `parsers_alma.read_arrears_fin` (mesmo campo `alma_inad`, formato pelo conteúdo; aceita
+  .xlsx/.pdf). Regra de quem entra não mudou (deve os 2 meses anteriores; mês do relatório = data de exportação do XLSX).
+  Item leva `partes` {taxa, fundo, agua, gas}; `main._impacto_partes` → `resumo.impacto_receita_partes`; o relatório
+  tira cada parte da sua linha, o fundo só do cenário com fundo. Cabo Frio: só a 410 (set+out) → taxa R$ 1.272,46 +
+  fundo R$ 127,25 = R$ 1.399,71/mês (o PDF dava R$ 1.522,00 com taxa extra e complemento). Testes em `test_inad_fin00801.py`.
+- Sessões antigas/PDF: item sem partes = tudo na taxa (igual antes).
+
+## Trabalho de 03/11/2026 — áudio José 03/11 (Cidade de Cabo Frio, FIN Alma)
 
 - Upload recusado com "FIN Almah: pagamento sem Data Pagto na linha 4" (protocolo `06998ea742e0`). O FIN COM coluna
   Status traz pagamento com multa/juros dividido: linha "Pago" sem data → linhas MULTA/JUROS sem Status → linha
@@ -230,7 +243,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Rebuild no EasyPanel** (tudo de 21/10 a 03/11 está no GitHub, `c34ea0f`). José reenvia Cidade de Cabo Frio após o rebuild. Depois: gerar de novo o relatório do Chateau
+0. **Push + rebuild no EasyPanel** (04/11 só local até a usuária autorizar o push). José reenvia Cidade de Cabo Frio com a Group e o
+   FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
    Propostas em aberto (usuária ainda não decidiu): alerta na revisão quando seguro previsto ficar muito abaixo do pago

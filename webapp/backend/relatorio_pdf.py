@@ -654,15 +654,36 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     if not com_fundo_pref:
         receitas = [(l, v) for l, v in receitas
                     if not ('fundo' in _norm(l) and 'reserva' in _norm(l))]
-    # A inadimplência considerada sai da Taxa de Condomínio (e de toda receita
-    # usada nos cenários/reajuste) — feedback José Henrique 09/2026: o texto
-    # dizia "subtraímos" mas a tabela mostrava a receita cheia.
+    # A inadimplência considerada sai da receita (feedback José Henrique 09/2026:
+    # o texto dizia "subtraímos" mas a tabela mostrava a receita cheia). Com o
+    # FIN00801 cada parte sai da sua linha: taxa da Taxa de Condomínio, fundo do
+    # Fundo de Reserva, água/gás das linhas deles (José Henrique, 04/11/2026).
     impacto_inad_mensal = float(impacto_inad_mensal or 0)
-    if impacto_inad_mensal > 0.005:
-        pos_taxa = next((i for i, (l, _) in enumerate(receitas)
-                         if _norm(l) == _norm('Taxas de Condomínio')), 0)
-        label_taxa, valor_taxa = receitas[pos_taxa]
-        receitas[pos_taxa] = (label_taxa, valor_taxa - impacto_inad_mensal)
+    partes_inad = {k: float(v) for k, v in (resumo.get('impacto_receita_partes') or {}).items()}
+    if not partes_inad and impacto_inad_mensal > 0.005:
+        partes_inad = {'taxa': impacto_inad_mensal}  # sessões anteriores / PDF
+    inad_fundo = partes_inad.get('fundo', 0.0) if com_fundo_pref else 0.0
+    # Sem fundo no relatório, o fundo inadimplente não reduz nenhuma receita mostrada.
+    inad_sem_fundo = sum(v for k, v in partes_inad.items() if k != 'fundo')
+
+    def _pos_receita(teste):
+        return next((i for i, (l, _) in enumerate(receitas) if teste(_norm(l))), None)
+
+    pos_taxa = _pos_receita(lambda l: l == _norm('Taxas de Condomínio'))
+    alvos = {
+        'taxa': pos_taxa,
+        'fundo': _pos_receita(lambda l: 'fundo' in l and 'reserva' in l),
+        'agua': _pos_receita(lambda l: re.search(r'\bagua\b', l)),
+        'gas': _pos_receita(lambda l: re.search(r'\bgas\b', l)),
+    }
+    for parte, valor in partes_inad.items():
+        if valor <= 0.005 or (parte == 'fundo' and not com_fundo_pref) or not receitas:
+            continue
+        pos = alvos.get(parte)
+        if pos is None:
+            pos = pos_taxa if pos_taxa is not None else 0
+        label, atual = receitas[pos]
+        receitas[pos] = (label, atual - valor)
     receitas = _normalizar_receitas_pdf(receitas)
     despesas = _consolidar_despesas_relatorio(
         linhas, resumo, estado.get('lancamentos_contas'))
@@ -670,8 +691,10 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
     grupos = _grupos_despesas_relatorio(despesas)
     total_grupo = sum(g['value'] for g in grupos)
 
-    receita_anual_com = (com_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
-    receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - impacto_inad_mensal * 12
+    receita_anual_com = (com_fundo.get('receita_anual') or 0) - (inad_sem_fundo + inad_fundo) * 12
+    receita_anual_sem = (sem_fundo.get('receita_anual') or 0) - inad_sem_fundo * 12
+    if fundo_reserva_anual > 0.005:
+        fundo_reserva_anual -= inad_fundo * 12
     resultado_com = receita_anual_com - total_previsto
     resultado_sem = receita_anual_sem - total_previsto
     opcoes = _opcoes_receita(receita_anual_sem, fundo_reserva_anual, nao_ordinarias, total_previsto)
@@ -707,7 +730,9 @@ def montar_contexto_relatorio(estado, logo_path=None, com_fundo_override=None):
         plural = 'da' if unidades_inad == 1 else 'das'
         consideracoes.append(
             f'Consideramos para esta previsão a inadimplência de {unidades_inad} unidade(s), ou seja, '
-            f'subtraímos {plural} receita mensal os valores das taxas condominiais dessa(s) unidade(s).'
+            f'subtraímos {plural} receita mensal os valores das taxas condominiais'
+            + (' e do fundo de reserva' if inad_fundo > 0.005 else '')
+            + ' dessa(s) unidade(s).'
         )
 
     conservacao_itens = _componentes_conservacao(linhas, resumo)

@@ -98,6 +98,135 @@ def group_name(name):
     return aliases.get(norm(name), name)
 
 
+# FIN00801: cada receita do boleto sai da sua própria linha de receita
+# (José Henrique, 04/11/2026). Fora: multa, juros, acordo, taxa extra,
+# complemento e fundo de obras — não compõem a receita ordinária.
+PARTES_INAD = {'taxa': 'Taxa de condomínio', 'fundo': 'Fundo de reserva', 'agua': 'Água', 'gas': 'Gás'}
+
+
+def _parte_inadimplencia(receita):
+    text = norm(receita)
+    if 'complemento' in text or 'extra' in text:
+        return None
+    if text.startswith(('taxa de condominio', 'taxa condominial', 'cota condominial', 'tx. condominio', 'tx condominio')):
+        return 'taxa'
+    if text.startswith('fundo de reserva'):
+        return 'fundo'
+    if re.search(r'\bagua\b', text):
+        return 'agua'
+    if re.search(r'\bgas\b', text):
+        return 'gas'
+    return None
+
+
+def _arrears_window(base):
+    end_day = base.replace(day=1) - dt.timedelta(days=1)
+    end = end_day.strftime('%Y-%m')
+    prev = (end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%Y-%m')
+    return prev, end
+
+
+def read_arrears_fin(path):
+    """FIN00801 (Contas a Receber, XLSX): mesma regra do PDF de inadimplência
+    (deve os dois meses anteriores ao mês do relatório → abate o boleto mais
+    recente), mas o boleto vem separado por receita, então o abatimento sai
+    de cada receita: taxa da taxa, fundo do fundo, água da água, gás do gás.
+    Mês do relatório = data de exportação gravada no arquivo."""
+    with open(path, 'rb') as source:
+        wb = openpyxl.load_workbook(source, data_only=True)
+    try:
+        rows = [tuple(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+        created = wb.properties.created
+    finally:
+        wb.close()
+    head = next((i for i, r in enumerate(rows)
+                 if {'receita', 'status', 'vencimento', 'unidade'} <= {norm(c) for c in r if c}), None)
+    if head is None:
+        raise ValueError('Inadimplência Almah (FIN00801): cabeçalho com Unidade, Status, Vencimento e Receita não encontrado.')
+    col = {norm(c): i for i, c in enumerate(rows[head]) if c}
+
+    def cell(row, name):
+        i = col.get(name)
+        return row[i] if i is not None and i < len(row) else None
+
+    def as_date(value):
+        if isinstance(value, dt.datetime):
+            return value.date()
+        if isinstance(value, dt.date):
+            return value
+        return dt.datetime.strptime(str(value).strip(), '%d/%m/%Y').date()
+
+    boletos, current = [], None
+    for row_no, row in enumerate(rows[head + 1:], head + 2):
+        receita = cell(row, 'receita')
+        if cell(row, 'status'):
+            try:
+                due = as_date(cell(row, 'vencimento'))
+            except (TypeError, ValueError):
+                raise ValueError(f'Inadimplência Almah (FIN00801): vencimento ilegível na linha {row_no}.')
+            unit = ' '.join(str(v).strip() for v in (cell(row, 'bloco'), cell(row, 'unidade')) if v)
+            doc = str(cell(row, 'doc/descricao') or '')
+            competence = MONTH.search(doc)
+            current = {'unidade': unit, 'vencimento': due, 'linha': row_no,
+                       'mes': month_key(competence[1]) if competence else due.strftime('%Y-%m'),
+                       'status': norm(cell(row, 'status')), 'partes': defaultdict(float),
+                       'fora': defaultdict(float), 'pago': 0.0}
+            boletos.append(current)
+        if current is None or not receita:
+            continue
+        if norm(receita) == 'total':
+            current['pago'] += number(cell(row, 'valor pago') or 0)
+            current = None
+            continue
+        value = number(cell(row, 'valor') or 0)
+        part = _parte_inadimplencia(receita)
+        (current['partes'] if part else current['fora'])[part or str(receita).strip()] += value
+    if not boletos and not any(norm(cell(r, 'receita')) == 'total' for r in rows[head + 1:]):
+        raise ValueError('Inadimplência Almah (FIN00801): nenhum boleto reconhecido; envie o relatório exportado do Almah.')
+
+    if isinstance(created, dt.datetime):
+        base = created.date()
+    elif boletos:  # sem data de exportação: mês seguinte ao último vencimento
+        last = max(b['vencimento'] for b in boletos)
+        base = (last.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+    else:
+        base = dt.date.today()
+    prev, end = _arrears_window(base)
+    window = {prev, end}
+    owed, latest = defaultdict(set), {}
+    for b in boletos:
+        total = sum(b['partes'].values()) + sum(b['fora'].values())
+        if b['mes'] not in window or b['vencimento'] > base or total - b['pago'] <= 0.005:
+            continue
+        if sum(b['partes'].values()) <= 0.005:
+            continue  # boleto só de acordo/taxa extra não conta
+        owed[b['unidade']].add(b['mes'])
+        if b['unidade'] not in latest or latest[b['unidade']]['mes'] < b['mes']:
+            latest[b['unidade']] = b
+    items = []
+    for unit, b in latest.items():
+        if owed[unit] != window:
+            continue
+        partes = {k: round(v, 2) for k, v in b['partes'].items() if abs(v) > 0.005}
+        valor = round(sum(partes.values()), 2)
+        items.append({'unidade': unit, 'taxa_condominio': True,
+                      'classe': 'Boleto: ' + ' + '.join(PARTES_INAD[k].lower() if i else PARTES_INAD[k]
+                                                         for i, k in enumerate(k for k in PARTES_INAD if k in partes)),
+                      'partes': partes, 'fora_do_abatimento': {k: round(v, 2) for k, v in b['fora'].items()},
+                      'mes_ref': month_label(b['mes']), 'vencimento': b['vencimento'], 'valor': valor,
+                      'valor_original_titulo': valor, 'proj_rec': valor,
+                      'meses_atraso': 1 if b['mes'] == end else 2, 'critica': True,
+                      'regra_inad': 'misto_ultimos_2_meses_alma', 'sistema': 'alma',
+                      'arquivo': Path(path).name, 'linha': b['linha']})
+    total = round(sum(i['valor'] for i in items), 2)
+    return {'total': total, 'critica': total, 'recente': 0.0, 'data_base': base,
+            'itens': items, 'unidades_criticas': len(items),
+            'unidades_criticas_detalhe': {i['unidade']: {'impacto': i['valor'],
+                'tx_mensal_media': i['valor'], 'meses_consecutivos': i['meses_atraso']} for i in items},
+            'impacto_mensal_receita': total, 'meses_considerados': [month_label(prev), month_label(end)],
+            'regra': 'misto_ultimos_2_meses_alma', 'formato': 'fin00801'}
+
+
 def read_arrears(path):
     """Inadimplente = deve os DOIS meses anteriores ao mês do relatório.
 
@@ -107,6 +236,13 @@ def read_arrears(path):
     taxas que ela deixa de pagar (José Henrique, 10/2026). Assim não depende
     do REC do sistema anterior para a taxa individual.
     """
+    try:
+        with open(path, 'rb') as handle:
+            fin00801 = handle.read(4) == b'PK\x03\x04'  # FIN00801 (XLSX), mesmo campo do PDF
+    except OSError:
+        fin00801 = False
+    if fin00801:
+        return read_arrears_fin(path)
     lines = pdf_lines(path)
     text = '\n'.join(line for _, line in lines)
     match = re.search(r'Boletos em\s+(\d{2}/\d{2}/\d{4})', text)
