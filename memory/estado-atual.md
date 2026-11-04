@@ -243,7 +243,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Push + rebuild no EasyPanel** (04/11 só local até a usuária autorizar o push). José reenvia Cidade de Cabo Frio com a Group e o
+0. **Rebuild no EasyPanel** (tudo até 04/11 no GitHub, `964353f`). José reenvia Cidade de Cabo Frio com a Group e o
    FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
