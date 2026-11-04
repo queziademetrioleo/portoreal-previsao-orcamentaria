@@ -69,7 +69,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   as partes herdam data/fornecedor do TOTAL e o Status da linha principal; multa e juros entram como pagamento
   (grupo vem do demonstrativo, como qualquer conta Alma). Lançamento em aberto com partes fica fora.
   Arquivo real: 4 pagamentos assim (linhas 4, 7, 48, 194); 213 pagamentos, total R$ 421.106,87 = total do relatório.
-  Teste novo em `test_mixed_import.py`. Commit local; **falta push + rebuild**, depois o José reenvia.
+  Teste novo em `test_mixed_import.py`. No GitHub em 03/11 (c34ea0f); **falta rebuild no EasyPanel**, depois o José reenvia.
 
 ## Trabalho de 30/10/2026 — áudio José 29/10 (condomínio sem fundo de reserva)
 
@@ -227,7 +227,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Push + rebuild no EasyPanel** (21–30/10 no GitHub; 03/11 só local). José reenvia Cidade de Cabo Frio após o rebuild. Depois: gerar de novo o relatório do Chateau
+0. **Rebuild no EasyPanel** (tudo de 21/10 a 03/11 está no GitHub, `c34ea0f`). José reenvia Cidade de Cabo Frio após o rebuild. Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
    Propostas em aberto (usuária ainda não decidiu): alerta na revisão quando seguro previsto ficar muito abaixo do pago
