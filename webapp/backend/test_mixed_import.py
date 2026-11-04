@@ -133,6 +133,30 @@ class MixedImportTest(unittest.TestCase):
                          [(267.68, dt.date(2026, 8, 18), 'FENIX'), (176.52, dt.date(2026, 8, 18), 'FENIX')])
         self.assertAlmostEqual(sum(i['valor_pago'] for i in items), 495.27)
 
+    def test_fin_with_status_split_payment_with_fine_and_interest(self):
+        """Cidade de Cabo Frio: "Pago" sem data + MULTA/JUROS sem Status + TOTAL com data."""
+        wb = MagicMock()
+        wb.active.values = iter([
+            ('Despesa', 'Valor Pago', 'Data Pagto', 'Fornecedor', 'Status'),
+            ('CONTRATO DE MANUTENÇÃO DA E.T.A.', '457,00', '', '', 'Pago Recorrente 0008'),
+            ('MULTA', '9,14', '', '', ''),
+            ('JUROS', '1,52', '', '', ''),
+            ('TOTAL', '467,66', '11/06/2026', 'CICLO DAGUA', ''),
+            ('TAXAS', '50,00', '', '', 'Aberto'),
+            ('MULTA', '1,00', '', '', ''),
+            ('TOTAL', '51,00', '', '', ''),
+            ('SALÁRIO', '932,00', '29/10/2026', 'WEDISON', 'Pago'),
+            ('Total', '1.399,66', '', '', ''),
+        ])
+        with patch.object(alma.openpyxl, 'load_workbook', return_value=wb):
+            items = alma.read_fin('FIN.xlsx', {}, {})
+        self.assertEqual([(i['classe'], i['valor_pago'], i['data'], i['fornecedor']) for i in items[:3]],
+                         [('CONTRATO DE MANUTENÇÃO DA E.T.A.', 457.0, dt.date(2026, 6, 11), 'CICLO DAGUA'),
+                          ('MULTA', 9.14, dt.date(2026, 6, 11), 'CICLO DAGUA'),
+                          ('JUROS', 1.52, dt.date(2026, 6, 11), 'CICLO DAGUA')])
+        self.assertEqual(items[1]['status'], 'Pago Recorrente 0008')
+        self.assertEqual(len(items), 4)  # lançamento em aberto e suas partes ficam fora
+
     def test_paid_fin_row_without_payment_date_is_rejected(self):
         wb = MagicMock()
         wb.active.values = iter([

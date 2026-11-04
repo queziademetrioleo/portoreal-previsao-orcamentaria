@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 30/10/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 03/11/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -61,7 +61,17 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (30/10/2026) — áudio José 29/10 (condomínio sem fundo de reserva)
+## Último trabalho (03/11/2026) — áudio José 03/11 (Cidade de Cabo Frio, FIN Alma)
+
+- Upload recusado com "FIN Almah: pagamento sem Data Pagto na linha 4" (protocolo `06998ea742e0`). O FIN COM coluna
+  Status traz pagamento com multa/juros dividido: linha "Pago" sem data → linhas MULTA/JUROS sem Status → linha
+  "TOTAL" com data e fornecedor. `read_fin` agora trata igual ao pagamento dividido do Forte Way (sem Status):
+  as partes herdam data/fornecedor do TOTAL e o Status da linha principal; multa e juros entram como pagamento
+  (grupo vem do demonstrativo, como qualquer conta Alma). Lançamento em aberto com partes fica fora.
+  Arquivo real: 4 pagamentos assim (linhas 4, 7, 48, 194); 213 pagamentos, total R$ 421.106,87 = total do relatório.
+  Teste novo em `test_mixed_import.py`. Commit local; **falta push + rebuild**, depois o José reenvia.
+
+## Trabalho de 30/10/2026 — áudio José 29/10 (condomínio sem fundo de reserva)
 
 - **Sem fundo no relatório, nenhuma consideração cita o fundo** (PDF/DOCX/XLSX): sai a de suficiência ("sem utilizar o
   Fundo de Reserva… suficiente") e o reajuste vira só "Recomendamos um reajuste de Y% na taxa condominial para os
@@ -217,7 +227,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Rebuild no EasyPanel** (tudo de 21–29/10 está no GitHub, `7cc31b3`). Depois: gerar de novo o relatório do Chateau
+0. **Push + rebuild no EasyPanel** (21–30/10 no GitHub; 03/11 só local). José reenvia Cidade de Cabo Frio após o rebuild. Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
    Propostas em aberto (usuária ainda não decidiu): alerta na revisão quando seguro previsto ficar muito abaixo do pago

@@ -282,9 +282,15 @@ def read_fin(path, plan, pdf_accounts):
                       'tipo_pgto': str(source_get('forma pgto.') or ''),
                       'valor_lcto': number(row_get('valor')), 'valor_pago': number(row_get('valor pago')),
                       'documento': str(source_get('doc') or ''), 'parcela': str(row_get('parcela') or ''),
-                      'status': str(row_get('status') or ''), 'sistema': 'alma',
+                      'status': str(row_get('status') or (split_parts[0][1]('status') if split_parts else '') or ''),
+                      'sistema': 'alma',
                       'arquivo': Path(path).name, 'linha': index,
                       'classificacao_pendente': group == 'Classes a revisar'})
+
+    # Com Status (Cidade de Cabo Frio, 11/2026): pagamento com multa/juros vem
+    # assim — linha "Pago" sem data, linhas MULTA/JUROS sem Status e a linha
+    # "TOTAL" com data e fornecedor. Multa e juros entram como pagamento.
+    skipping_group = False  # partes de um lançamento não pago
 
     for index, row in enumerate(rows[1:], 2):
         def get(name, row=row):
@@ -298,18 +304,30 @@ def read_fin(path, plan, pdf_accounts):
                 for part_account, part_get, part_index in split_parts:
                     add_item(part_account, part_get, get, parse_date(get('data pagto')), part_index)
                 split_parts = []
+            elif skipping_group:
+                pass
             else:
                 report_total = number(get('valor pago'))
+            skipping_group = False
             continue
         if not account:
             continue
-        paid = norm(get('status')).startswith('pago') if has_status else True
+        status = norm(get('status')) if has_status else ''
+        continuation = has_status and not status
+        if continuation:
+            if split_parts:
+                split_parts.append((account, get, index))
+            continue
+        if has_status and split_parts:
+            raise ValueError(f'FIN Almah: pagamento sem Data Pagto na linha {split_parts[0][2]}.')
+        skipping_group = False
+        paid = status.startswith('pago') if has_status else True
         date = get('data pagto')
         if not date:
-            if has_status and paid:
-                raise ValueError(f'FIN Almah: pagamento sem Data Pagto na linha {index}.')
-            if not has_status:
+            if paid:
                 split_parts.append((account, get, index))
+            else:
+                skipping_group = True
             continue
         if not paid:
             continue
