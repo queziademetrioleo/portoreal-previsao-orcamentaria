@@ -31,8 +31,10 @@ export default function App() {
       }
 
       throw new Error(`Erro ${r.status}`)
-    } catch {
-      alert('Erro ao carregar sessao. Tente novamente.')
+    } catch (e) {
+      // Mostra o motivo do servidor (ex.: upload recusado → "Envie novamente").
+      const motivo = e instanceof Error && !e.message.startsWith('Erro ') ? e.message : ''
+      alert(motivo || 'Erro ao carregar sessão. Tente novamente.')
     }
   }
 

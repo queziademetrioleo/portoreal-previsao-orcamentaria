@@ -36,8 +36,11 @@ export default function ListaSessoes({ onNova, onAbrir }: Props) {
   }
 
   // Só o selo "Gerado"; "Em revisão" foi retirado a pedido da usuária (23/10/2026).
-  const statusBadge = (status: string) =>
-    status === 'gerado' ? <Badge label="Gerado" variant="success" /> : null
+  // Upload recusado na validação fica no banco como protocolo; não abre (11/2026).
+  const statusBadge = (s: SessaoResumida) =>
+    s.etapa === 'erro_validacao' || s.etapa === 'recebido'
+      ? <Badge label="Recusado — envie novamente" variant="danger" />
+      : s.status === 'gerado' ? <Badge label="Gerado" variant="success" /> : null
 
   return (
     <>
@@ -86,7 +89,7 @@ export default function ListaSessoes({ onNova, onAbrir }: Props) {
                 </button>
                 <h3>{s.nome}</h3>
                 <p>Previsão {s.ano}</p>
-                {statusBadge(s.status)}
+                {statusBadge(s)}
                 <time>
                   {new Date(s.criado_em).toLocaleDateString('pt-BR')}
                 </time>

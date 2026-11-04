@@ -195,6 +195,7 @@ export interface SessaoResumida {
   ano: number
   criado_em: string
   status: string
+  etapa?: string | null
 }
 
 export async function deletarSessao(sid: string): Promise<void> {

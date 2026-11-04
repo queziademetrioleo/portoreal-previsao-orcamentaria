@@ -70,6 +70,9 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   (grupo vem do demonstrativo, como qualquer conta Alma). Lançamento em aberto com partes fica fora.
   Arquivo real: 4 pagamentos assim (linhas 4, 7, 48, 194); 213 pagamentos, total R$ 421.106,87 = total do relatório.
   Teste novo em `test_mixed_import.py`. No GitHub em 03/11 (c34ea0f); **falta rebuild no EasyPanel**, depois o José reenvia.
+- **Envio recusado na lista (usuária 03/11):** clicar nele dava "Erro ao carregar sessão" (sem estado → reanalisar →
+  409). Agora a lista mostra o selo "Recusado — envie novamente" (`etapa` em `/api/sessoes`) e o alerta mostra o
+  motivo do servidor. Envio recusado nunca é reanalisado: corrigir e enviar de novo (protocolo novo).
 
 ## Trabalho de 30/10/2026 — áudio José 29/10 (condomínio sem fundo de reserva)
 

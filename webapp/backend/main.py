@@ -1050,6 +1050,7 @@ def listar_sessoes():
         'ano': s['ano_previsao'],
         'criado_em': str(s['criado_em']),
         'status': s.get('status', 'em_revisao'),
+        'etapa': s.get('etapa'),
     } for s in sessoes]
 
 

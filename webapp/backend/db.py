@@ -166,7 +166,7 @@ def listar_sessoes():
     conn = get_conn()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, nome_condominio, ano_previsao, criado_em, status FROM sessoes ORDER BY criado_em DESC LIMIT 50")
+        cur.execute("SELECT id, nome_condominio, ano_previsao, criado_em, status, etapa FROM sessoes ORDER BY criado_em DESC LIMIT 50")
         return cur.fetchall()
     finally:
         conn.close()
