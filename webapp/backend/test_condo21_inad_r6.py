@@ -49,18 +49,50 @@ class InadimplenciaCondo21(unittest.TestCase):
         self.assertIn('1-101', core._unidades_criticas_condo21(meses, itens, datetime.date(2026, 2, 3)))
 
 
-class R6MediaUltimos3Meses(unittest.TestCase):
-    def test_mes_zero_com_parcela_dobrada_no_seguinte(self):
-        # Contrato Serasa Prainha: jul 116,19, ago 113,54, set 0, out 230,48
-        media = core._media_ultimos_3_meses([113.54, 0, 115.92 + 117.10 + 118.23, 116.19, 113.54, 0, 230.48])
-        self.assertAlmostEqual(media, (113.54 + 0 + 230.48) / 3, places=2)
-        self.assertAlmostEqual(round(media * 12, 2), 1376.08, places=2)
+class R6ParcelaVigente(unittest.TestCase):
+    """José 05/11/2026: parcela vigente = último pagamento ÷ meses que ele cobre."""
+
+    def test_parcela_atrasada_paga_em_dobro(self):
+        # Contrato Serasa Prainha: set 0, out 230,48 (2 parcelas) → 115,24 (conta do José)
+        serie = [103.71, 113.54, 113.54, 113.54, 113.54, 0, 0, 351.25, 116.19, 113.54, 0, 230.48]
+        self.assertAlmostEqual(core._media_ultimos_3_meses(serie), 115.24, places=2)
+
+    def test_tres_parcelas_juntas(self):
+        self.assertAlmostEqual(core._media_ultimos_3_meses([113.54, 0, 0, 351.25]), 117.08, places=2)
+
+    def test_reajuste_no_ultimo_mes_vale_a_parcela_nova(self):
+        # Taxa de Administração Prainha: 2.875 → 3.070 em out (média de 3 meses dava 2.940)
+        self.assertAlmostEqual(core._media_ultimos_3_meses([2875.0] * 11 + [3070.0]), 3070.0)
 
     def test_mes_ainda_sem_pagamento_no_fim_fica_fora(self):
-        self.assertAlmostEqual(core._media_ultimos_3_meses([100, 100, 100, 0]), 100)
+        self.assertAlmostEqual(core._media_ultimos_3_meses([100, 100, 120, 0]), 120)
+
+    def test_pagamento_unico_no_ano_nao_e_dividido(self):
+        self.assertAlmostEqual(core._media_ultimos_3_meses([0, 0, 0, 450]), 450)
 
     def test_sem_pagamento(self):
         self.assertEqual(core._media_ultimos_3_meses([0, 0]), 0.0)
+
+
+class InadimplenciaCondo21FundoNaTela(unittest.TestCase):
+    """José 05/11/2026: unidade inadimplente abate a taxa E o fundo de reserva do mês."""
+
+    def test_taxa_e_fundo_do_ultimo_mes(self):
+        import main
+        itens = []
+        for m in ('08/2026', '09/2026', '10/2026'):
+            itens += [{'unidade': '4-101', 'classe': 'Tx. Condomínio', 'mes_ref': m, 'vencimento': None,
+                       'valor': 764.03, 'meses_atraso': 3, 'critica': True},
+                      {'unidade': '4-101', 'classe': 'Fundo Reserva', 'mes_ref': m, 'vencimento': None,
+                       'valor': 76.40, 'meses_atraso': 3, 'critica': True},
+                      {'unidade': '4-101', 'classe': 'Taxa Extra', 'mes_ref': m, 'vencimento': None,
+                       'valor': 260.0, 'meses_atraso': 3, 'critica': True}]
+        estado = {'inadimplencia': main._itens_inadimplencia_tela({'itens': itens})}
+        self.assertEqual(len(estado['inadimplencia']), 1)
+        item = estado['inadimplencia'][0]
+        self.assertEqual(item['partes'], {'taxa': 764.03, 'fundo': 76.40})
+        self.assertAlmostEqual(item['valor'], 840.43)
+        self.assertEqual(main._impacto_partes(estado), {'taxa': 764.03, 'fundo': 76.4})
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 04/11/2026 (noite).
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 05/11/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -61,14 +61,24 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (04/11/2026, noite) — 3 áudios José 04/11 (Cond. Ed. Prainha `790376c4780b`, Condo21)
+## Último trabalho (05/11/2026) — 2 áudios José 05/11 (Prainha `790376c4780b`, Condo21)
+
+- **Inadimplência Condo21 abate também o fundo de reserva:** só a taxa (764,03) saía; o fundo (76,40) da unidade
+  ficava na receita. `main._itens_inadimplencia_tela` (extraída de `_montar_estado`) junta o Fundo Reserva do mesmo
+  mês e unidade como `partes` {taxa, fundo} — o relatório já tira cada parte da sua linha. Prainha: 3 × 840,43 →
+  taxa R$ 2.292,09 + fundo R$ 229,20/mês. Alma/Group não mudam.
+- **R6 = parcela vigente × 12** (José não sabia a regra e pediu uma ideia; a dele: última parcela, dividida se pagou
+  atrasada junto): último pagamento ÷ meses que cobre. Prainha: Contrato 115,24 (= José); **Tx. Administração passa
+  de 2.940 (média) para 3.070/mês** (reajuste de out). Vale p/ todos os condomínios (ex.: `dda8028ab309` 1.481 → 1.502).
+- Testes em `test_condo21_inad_r6.py`. Commit local; **falta push + rebuild**; depois reanalisar a Prainha (os itens
+  de inadimplência são montados na análise, o recalcular do cache não refaz).
+
+## Trabalho anterior (04/11/2026, noite) — 3 áudios José 04/11 (Cond. Ed. Prainha `790376c4780b`, Condo21)
 
 - **Inadimplência Condo21:** a 4-201 (devia 10/2015–04/2025, paga desde 05/2025 = acordo) era abatida (R$ 693).
   `_unidades_criticas_condo21`: a sequência de 3+ meses tem de ser a atual (último mês devido ≥ mês do relatório − 2).
   Prainha: 4 → 3 unidades (4-101, 4-303, 4-304, R$ 764,03 cada). O 4º do José é escolha manual dele.
-- **R6 (Contrato Serasa):** dava R$ 153,40/mês porque a média pulava setembro (zero) e out tinha 2 parcelas.
-  `_media_ultimos_3_meses`: janela de 3 meses até o último pagamento, mês vazio = zero → R$ 114,67/mês
-  (José fez 230,48 ÷ 2 = R$ 115,24). Na Prainha só essa linha R6 mudou.
+- R6 (Contrato Serasa) foi para média com mês vazio = zero (R$ 114,67) — substituída em 05/11 pela parcela vigente.
 - **Taxa Extra R$ 14.312,65 (pergunta do José):** não é abatimento por valor nem por parcela; é a conta "Taxa Extra" do
   balancete (rateio "Obra de infiltração da fachada – 02/24", R$ 260/unidade no rec02) e taxa extra nunca entra na
   receita ordinária (regra fixa). Responder ao José.
@@ -256,7 +266,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Rebuild no EasyPanel** (tudo até 04/11 no GitHub, `964353f`). José reenvia Cidade de Cabo Frio com a Group e o
+0. **Push + rebuild no EasyPanel** (até 04/11 no GitHub; 05/11 só local). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
    FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.

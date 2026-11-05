@@ -677,19 +677,24 @@ def _criterio_2_meses(inad):
 
 
 def _media_ultimos_3_meses(monthly):
-    """R6: média dos 3 últimos meses do balancete até o último pagamento.
+    """R6: parcela mensal vigente do contrato (nome mantido por compatibilidade).
 
-    Mês sem pagamento dentro da janela conta como zero: mensalidade atrasada que
-    vem paga junto com a do mês seguinte (Contrato Serasa do Prainha: set = 0,
-    out = 2 parcelas) não infla a média (José 04/11/2026). Meses vazios depois
-    do último pagamento (mês ainda não fechado) ficam fora da janela."""
+    Parcela = último pagamento do balancete ÷ nº de meses que ele cobre (o próprio
+    mês + os meses sem pagamento logo antes). Pega o reajuste mais recente (Prainha:
+    Taxa de Administração 2.875 → 3.070 em out) e a parcela atrasada paga em dobro
+    (Contrato Serasa: set = 0, out = 230,48 → 115,24) — José Henrique 05/11/2026.
+    Meses vazios depois do último pagamento (mês ainda não fechado) ficam fora."""
     vals = list(monthly or [])
     while vals and abs(vals[-1]) <= 0.005:
         vals.pop()
     if not vals:
         return 0.0
-    ultimos = vals[-3:]
-    return sum(ultimos) / len(ultimos)
+    meses = 1
+    while meses < len(vals) and abs(vals[-1 - meses]) <= 0.005:
+        meses += 1
+    if meses == len(vals):  # só um pagamento no ano: não dá p/ saber quantos meses cobre
+        meses = 1
+    return vals[-1] / meses
 
 
 def _mes_tuple(m):
@@ -1860,8 +1865,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
             final = previsto - ex
             ded = base - final
-            regra = ('R6: média anualizada menos lançamentos extraordinários'
-                     if ex > 0.005 else 'R6: media ultimos 3 meses x 12')
+            regra = ('R6: parcela vigente x 12 menos lançamentos extraordinários'
+                     if ex > 0.005 else 'R6: parcela vigente x 12')
         # R3 lumpy — somente lançamentos marcados individualmente entram na dedução.
         elif any(k in nc for k in LUMPY_KEYS):
             # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF.
@@ -2058,9 +2063,9 @@ def recalcular(R, inflacao_pct=None):
             previsto = round(media_ult.get(nc, base / 12.0) * 12, 2)
             ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
             final = previsto - ex
-            ded, regra = base - final, 'R6: media ultimos 3 meses x 12'
+            ded, regra = base - final, 'R6: parcela vigente x 12'
             if ex > 0.005:
-                regra = 'R6: média anualizada menos lançamentos extraordinários'
+                regra = 'R6: parcela vigente x 12 menos lançamentos extraordinários'
         elif any(k in nc for k in LUMPY_KEYS):
             # R3: só os lançamentos extraordinários identificados são deduzidos.
             extra_humano = extra_por_classe.get((ng, nc), 0.0)

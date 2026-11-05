@@ -23,6 +23,7 @@ import tempfile
 import datetime
 import logging
 import time
+from collections import defaultdict
 from typing import Literal
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
@@ -458,6 +459,63 @@ def _montar_lancamentos_contas(des):
     } for idx, it in enumerate((des or {}).get('itens') or [])]
 
 
+def _itens_inadimplencia_tela(inad):
+    """Itens de inadimplência da revisão: um por unidade crítica (última parcela em atraso)."""
+    inad_itens = []
+    if not inad:
+        return inad_itens
+    # Apenas inadimplência crítica: 3+ meses consecutivos sem pagar.
+    # Para cada unidade, a previsão abate somente a taxa condominial da
+    # última parcela em atraso, jamais a soma de parcelas vencidas.
+    ultima_critica = {}
+    for original_id, it in enumerate(inad.get('itens') or []):
+        critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
+        classe = core._norm(it.get('classe'))
+        # Alma e Group marcam o que se abate (boleto inteiro; o Compl.Tx. também tem "tx").
+        eh_taxa_condominio = it.get('taxa_condominio', 'condom' in classe and ('taxa' in classe or 'tx' in classe))
+        if not critica or not eh_taxa_condominio:
+            continue
+        unidade = it.get('unidade') or ''
+        atual = ultima_critica.get(unidade)
+        # mes_ref é MM/AAAA: comparar como texto pegava 12/2025 em vez de 09/2026.
+        if atual is None or _chave_mes(it.get('mes_ref')) > _chave_mes(atual[1].get('mes_ref')):
+            ultima_critica[unidade] = (original_id, it)
+
+    # Condo21 (inad01 vem por classe, uma linha por receita): o fundo de
+    # reserva do mesmo mês da unidade sai junto com a taxa (José Henrique,
+    # 05/11/2026, Prainha). Alma/Group já trazem o boleto inteiro.
+    fundo_condo21 = defaultdict(float)
+    for it in inad.get('itens') or []:
+        classe = core._norm(it.get('classe'))
+        if 'taxa_condominio' not in it and 'fundo' in classe and 'reserva' in classe:
+            fundo_condo21[(it.get('unidade') or '', it.get('mes_ref'))] += float(it.get('valor') or 0)
+
+    for original_id, it in ultima_critica.values():
+        partes = it.get('partes')
+        if not partes and 'taxa_condominio' not in it:
+            fundo = round(fundo_condo21.get((it.get('unidade') or '', it.get('mes_ref')), 0.0), 2)
+            if fundo > 0.005:
+                partes = {'taxa': round(it['valor'], 2), 'fundo': fundo}
+        inad_itens.append({
+            'id': original_id,
+            'unidade': it['unidade'],
+            'classe': it['classe'],
+            'mes_ref': it['mes_ref'],
+            'vencimento': str(it['vencimento'] or ''),
+            'valor': round(sum(partes.values()) if partes else it['valor'], 2),
+            'meses_atraso': it['meses_atraso'],
+            'critica': True,
+            'decisao': 'abater',
+            'ultima_parcela': it.get('mes_ref', ''),
+            'regra_inad': it.get('regra_inad'),
+            # FIN00801: valor por receita (taxa, fundo, água, gás), cada
+            # parte sai da sua linha no relatório (José Henrique, 04/11/2026).
+            **({'partes': partes, 'fora_do_abatimento': it.get('fora_do_abatimento') or {}}
+               if partes else {}),
+        })
+    return inad_itens
+
+
 def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
     """Converte o resultado de core.analisar() no payload de revisao humana."""
     des = R.get('des') or {}
@@ -486,44 +544,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             item['decisao'] = 'pendente'        # humano decide
             revisar.append(item)
 
-    inad_itens = []
-    inad = R.get('inad') or None
-    if inad:
-        # Apenas inadimplência crítica: 3+ meses consecutivos sem pagar.
-        # Para cada unidade, a previsão abate somente a taxa condominial da
-        # última parcela em atraso, jamais a soma de parcelas vencidas.
-        ultima_critica = {}
-        for original_id, it in enumerate(inad.get('itens') or []):
-            critica = it.get('critica', (it.get('meses_atraso') or 0) >= 3)
-            classe = core._norm(it.get('classe'))
-            # Alma e Group marcam o que se abate (boleto inteiro; o Compl.Tx. também tem "tx").
-            eh_taxa_condominio = it.get('taxa_condominio', 'condom' in classe and ('taxa' in classe or 'tx' in classe))
-            if not critica or not eh_taxa_condominio:
-                continue
-            unidade = it.get('unidade') or ''
-            atual = ultima_critica.get(unidade)
-            # mes_ref é MM/AAAA: comparar como texto pegava 12/2025 em vez de 09/2026.
-            if atual is None or _chave_mes(it.get('mes_ref')) > _chave_mes(atual[1].get('mes_ref')):
-                ultima_critica[unidade] = (original_id, it)
-
-        for original_id, it in ultima_critica.values():
-            inad_itens.append({
-                'id': original_id,
-                'unidade': it['unidade'],
-                'classe': it['classe'],
-                'mes_ref': it['mes_ref'],
-                'vencimento': str(it['vencimento'] or ''),
-                'valor': round(it['valor'], 2),
-                'meses_atraso': it['meses_atraso'],
-                'critica': True,
-                'decisao': 'abater',
-                'ultima_parcela': it.get('mes_ref', ''),
-                'regra_inad': it.get('regra_inad'),
-                # FIN00801: valor por receita (taxa, fundo, água, gás), cada
-                # parte sai da sua linha no relatório (José Henrique, 04/11/2026).
-                **({'partes': it['partes'], 'fora_do_abatimento': it.get('fora_do_abatimento') or {}}
-                   if it.get('partes') else {}),
-            })
+    inad_itens = _itens_inadimplencia_tela(R.get('inad') or None)
 
     linhas = [{
         'grupo': l['grupo'], 'classe': l['classe'],
