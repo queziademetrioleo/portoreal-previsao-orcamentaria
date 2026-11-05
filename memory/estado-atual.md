@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 04/11/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 04/11/2026 (noite).
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -61,7 +61,20 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (04/11/2026) — áudios José 04/11 (Cidade de Cabo Frio, Group + Alma)
+## Último trabalho (04/11/2026, noite) — 3 áudios José 04/11 (Cond. Ed. Prainha `790376c4780b`, Condo21)
+
+- **Inadimplência Condo21:** a 4-201 (devia 10/2015–04/2025, paga desde 05/2025 = acordo) era abatida (R$ 693).
+  `_unidades_criticas_condo21`: a sequência de 3+ meses tem de ser a atual (último mês devido ≥ mês do relatório − 2).
+  Prainha: 4 → 3 unidades (4-101, 4-303, 4-304, R$ 764,03 cada). O 4º do José é escolha manual dele.
+- **R6 (Contrato Serasa):** dava R$ 153,40/mês porque a média pulava setembro (zero) e out tinha 2 parcelas.
+  `_media_ultimos_3_meses`: janela de 3 meses até o último pagamento, mês vazio = zero → R$ 114,67/mês
+  (José fez 230,48 ÷ 2 = R$ 115,24). Na Prainha só essa linha R6 mudou.
+- **Taxa Extra R$ 14.312,65 (pergunta do José):** não é abatimento por valor nem por parcela; é a conta "Taxa Extra" do
+  balancete (rateio "Obra de infiltração da fachada – 02/24", R$ 260/unidade no rec02) e taxa extra nunca entra na
+  receita ordinária (regra fixa). Responder ao José.
+- Testes em `test_condo21_inad_r6.py`. **Commit local, falta push (autorização) + rebuild EasyPanel**; depois reanalisar a sessão Prainha.
+
+## Trabalho de (04/11/2026) — áudios José 04/11 (Cidade de Cabo Frio, Group + Alma)
 
 - **Group recusado** "condomínio não identificado em group_des.xlsx" (protocolo `e6860cc7eaf2`): o arquivo traz
   "COND CIDADE DE CABO FRIO" (sem ponto). `parsers_group.read` aceita `cond.`, `cond ` e `condominio `. Com os arquivos

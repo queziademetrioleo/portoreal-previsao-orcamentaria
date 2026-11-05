@@ -675,6 +675,64 @@ def _criterio_2_meses(inad):
             'group_ultimos_2_meses': 'dois meses anteriores ao relatório Group'}.get(inad.get('regra'))
 
 
+
+def _media_ultimos_3_meses(monthly):
+    """R6: média dos 3 últimos meses do balancete até o último pagamento.
+
+    Mês sem pagamento dentro da janela conta como zero: mensalidade atrasada que
+    vem paga junto com a do mês seguinte (Contrato Serasa do Prainha: set = 0,
+    out = 2 parcelas) não infla a média (José 04/11/2026). Meses vazios depois
+    do último pagamento (mês ainda não fechado) ficam fora da janela."""
+    vals = list(monthly or [])
+    while vals and abs(vals[-1]) <= 0.005:
+        vals.pop()
+    if not vals:
+        return 0.0
+    ultimos = vals[-3:]
+    return sum(ultimos) / len(ultimos)
+
+
+def _mes_tuple(m):
+    try:
+        mm, aa = (int(x) for x in str(m).split('/'))
+        return (aa, mm)
+    except ValueError:
+        return None
+
+
+def _unidades_criticas_condo21(unidade_meses, unidade_itens, data_base):
+    """R8 Condo21: unidade crítica = 3+ meses seguidos em aberto, sendo a sequência
+    atual — o último mês devido é um dos dois meses anteriores ao relatório (ou o
+    próprio mês). Dívida antiga com os meses recentes pagos é acordo e não entra
+    (José 04/11/2026, Prainha 4-201: devia até 04/2025 e paga desde 05/2025).
+    Impacto: a taxa da unidade de um mês."""
+    limite = None
+    if data_base:
+        a, m = data_base.year, data_base.month - 2
+        if m <= 0:
+            a, m = a - 1, m + 12
+        limite = (a, m)
+    criticas = {}
+    for u, meses_str in unidade_meses.items():
+        meses = sorted({t for t in map(_mes_tuple, meses_str) if t})
+        if not meses or (limite and meses[-1] < limite):
+            continue
+        consec = 1  # sequência que termina no último mês devido
+        for k in range(len(meses) - 1, 0, -1):
+            (pa, pm), (ca, cm) = meses[k - 1], meses[k]
+            if (ca, cm) == ((pa, pm + 1) if pm < 12 else (pa + 1, 1)):
+                consec += 1
+            else:
+                break
+        if consec < 3:
+            continue
+        tx_items = [i for i in unidade_itens[u] if 'condominio' in _norm(i.get('classe', ''))]
+        base = tx_items or unidade_itens[u]
+        tx_media = sum(i['valor'] for i in base) / len(base)
+        criticas[u] = {'meses_consecutivos': consec, 'tx_mensal_media': tx_media,
+                       'impacto': tx_media}  # abate apenas 1 mês da receita
+    return criticas
+
 def parse_inad(path):
     wb = xlrd.open_workbook(path)
     sh = wb.sheet_by_index(0)
@@ -1645,14 +1703,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     manual = parse_previsao(prev_paths[0]) if prev_paths else None
 
     freq = {_norm(l['classe']): l['n_meses'] for l in bal['despesas']}
-    media_ult = {}   # media dos ultimos 3 meses nao-zero por classe (p/ R6)
-    for l in bal['despesas']:
-        nz = [v for v in l['monthly'] if abs(v) > 0.005]
-        if nz:
-            ultimos = nz[-3:]  # ate os ultimos 3 meses
-            media_ult[_norm(l['classe'])] = sum(ultimos) / len(ultimos)
-        else:
-            media_ult[_norm(l['classe'])] = 0.0
+    media_ult = {_norm(l['classe']): _media_ultimos_3_meses(l['monthly']) for l in bal['despesas']}  # R6
 
     if progress_callback:
         progress_callback({'fase': 'Relatórios carregados', 'passo': 1, 'total': 6, 'detalhe': f'{len(des["itens"])} itens encontrados'})
@@ -1884,48 +1935,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             unidade_meses[u].add(i['mes_ref'])
             unidade_itens[u].append(i)
 
-        # Determinar quais unidades tem >= 3 meses CONSECUTIVOS de divida
-        unidades_criticas = {}
-        for u, meses_str in unidade_meses.items():
-            # Converter MM/AAAA para (ano, mes) ordenado
-            meses_tuples = []
-            for m in meses_str:
-                parts = m.split('/')
-                if len(parts) == 2:
-                    try:
-                        mm, aa = int(parts[0]), int(parts[1])
-                        meses_tuples.append((aa, mm))
-                    except ValueError:
-                        pass
-            if not meses_tuples:
-                continue
-            meses_tuples.sort()
-            # Verificar se há >= 3 meses consecutivos
-            consec = 1
-            max_consec = 1
-            for k in range(1, len(meses_tuples)):
-                prev_aa, prev_mm = meses_tuples[k-1]
-                cur_aa, cur_mm = meses_tuples[k]
-                # Consecutivo: mesmo ano + mes seguinte, ou dez→jan do ano seguinte
-                if (cur_aa == prev_aa and cur_mm == prev_mm + 1) or \
-                   (cur_aa == prev_aa + 1 and prev_mm == 12 and cur_mm == 1):
-                    consec += 1
-                    max_consec = max(max_consec, consec)
-                else:
-                    consec = 1
-            if max_consec >= 3:
-                # Unidade critica: impacto = media da Tx. Condominio mensal × meses consecutivos
-                tx_items = [i for i in unidade_itens[u]
-                           if 'condominio' in _norm(i.get('classe', ''))]
-                if tx_items:
-                    tx_media = sum(i['valor'] for i in tx_items) / len(tx_items)
-                else:
-                    tx_media = sum(i['valor'] for i in unidade_itens[u]) / len(unidade_itens[u])
-                unidades_criticas[u] = {
-                    'meses_consecutivos': max_consec,
-                    'tx_mensal_media': tx_media,
-                    'impacto': tx_media,  # abate apenas a ultima parcela (1 mes) da receita
-                }
+        # >= 3 meses CONSECUTIVOS de dívida, e a sequência tem de ser a atual
+        unidades_criticas = _unidades_criticas_condo21(unidade_meses, unidade_itens, data_base)
 
         # Totais
         todos_itens = ina['itens']
@@ -1992,14 +2003,7 @@ def recalcular(R, inflacao_pct=None):
     pct_ia_classe = R.get('pct_ia_por_classe', {})
 
     bal = R['bal']
-    media_ult = {}   # media dos ultimos 3 meses nao-zero por classe (p/ R6)
-    for l in bal['despesas']:
-        nz = [v for v in l['monthly'] if abs(v) > 0.005]
-        if nz:
-            ultimos = nz[-3:]  # ate os ultimos 3 meses
-            media_ult[_norm(l['classe'])] = sum(ultimos) / len(ultimos)
-        else:
-            media_ult[_norm(l['classe'])] = 0.0
+    media_ult = {_norm(l['classe']): _media_ultimos_3_meses(l['monthly']) for l in bal['despesas']}  # R6
 
     linhas, desconsider = [], 0.0
     for l in bal['despesas']:
