@@ -130,6 +130,10 @@ def parse_balance(path):
     section = group = group_code = None
     seen = set()
     warnings = []
+    # Conta de 1º nível sem subcontas é a própria conta (Cidade de Cabo Frio, 11/2026:
+    # "1.2 - Tx. Condomínio" com valores, sem 1.2.x); com subcontas é título de grupo.
+    codes = {account(row[cols['classe de conta']])[0] for row in rows[start + 1:]}
+    parents = {c.rsplit('.', 1)[0] for c in codes if c and c.count('.') > 1}
     for row_no, row in enumerate(rows[start + 1:], start + 2):
         label = row[cols['classe de conta']]
         normalized = norm(label)
@@ -148,8 +152,9 @@ def parse_balance(path):
             continue
         if code.count('.') == 1:
             group_code, group = code, title
-            continue
-        if not group_code or not code.startswith(group_code + '.'):
+            if code in parents or row[cols['total']] in (None, ''):
+                continue
+        elif not group_code or not code.startswith(group_code + '.'):
             raise ValueError(f'Group: conta {code} sem grupo correspondente na linha {row_no}.')
         values = [money(row[c]) for c, _ in month_cols]
         total = money(row[cols['total']])

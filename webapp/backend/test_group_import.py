@@ -135,6 +135,19 @@ class GroupImportTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'soma das classes de receitas'):
                 group.parse_balance('group_bal.xlsx')
 
+    def test_first_level_account_without_children_is_an_account(self):
+        """Cidade de Cabo Frio 11/2026: "1.2 - .Tx. Condomínio" com valores e sem 1.2.x."""
+        self.balance[3:5] = [['1.2 - .Tx. Condomínio', *([100] * 12), 1200],
+                             ['1.3 - .Fundo Reserva', *([10] * 12), 120],
+                             ['1.40 - Receitas Diversas'],
+                             ['1.40.8 - Desconto', *([-10] * 12), -120]]
+        with patch.object(group, 'read', side_effect=self.reader):
+            bal = group.parse_balance('group_bal.xlsx')
+        self.assertEqual([(r['codigo'], r['classe'], r['total']) for r in bal['receitas']],
+                         [('1.2', 'Tx. Condomínio', 1200), ('1.3', 'Fundo Reserva', 120),
+                          ('1.40.8', 'Desconto', -120)])
+        self.assertEqual(bal['receitas'][2]['grupo'], 'Receitas Diversas')
+
     def arrears(self):
         head = ['Unidade', 'Sacado', 'NN', 'Classe de conta', 'Competência', 'Vencimento', 'Atraso',
                 'Valor (R$)', 'Juros (R$)', 'Total (R$)', 'Informações do acordo', 'Recebimento']

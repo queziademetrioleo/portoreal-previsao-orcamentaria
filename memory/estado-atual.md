@@ -61,7 +61,19 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (05/11/2026) — 2 áudios José 05/11 (Prainha `790376c4780b`, Condo21)
+## Último trabalho (05/11/2026, tarde) — Cidade de Cabo Frio recusado (protocolo `d6fe1396ca95`)
+
+- Erro "Group: soma das classes de receitas difere do total do balancete". Envio veio marcado **só Group**, com
+  Rateio por Unidade (Alma) no campo de receitas Group e FIN00801 (Alma) no de inadimplência Group.
+- Causa do erro: o balancete Group deste condomínio traz receitas em 1º nível ("1.2 - .Tx. Condomínio" com valores,
+  sem 1.2.x) e o parser tratava todo X.Y como título de grupo. `parsers_group.parse_balance`: X.Y sem subcontas e
+  com valor = conta (grupo = ela mesma). Teste em `test_group_import.py`.
+- O balancete Group não tem movimento em 09–10/2026 (condomínio já no Alma). Envio certo = **Group + Alma**: Group só
+  despesas detalhadas; Alma FIN00601 + demonstrativo PDF + Rateio + FIN00801. Simulado local com os arquivos reais
+  (FIN/demonstrativo do envio de 04/11): passa; Group nov/25–abr/26, Alma mai–out/26; taxa R$ 49.944,09 + fundo
+  R$ 4.994,29/mês (Rateio 11/2026); inadimplência R$ 1.399,71/mês (só a 410).
+
+## Trabalho de 05/11/2026 — 2 áudios José 05/11 (Prainha `790376c4780b`, Condo21)
 
 - **Inadimplência Condo21 abate também o fundo de reserva:** só a taxa (764,03) saía; o fundo (76,40) da unidade
   ficava na receita. `main._itens_inadimplencia_tela` (extraída de `_montar_estado`) junta o Fundo Reserva do mesmo
