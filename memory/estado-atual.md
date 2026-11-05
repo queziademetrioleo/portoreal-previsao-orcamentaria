@@ -82,7 +82,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **R6 = parcela vigente × 12** (José não sabia a regra e pediu uma ideia; a dele: última parcela, dividida se pagou
   atrasada junto): último pagamento ÷ meses que cobre. Prainha: Contrato 115,24 (= José); **Tx. Administração passa
   de 2.940 (média) para 3.070/mês** (reajuste de out). Vale p/ todos os condomínios (ex.: `dda8028ab309` 1.481 → 1.502).
-- Testes em `test_condo21_inad_r6.py`. Commit local; **falta push + rebuild**; depois reanalisar a Prainha (os itens
+- Testes em `test_condo21_inad_r6.py`. No GitHub em 05/11; **falta rebuild**; depois reanalisar a Prainha (os itens
   de inadimplência são montados na análise, o recalcular do cache não refaz).
 
 ## Trabalho anterior (04/11/2026, noite) — 3 áudios José 04/11 (Cond. Ed. Prainha `790376c4780b`, Condo21)
@@ -278,7 +278,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Push + rebuild no EasyPanel** (até 04/11 no GitHub; 05/11 só local). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
+0. **Rebuild no EasyPanel** (tudo até 05/11 no GitHub, `2bef884`). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
    FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
