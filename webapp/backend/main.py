@@ -544,7 +544,8 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
             item['decisao'] = 'pendente'        # humano decide
             revisar.append(item)
 
-    inad_itens = _itens_inadimplencia_tela(R.get('inad') or None)
+    inad = R.get('inad') or None
+    inad_itens = _itens_inadimplencia_tela(inad)
 
     linhas = [{
         'grupo': l['grupo'], 'classe': l['classe'],

@@ -94,6 +94,20 @@ class InadimplenciaCondo21FundoNaTela(unittest.TestCase):
         self.assertAlmostEqual(item['valor'], 840.43)
         self.assertEqual(main._impacto_partes(estado), {'taxa': 764.03, 'fundo': 76.4})
 
+    def test_montar_estado_com_inadimplencia(self):
+        """Reanálise da Prainha quebrou em prod (NameError 'inad', 05/11/2026)."""
+        import main
+        itens = [{'unidade': '4-101', 'classe': c, 'mes_ref': m, 'vencimento': None, 'valor': v,
+                  'meses_atraso': 3, 'critica': True}
+                 for m in ('08/2026', '09/2026', '10/2026')
+                 for c, v in (('Tx. Condomínio', 764.03), ('Fundo Reserva', 76.40))]
+        R = {'des': {'itens': []}, 'linhas': [], 'bal': {}, 'base_total': 0, 'desconsideracoes': 0,
+             'subtotal': 0, 'total_previsto': 0,
+             'inad': {'total': 1000, 'critica': 840.43, 'data_base': '2026-11-04', 'itens': itens}}
+        estado = main._montar_estado('t', 'Teste', 2027, R, True)
+        self.assertEqual(estado['inadimplencia'][0]['partes'], {'taxa': 764.03, 'fundo': 76.4})
+        self.assertEqual(estado['inad_meta']['critica'], 840.43)
+
 
 if __name__ == '__main__':
     unittest.main()

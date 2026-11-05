@@ -82,6 +82,8 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **R6 = parcela vigente × 12** (José não sabia a regra e pediu uma ideia; a dele: última parcela, dividida se pagou
   atrasada junto): último pagamento ÷ meses que cobre. Prainha: Contrato 115,24 (= José); **Tx. Administração passa
   de 2.940 (média) para 3.070/mês** (reajuste de out). Vale p/ todos os condomínios (ex.: `dda8028ab309` 1.481 → 1.502).
+- 05/11 19h: reanálise em prod quebrou com `NameError: inad` (a extração tirou a variável de `_montar_estado`);
+  corrigido + teste que monta o estado com inadimplência.
 - Testes em `test_condo21_inad_r6.py`. No GitHub em 05/11; **falta rebuild**; depois reanalisar a Prainha (os itens
   de inadimplência são montados na análise, o recalcular do cache não refaz).
 
