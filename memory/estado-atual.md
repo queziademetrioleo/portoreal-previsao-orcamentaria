@@ -72,7 +72,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **Taxa Extra R$ 14.312,65 (pergunta do José):** não é abatimento por valor nem por parcela; é a conta "Taxa Extra" do
   balancete (rateio "Obra de infiltração da fachada – 02/24", R$ 260/unidade no rec02) e taxa extra nunca entra na
   receita ordinária (regra fixa). Responder ao José.
-- Testes em `test_condo21_inad_r6.py`. **Commit local, falta push (autorização) + rebuild EasyPanel**; depois reanalisar a sessão Prainha.
+- Testes em `test_condo21_inad_r6.py`. No GitHub em 04/11; **falta rebuild EasyPanel**; depois reanalisar a sessão Prainha.
 
 ## Trabalho de (04/11/2026) — áudios José 04/11 (Cidade de Cabo Frio, Group + Alma)
 
