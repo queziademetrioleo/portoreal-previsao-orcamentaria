@@ -34,6 +34,7 @@ function payloadRevisao(items: ItemRevisao[]) {
     items.map(i => [String(i.id), {
       decisao: i.decisao,
       valor: valorAtual(i),
+      valor_base: i.valor,
       nota: i.nota ?? '',
     }]),
   )
@@ -44,6 +45,7 @@ function payloadInad(items: ItemInad[]) {
     items.map(i => [String(i.id), {
       decisao: i.decisao,
       valor: valorAtual(i),
+      valor_base: i.valor,
       nota: i.nota ?? '',
     }]),
   )

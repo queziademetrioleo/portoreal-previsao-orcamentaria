@@ -194,18 +194,34 @@ def _obter_R(sid):
 def _decisao_payload(decisoes, item_id):
     raw = decisoes.get(str(item_id))
     if isinstance(raw, dict):
-        return raw.get('decisao'), raw.get('valor'), raw.get('nota')
-    return raw, None, None
+        return raw.get('decisao'), (raw.get('valor'), raw.get('valor_base')), raw.get('nota')
+    return raw, (None, None), None
 
 
 def _aplicar_decisao_editavel(item, decisao, valor, nota, permitidas):
+    """valor = (valor na tela, valor original que a tela recebeu).
+
+    Só grava `valor_editado` quando difere do original. Se a tela tinha outra versão
+    do item (aba aberta antes da reanálise), o valor dela é ignorado: na Prainha
+    (05/11/2026) uma aba velha gravou 764,03 (só a taxa) por cima de 840,43
+    (taxa + fundo) e o abatimento saiu menor."""
     if decisao in permitidas:
         item['decisao'] = decisao
-    if valor is not None and valor != '':
+    valor, base = valor if isinstance(valor, tuple) else (valor, None)
+    if valor is None or valor == '':
+        pass
+    else:
         try:
-            item['valor_editado'] = round(float(valor), 2)
+            valor = round(float(valor), 2)
+            original = round(float(item.get('valor') or 0), 2)
+            base = None if base in (None, '') else round(float(base), 2)
         except (TypeError, ValueError):
-            pass
+            valor = None
+        if valor is not None and (base is None or abs(base - original) <= 0.005):
+            if abs(valor - original) <= 0.005:
+                item.pop('valor_editado', None)
+            else:
+                item['valor_editado'] = valor
     if nota is not None:
         item['nota'] = str(nota).strip()[:1000]
 

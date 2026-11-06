@@ -109,5 +109,30 @@ class InadimplenciaCondo21FundoNaTela(unittest.TestCase):
         self.assertEqual(estado['inad_meta']['critica'], 840.43)
 
 
+class ValorEditadoAbaVelha(unittest.TestCase):
+    """Prainha 05/11/2026: aba aberta antes da reanálise gravou 764,03 por cima de 840,43."""
+
+    def item(self):
+        return {'id': 0, 'valor': 840.43, 'decisao': 'abater', 'partes': {'taxa': 764.03, 'fundo': 76.4}}
+
+    def test_valor_de_tela_com_versao_velha_e_ignorado(self):
+        import main
+        item = self.item()
+        main._aplicar_decisao_editavel(item, 'abater', (764.03, 764.03), None, ('abater', 'ignorar'))
+        self.assertNotIn('valor_editado', item)
+
+    def test_valor_igual_ao_original_nao_vira_edicao(self):
+        import main
+        item = {**self.item(), 'valor_editado': 764.03}
+        main._aplicar_decisao_editavel(item, 'abater', (840.43, 840.43), None, ('abater', 'ignorar'))
+        self.assertNotIn('valor_editado', item)
+
+    def test_edicao_de_verdade_e_gravada(self):
+        import main
+        item = self.item()
+        main._aplicar_decisao_editavel(item, 'abater', (800.0, 840.43), None, ('abater', 'ignorar'))
+        self.assertEqual(item['valor_editado'], 800.0)
+
+
 if __name__ == '__main__':
     unittest.main()

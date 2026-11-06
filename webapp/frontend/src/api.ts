@@ -54,6 +54,8 @@ async function lancarErroResposta(r: Response): Promise<never> {
 export interface DecisaoEditavel {
   decisao: string
   valor?: number
+  /** valor original que a tela recebeu; o servidor ignora a edição se o item mudou */
+  valor_base?: number
   nota?: string
 }
 

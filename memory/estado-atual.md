@@ -84,6 +84,11 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   de 2.940 (média) para 3.070/mês** (reajuste de out). Vale p/ todos os condomínios (ex.: `dda8028ab309` 1.481 → 1.502).
 - 05/11 19h: reanálise em prod quebrou com `NameError: inad` (a extração tirou a variável de `_montar_estado`);
   corrigido + teste que monta o estado com inadimplência.
+- 05/11 noite: PDF da Prainha saiu com receita maior que a do José (taxa 42.994,04 × 42.785,68; fundo 4.375,64 ×
+  4.354,80). Base igual (rec02 45.077,77 / 4.584,00); os 3 itens tinham `valor_editado` 764,03 gravado por aba aberta
+  antes da reanálise (a tela manda o valor sempre) → 764,03 rateado entre taxa e fundo. Agora a tela manda `valor_base`
+  e o servidor ignora valor de versão velha e não grava edição igual ao original. **Na sessão atual o 764,03 continua
+  gravado**: após o rebuild, reanalisar (ou digitar 840,43) e regerar o PDF.
 - Testes em `test_condo21_inad_r6.py`. No GitHub em 05/11; **falta rebuild**; depois reanalisar a Prainha (os itens
   de inadimplência são montados na análise, o recalcular do cache não refaz).
 
