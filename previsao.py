@@ -697,6 +697,45 @@ def _media_ultimos_3_meses(monthly):
     return vals[-1] / meses
 
 
+def _eh_r6(classe):
+    nc = _norm(classe or '')
+    return any(k in nc for k in ANUALIZAR) and '13' not in nc
+
+
+def _parcelas_r6(despesas):
+    """R6 por classe, não por linha (José 06/11/2026, Cidade de Cabo Frio).
+
+    Se a mesma conta anualizada (contrato, pró-labore, taxa de administração) cai em
+    mais de uma linha — sistemas diferentes que escrevem o grupo de outro jeito —, a
+    parcela vigente sai da soma mês a mês das linhas e fica na linha com o pagamento
+    mais recente; as demais ficam com zero. Sem isso cada linha virava parcela × 12 e
+    a conta saía dobrada (pró-labore 3.242 em vez de 1.621).
+    Devolve ({índice da linha: parcela mensal}, {índice: observação}, [alertas])."""
+    por_classe = defaultdict(list)
+    for i, l in enumerate(despesas):
+        if _eh_r6(l['classe']):
+            por_classe[_norm(l['classe'])].append(i)
+    parcelas, notas, alertas = {}, {}, []
+    for idx in por_classe.values():
+        n = max(len(despesas[i]['monthly'] or []) for i in idx)
+        soma = [sum((despesas[i]['monthly'] or [])[k] if k < len(despesas[i]['monthly'] or []) else 0.0
+                    for i in idx) for k in range(n)]
+
+        def ultimo(serie):
+            return max((k for k, v in enumerate(serie or []) if abs(v) > 0.005), default=-1)
+        dono = max(idx, key=lambda i: (ultimo(despesas[i]['monthly']), -i))
+        parcelas[dono] = _media_ultimos_3_meses(soma)
+        for i in idx:
+            if i != dono:
+                parcelas[i] = 0.0
+                notas[i] = f'somada à linha "{despesas[dono]["grupo"]}"'
+        if len(idx) > 1:
+            alertas.append(f'{despesas[dono]["classe"]}: aparece em {len(idx)} grupos '
+                           f'({", ".join(despesas[i]["grupo"] or "sem grupo" for i in idx)}); '
+                           'a parcela foi calculada uma vez só, na linha com o pagamento mais recente.')
+    return parcelas, notas, alertas
+
+
 def _mes_tuple(m):
     try:
         mm, aa = (int(x) for x in str(m).split('/'))
@@ -1708,7 +1747,6 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     manual = parse_previsao(prev_paths[0]) if prev_paths else None
 
     freq = {_norm(l['classe']): l['n_meses'] for l in bal['despesas']}
-    media_ult = {_norm(l['classe']): _media_ultimos_3_meses(l['monthly']) for l in bal['despesas']}  # R6
 
     if progress_callback:
         progress_callback({'fase': 'Relatórios carregados', 'passo': 1, 'total': 6, 'detalhe': f'{len(des["itens"])} itens encontrados'})
@@ -1801,7 +1839,8 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
     logger.info('Passo 6/6: Aplicando regras R1-R8...')
     linhas = []          # uma por classe do balanual
     desconsider = 0.0    # R1 (obras)
-    for l in bal['despesas']:
+    media_ult, notas_r6, alertas_r6 = _parcelas_r6(bal['despesas'])  # R6
+    for i_lin, l in enumerate(bal['despesas']):
         g, c = l['grupo'] or '', l['classe']
         ng, nc = _norm(g), _norm(c)
         base = l['total']
@@ -1861,12 +1900,14 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
                      'R2: item de pessoal mantido na previsão')
         # R6 anualizacao
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
-            previsto = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            previsto = round(media_ult.get(i_lin, base / 12.0) * 12, 2)
             ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
             final = previsto - ex
             ded = base - final
             regra = ('R6: parcela vigente x 12 menos lançamentos extraordinários'
                      if ex > 0.005 else 'R6: parcela vigente x 12')
+            if i_lin in notas_r6:
+                regra += f' ({notas_r6[i_lin]})'
         # R3 lumpy — somente lançamentos marcados individualmente entram na dedução.
         elif any(k in nc for k in LUMPY_KEYS):
             # NF por NF: NFs marcadas como Extraordinaria pelo MAD + IA NF-by-NF.
@@ -1980,6 +2021,7 @@ def analisar(folder, progress_callback=None, inflacao_pct=None):
             'outliers_estatisticos': outliers_estatisticos,
             'pct_ia_por_classe': pct_ia_por_classe,
             'divergencias': divergencias,
+            'alertas_r6': alertas_r6,
             'origem_sistema': selected_data['origem_sistema'] if selected_data else ('group' if group_data else ('misto' if mixed_data else 'condo21')),
             'sistemas': selected_data['sistemas'] if selected_data else (['group'] if group_data else (['condo21', 'alma'] if mixed_data else ['condo21'])),
             'inadimplencia_apurada': selected_data.get('inadimplencia_apurada', True) if selected_data else not bool(group_data),
@@ -2008,10 +2050,10 @@ def recalcular(R, inflacao_pct=None):
     pct_ia_classe = R.get('pct_ia_por_classe', {})
 
     bal = R['bal']
-    media_ult = {_norm(l['classe']): _media_ultimos_3_meses(l['monthly']) for l in bal['despesas']}  # R6
+    media_ult, notas_r6, alertas_r6 = _parcelas_r6(bal['despesas'])  # R6
 
     linhas, desconsider = [], 0.0
-    for l in bal['despesas']:
+    for i_lin, l in enumerate(bal['despesas']):
         g, c = l['grupo'] or '', l['classe']
         ng, nc = _norm(g), _norm(c)
         base = l['total']
@@ -2060,12 +2102,14 @@ def recalcular(R, inflacao_pct=None):
             regra = ('R2: lançamentos pontuais identificados'
                      if ded > 0.005 else 'R2: mantido na revisão')
         elif any(k in nc for k in ANUALIZAR) and '13' not in nc:
-            previsto = round(media_ult.get(nc, base / 12.0) * 12, 2)
+            previsto = round(media_ult.get(i_lin, base / 12.0) * 12, 2)
             ex = min(extra_por_classe.get((ng, nc), 0.0), previsto)
             final = previsto - ex
             ded, regra = base - final, 'R6: parcela vigente x 12'
             if ex > 0.005:
                 regra = 'R6: parcela vigente x 12 menos lançamentos extraordinários'
+            if i_lin in notas_r6:
+                regra += f' ({notas_r6[i_lin]})'
         elif any(k in nc for k in LUMPY_KEYS):
             # R3: só os lançamentos extraordinários identificados são deduzidos.
             extra_humano = extra_por_classe.get((ng, nc), 0.0)
@@ -2104,7 +2148,7 @@ def recalcular(R, inflacao_pct=None):
 
     for chave in ('prov_laudo', 'prov_incendio'):  # caches antigos; provisão não existe mais
         R.pop(chave, None)
-    R.update({'linhas': linhas, 'desconsideracoes': desconsider,
+    R.update({'linhas': linhas, 'desconsideracoes': desconsider, 'alertas_r6': alertas_r6,
               'base_total': base_total, 'subtotal': subtotal,
               'total_previsto': total_previsto,
               'inflacao_pct': inflacao_pct,

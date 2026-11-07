@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 05/11/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 06/11/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -61,7 +61,34 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Último trabalho (05/11/2026, tarde) — Cidade de Cabo Frio recusado (protocolo `d6fe1396ca95`)
+## Último trabalho (06/11/2026) — áudio José 06/11 (Cidade de Cabo Frio, pró-labore 3.242)
+
+- José: pró-labore do síndico saiu R$ 3.242/mês; o certo é 1.621 (um salário mínimo, o ano todo).
+- Causa: na junção Group + Alma o grupo vem escrito "Reembolso/Pró-labore ao Síndico" (Group) e
+  "REEMBOLSO / PRÓ-LABORE AO SÍNDICO" (Alma); `norm` mantinha o espaço em volta da barra → duas linhas da
+  mesma classe, e a R6 anualizava cada uma (1.621 × 12 duas vezes).
+- `parsers_sistemas.group_key`: chave de grupo ignora espaço em volta de `/` e `-` (consolidação, `known` e itens
+  detalhados; o item herda o grupo da linha consolidada). Com os arquivos reais: uma linha só, 1.518 ×2 + 1.621 ×10,
+  R6 = R$ 19.452/ano (1.621/mês). Só o pró-labore era afetado neste condomínio. Teste em `test_sistemas.py`.
+- Ainda em 2 grupos (diferença real de plano de contas, não de espaço): "Laudo de Autovistoria Predial"
+  (Despesas Diversas no Group × Conservação no Alma) — não é R6, não duplica.
+- **R6 por classe** (`previsao._parcelas_r6`, usada em `analisar` e `recalcular`): mesma conta anualizada em mais de uma
+  linha → parcela da soma mês a mês, na linha com pagamento mais recente; as outras ficam 0 ("somada à linha …").
+  Segura o dobro mesmo se o nome do grupo vier diferente de outro jeito (provado com os arquivos reais e o nome antigo).
+- **Alerta na revisão** (`alertas_revisao` no estado; card "Confira antes de gerar o relatório" na aba Relatório): só
+  conta R6 em 2+ grupos. Não muda número. (Alerta de "contrato sem pagamento há 3 meses" retirado: usuária não pediu.)
+  Visto na simulação: **Contrato Terceirização de Mão de Obra** (Cabo Frio) pago só jun e jul/26 (12.140 cada) → R6 projeta R$ 145.680/ano.
+- **Excel: gráfico de barras resiste à edição** (usuária: "se o José muda valores ou adiciona algo, o gráfico não pode
+  sumir"). Reproduzido no Numbers: apagar a linha de uma conta do gráfico zerava TODAS as barras (#REF! numa linha
+  contamina a SUM das porcentagens). Aba "Dados do gráfico": `IFERROR(ref*1,0)`, Outros `IFERROR(MAX(0,…),0)`,
+  % `IFERROR`; gráfico `object_position 2` (move com as linhas, não encolhe). `N()` NÃO serve: o Numbers não importa e a
+  aba vira valor fixo. Conferido no Numbers: valor, apagar, inserir conta e limpar valor. Excel de verdade não testado
+  (não instalado). Testes em `test_relatorio_xlsx.py`. Ainda: o gráfico mostra sempre as mesmas 5 contas + Outros
+  (conta nova entra em Outros; não reordena se o José mudar os valores).
+- No Numbers o gráfico aparece deslocado à esquerda e corta os nomes das contas (no PDF/Excel não verificado).
+- **Falta push + rebuild**; depois reanalisar a sessão do Cabo Frio (a consolidação é feita na análise).
+
+## Trabalho de 05/11/2026 (tarde) — Cidade de Cabo Frio recusado (protocolo `d6fe1396ca95`)
 
 - Erro "Group: soma das classes de receitas difere do total do balancete". Envio veio marcado **só Group**, com
   Rateio por Unidade (Alma) no campo de receitas Group e FIN00801 (Alma) no de inadimplência Group.
@@ -285,7 +312,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Rebuild no EasyPanel** (tudo até 05/11 no GitHub, `2bef884`). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
+0. **Push + rebuild no EasyPanel** (06/11: pró-labore, R6 por classe, alertas, gráfico do Excel). Reanalisar o Cabo Frio, conferir pró-labore 1.621 e perguntar ao José sobre o Contrato Terceirização de Mão de Obra (só jun/jul, R6 projeta 145.680/ano). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
    FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.

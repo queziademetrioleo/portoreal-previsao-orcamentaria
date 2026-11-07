@@ -2,6 +2,7 @@
 import calendar
 import datetime as dt
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -17,6 +18,13 @@ ALIASES = {'taxa de condominio': 'tx. condominio', 'fundo de reserva': 'fundo re
 
 def canonical(value):
     return ALIASES.get(alma.norm(value), alma.norm(value))
+
+
+def group_key(value):
+    """Chave do grupo entre sistemas: Group escreve "Reembolso/Pró-labore ao Síndico" e o
+    Alma "REEMBOLSO / PRÓ-LABORE AO SÍNDICO" — sem isso a classe vira duas linhas e a R6
+    anualiza as duas (Cidade de Cabo Frio, pró-labore 3.242 em vez de 1.621; José 06/11/2026)."""
+    return re.sub(r'\s*([/\-–])\s*', r'\1', alma.norm(alma.group_name(value or 'Classes a revisar')))
 
 
 def migration_start(sources, requested=None):
@@ -72,14 +80,14 @@ def consolidate(sources, start=None, end=None, alma_start=None):
     for data in sources.values():
         for kind in ('receitas', 'despesas'):
             for row in data['bal'][kind]:
-                identity = (alma.norm(alma.group_name(row['grupo'] or 'Classes a revisar')), canonical(row['classe']))
+                identity = (group_key(row['grupo']), canonical(row['classe']))
                 names.setdefault(identity, row['classe'])
     for kind in ('receitas', 'despesas'):
         merged = {}
         for name, data in sources.items():
             for row in data['bal'][kind]:
                 grp = alma.group_name(row['grupo'] or 'Classes a revisar')
-                identity = (alma.norm(grp), canonical(row['classe']))
+                identity = (group_key(grp), canonical(row['classe']))
                 target = merged.setdefault(identity, {'grupo': grp, 'classe': names[identity],
                                                        'monthly': [0.0] * len(keys)})
                 for index, key in enumerate(indices[name]):
@@ -157,7 +165,7 @@ def load_selected(folder, core):
             token in w for token in ('inadimplência não fornecido', 'meses sem movimentação', 'receita fixa baseada')))
     if len(keys) < 12:
         warnings.append(f'Período disponível de {len(keys)} meses; confirme a cobertura para a previsão anual.')
-    known = {(alma.norm(r['grupo']), canonical(r['classe'])): r for r in bal['despesas']}
+    known = {(group_key(r['grupo']), canonical(r['classe'])): r for r in bal['despesas']}
     items = []
     for source, data in sources.items():
         for original in data['des']['itens']:
@@ -173,7 +181,7 @@ def load_selected(folder, core):
                 continue
             item['sistema'] = source
             item['grupo'] = alma.group_name(item['grupo'] or 'Classes a revisar')
-            identity = (alma.norm(item['grupo']), canonical(item['classe']))
+            identity = (group_key(item['grupo']), canonical(item['classe']))
             if identity not in known:
                 item['classificacao_pendente'] = True
                 target = {'grupo': item['grupo'], 'classe': item['classe'], 'monthly': [0.0] * len(keys),
@@ -182,7 +190,7 @@ def load_selected(folder, core):
                 bal['despesas'].append(target)
                 warnings.append(f'{item["classe"]}: pagamento sem conta no demonstrativo; incluído para revisão.')
             target = known[identity]
-            item['classe'] = target['classe']
+            item['grupo'], item['classe'] = target['grupo'], target['classe']
             if target.get('somente_detalhe'):
                 item['classificacao_pendente'] = True
                 target['monthly'][keys.index(key)] += item['valor_pago']

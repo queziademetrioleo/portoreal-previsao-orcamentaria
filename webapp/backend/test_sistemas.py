@@ -61,6 +61,16 @@ class SystemsConsolidationTest(unittest.TestCase):
         self.assertEqual(result['total_despesas'], 150)
         self.assertEqual(coverage['2026-02'], 'group')
 
+    def test_group_name_spacing_around_slash_does_not_split_class(self):
+        # Cidade de Cabo Frio (José 06/11/2026): o pró-labore virava duas linhas e a R6
+        # anualizava as duas (3.242/mês em vez de 1.621).
+        legacy, current = source('2026-01'), source('2026-02')
+        legacy['bal']['despesas'][0].update(grupo='Reembolso/Pró-labore ao Síndico', classe='Pró-labore do Síndico')
+        current['bal']['despesas'][0].update(grupo='REEMBOLSO / PRÓ-LABORE AO SÍNDICO', classe='PRÓ-LABORE DO SÍNDICO')
+        result, _, _ = selected.consolidate({'group': legacy, 'alma': current})
+        self.assertEqual(len(result['despesas']), 1)
+        self.assertEqual(result['despesas'][0]['monthly'], [60, 60])
+
     @unittest.skipUnless(Path('tmp/berlin-db-audit/balanual.xls').exists(), 'Documentos privados de Berlin indisponíveis')
     def test_real_berlin_group_alma_migration_preserves_selected_totals(self):
         import shutil

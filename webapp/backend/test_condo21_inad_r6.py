@@ -136,3 +136,21 @@ class ValorEditadoAbaVelha(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class R6PorClasseTest(unittest.TestCase):
+    """José 06/11/2026 (Cidade de Cabo Frio): pró-labore em duas linhas saía 3.242/mês."""
+    def test_mesma_classe_em_dois_grupos_calcula_uma_parcela(self):
+        group = {'grupo': 'Reembolso/Pró-labore ao Síndico', 'classe': 'Pró-labore do Síndico',
+                 'monthly': [1621.0] * 6 + [0.0] * 6}
+        alma = {'grupo': 'Outro grupo', 'classe': 'PRÓ-LABORE DO SÍNDICO',
+                'monthly': [0.0] * 6 + [1621.0] * 6}
+        parcelas, notas, alertas = core._parcelas_r6([group, alma])
+        self.assertEqual(parcelas, {0: 0.0, 1: 1621.0})
+        self.assertIn(0, notas)
+        self.assertEqual(sum(parcelas.values()) * 12, 19452.0)
+        self.assertTrue(any('2 grupos' in a for a in alertas))
+
+    def test_conta_em_um_grupo_nao_gera_alerta(self):
+        linha = {'grupo': 'Contratos', 'classe': 'Contrato Elevador', 'monthly': [500.0] * 6 + [0.0] * 6}
+        self.assertEqual(core._parcelas_r6([linha]), ({0: 500.0}, {}, []))

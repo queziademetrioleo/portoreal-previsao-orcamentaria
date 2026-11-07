@@ -446,6 +446,17 @@ export default function TelaRevisao({
                     <NumberBlock label="Itens extraordinários removidos" value={String(removidos)} />
                   </div>
                 </Card>
+                {(sessao.alertas_revisao?.length ?? 0) > 0 && (
+                  <Card>
+                    <h2 className="section-title">Confira antes de gerar o relatório</h2>
+                    <p className="section-desc">Contas projetadas como parcela × 12 que merecem um olhar.</p>
+                    <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {sessao.alertas_revisao!.map((alerta) => (
+                        <li key={alerta}>{alerta}</li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
 
               </div>
             )}

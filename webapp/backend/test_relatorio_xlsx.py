@@ -88,3 +88,33 @@ class RelatorioXlsxTest(unittest.TestCase):
     def test_grafico_de_barras(self):
         self.assertEqual(len(self.ws._charts), 1)
         self.assertEqual(self.ws._charts[0].type, 'bar')
+
+
+class GraficoResisteEdicaoTest(unittest.TestCase):
+    """José edita o .xlsx: apagar a linha de uma conta ou digitar texto no valor zerava
+    todas as barras (#REF!/#VALUE! numa linha contamina a SUM das porcentagens) — 06/11/2026."""
+
+    def setUp(self):
+        self.bytes = relatorio_xlsx.gerar_relatorio_xlsx(_estado())
+        self.dados = load_workbook(io.BytesIO(self.bytes))[relatorio_xlsx.ABA_DADOS]
+
+    def test_cada_celula_do_grafico_tolera_erro(self):
+        linhas = [r for r in range(2, self.dados.max_row + 1) if self.dados[f'C{r}'].value]
+        self.assertGreater(len(linhas), 1)
+        for r in linhas:
+            for col in 'ABC':
+                valor = self.dados[f'{col}{r}'].value
+                if isinstance(valor, str) and valor.startswith('='):
+                    self.assertTrue(valor.startswith('=IFERROR('), f'{col}{r}: {valor}')
+        # Valor da conta vira número (texto digitado conta 0); N() não é importado pelo Numbers.
+        self.assertTrue(self.dados['B2'].value.endswith('*1,0)'))
+        self.assertNotIn('N(', ''.join(str(self.dados[f'B{r}'].value) for r in linhas))
+
+    def test_grafico_move_com_as_linhas_sem_encolher(self):
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(self.bytes)) as z:
+            desenho = next(z.read(n).decode() for n in z.namelist() if n.startswith('xl/drawings/drawing'))
+        ancoras = desenho.split('<xdr:twoCellAnchor')[1:]
+        grafico = [a for a in ancoras if 'graphicFrame' in a]
+        self.assertEqual(len(grafico), 1)
+        self.assertTrue(grafico[0].startswith(' editAs="oneCell"'), grafico[0][:40])

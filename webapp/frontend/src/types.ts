@@ -105,6 +105,7 @@ export interface Sessao {
   sistemas?: Sistema[]
   inadimplencia_apurada?: boolean
   avisos_importacao?: string[]
+  alertas_revisao?: string[]
   cobertura?: Record<string, string>
   sessao_id: string
   nome_condominio: string

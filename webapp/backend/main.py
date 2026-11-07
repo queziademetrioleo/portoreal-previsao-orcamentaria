@@ -584,6 +584,7 @@ def _montar_estado(sid, nome, ano, R, tem_fundo_reserva=None):
         'sistemas': R.get('sistemas', ['condo21', 'alma'] if R.get('origem_sistema') == 'misto' else [R.get('origem_sistema', 'condo21')]),
         'inadimplencia_apurada': R.get('inadimplencia_apurada', R.get('origem_sistema') != 'group'),
         'avisos_importacao': R.get('divergencias', []),
+        'alertas_revisao': R.get('alertas_r6', []),
         'cobertura': R.get('cobertura', {}),
         'resumo': {
             'base_total': round(R['base_total'], 2),

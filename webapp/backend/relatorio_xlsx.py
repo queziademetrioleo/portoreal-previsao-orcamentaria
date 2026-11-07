@@ -251,15 +251,18 @@ def _barras(f, ctx, linhas_despesa, ref_subtotal, subtotal):
         linha = linhas_despesa.get(_norm(barra['label']))
         if linha:
             num, valor = linha
-            f.escreve(f'A{r}', f'={P}B{num}', cinza, barra['label'], ws=d)
-            f.escreve(f'B{r}', f'={P}F{num}', cinza_m, valor, ws=d)
+            # IFERROR: conta apagada na folha vira 0 em vez de #REF!, que zerava o gráfico inteiro
+            # (o erro de uma linha contamina a SUM de todas as porcentagens — usuária 06/11/2026).
+            # *1: texto digitado no lugar do valor conta como 0 (N() não existe no Numbers: a aba vira valor fixo).
+            f.escreve(f'A{r}', f'=IFERROR({P}B{num},"")', cinza, barra['label'], ws=d)
+            f.escreve(f'B{r}', f'=IFERROR({P}F{num}*1,0)', cinza_m, valor, ws=d)
             refs.append(f'B{r}')
             soma += valor
         else:  # "Outros" = o que sobra do SUBTOTAL
             f.escreve(f'A{r}', barra['label'], cinza, ws=d)
-            f.escreve(f'B{r}', f'={P}{ref_subtotal}' + ''.join(f'-{x}' for x in refs), cinza_m,
-                      round(subtotal - soma, 2), ws=d)
-        f.escreve(f'C{r}', f'=B{r}/SUM($B${ini}:$B${fim})', cinza_p, barra['frac'], ws=d)
+            f.escreve(f'B{r}', f'=IFERROR(MAX(0,{P}{ref_subtotal}' + ''.join(f'-{x}' for x in refs) + '),0)',
+                      cinza_m, round(max(0.0, subtotal - soma), 2), ws=d)
+        f.escreve(f'C{r}', f'=IFERROR(B{r}/SUM($B${ini}:$B${fim}),0)', cinza_p, barra['frac'], ws=d)
     g = f.wb.add_chart({'type': 'bar'})
     g.add_series({
         'categories': f"={D}$A${ini}:$A${fim}",
@@ -280,7 +283,7 @@ def _barras(f, ctx, linhas_despesa, ref_subtotal, subtotal):
     g.set_legend({'none': True})
     g.set_chartarea({'border': {'none': True}})
     g.set_size({'width': 820, 'height': 60 + 42 * len(barras)})
-    f.ws.insert_chart(f'B{f.lin}', g)
+    f.ws.insert_chart(f'B{f.lin}', g, {'object_position': 2})  # move com as linhas, sem encolher/sumir
     n = math.ceil((60 + 42 * len(barras)) / 15)
     for r in range(f.lin, f.lin + n):
         f.altura(r, 15)
