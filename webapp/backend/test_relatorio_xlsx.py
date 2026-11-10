@@ -118,3 +118,22 @@ class GraficoResisteEdicaoTest(unittest.TestCase):
         grafico = [a for a in ancoras if 'graphicFrame' in a]
         self.assertEqual(len(grafico), 1)
         self.assertTrue(grafico[0].startswith(' editAs="oneCell"'), grafico[0][:40])
+
+
+class GraficoItensJoseTest(unittest.TestCase):
+    """José 09/11/2026: o gráfico usa só pessoal, luz, água, tarifa bancária, limpeza,
+    conservação e contrato de terceirização; o resto vai para Outros."""
+
+    def test_so_itens_pedidos_e_outros(self):
+        from relatorio_pdf import _grafico_barras_svg
+        g = [{'label': 'Despesas com Pessoal', 'value': 500},
+             {'label': 'Contrato Terceirização de Mão de Obra', 'value': 300},
+             {'label': 'Luz do Condomínio', 'value': 100},
+             {'label': 'Contrato de Jardinagem', 'value': 50},
+             {'label': 'Seguro de Incêndio Obrigatório', 'value': 40},
+             {'label': 'Tarifas Bancárias', 'value': 10}]
+        r = _grafico_barras_svg(g, 1000)
+        self.assertEqual([b['label'] for b in r['barras']],
+                         ['Despesas com Pessoal', 'Contrato Terceirização de Mão de Obra',
+                          'Luz do Condomínio', 'Tarifas Bancárias', 'Outros'])
+        self.assertAlmostEqual(sum(b['frac'] for b in r['barras']), 1.0)

@@ -28,6 +28,17 @@ MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
             'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
 BARRAS_LIMITE = 5
+# José (09/11/2026): o gráfico considera só estes itens; o resto vai para "Outros".
+# Compara o rótulo normalizado da tabela resumida (`_norm`); 'terceiriz' pega o
+# "Contrato ... Terceirização de Mão de Obra" com o nome que vier do balancete.
+BARRAS_ITENS = ('despesas com pessoal', 'luz do condominio', 'agua do condominio',
+                'tarifas bancarias', 'material de limpeza', 'gastos com conservacao')
+BARRAS_ITENS_PARCIAL = ('terceiriz',)
+
+
+def _item_do_grafico(label):
+    n = _norm(label)
+    return n in BARRAS_ITENS or any(t in n for t in BARRAS_ITENS_PARCIAL)
 
 
 def _norm(s):
@@ -498,10 +509,14 @@ def _layout_barras(barras, largura=680):
 def _grafico_barras_svg(grupos, total):
     if not grupos or total <= 0:
         return None
-    dados = grupos
-    if len(dados) > BARRAS_LIMITE + 1:
-        principais = dados[:BARRAS_LIMITE]
-        outros = sum(g['value'] for g in dados[BARRAS_LIMITE:])
+    principais = [g for g in grupos if _item_do_grafico(g['label'])]
+    if principais:
+        resto = [g for g in grupos if not _item_do_grafico(g['label'])]
+    else:  # nenhum dos itens pedidos existe: mantém as maiores contas
+        principais, resto = grupos[:BARRAS_LIMITE], grupos[BARRAS_LIMITE:]
+    dados = principais
+    outros = sum(g['value'] for g in resto)
+    if outros > 0.005:
         dados = principais + [{'label': 'Outros', 'value': outros}]
     barras = [{'label': g['label'], 'value': g['value'], 'frac': g['value'] / total} for g in dados]
 

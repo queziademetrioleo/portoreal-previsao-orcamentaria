@@ -24,6 +24,7 @@ Exceções fixas: `PONTUAL_FORA` (combate a incêndio — gasto pontual, fora); 
 juros, multa, taxa extra, rendimentos, créditos.
 **Sem gráfico de evolução mensal (retirado em 26/10/2026, pedido da usuária: "não será mais preciso"):** nem no
 PDF, nem no DOCX, nem no XLSX; o estado da sessão também não calcula mais `fluxo_mensal`. Único gráfico: barras horizontais de composição (era pizza até 29/10/2026).
+O gráfico considera só (pedido do José, 09/11/2026): Despesas com Pessoal, Luz, Água, Tarifas Bancárias, Material de Limpeza, Gastos com conservação e o contrato de Terceirização de Mão de Obra; o restante soma em "Outros" (última barra), % sobre o total das despesas.
 Opções de custeio: "Receitas sem fundo de reserva" / "Receitas com fundo de reserva" (+ aluguel, se houver).
 Páginas (26/10/2026, "sem espaçamentos muito longos"): sem página nova forçada — gráfico e Conclusão seguem o
 fluxo (seção inteira pula de página só se não couber); assinatura presa ao último item das Considerações.

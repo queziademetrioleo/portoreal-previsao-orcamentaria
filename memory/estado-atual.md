@@ -61,6 +61,13 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
+## Gráfico só com os itens do José (10/11/2026) — NÃO commitado
+
+- Pedido do José: o gráfico considera Despesas com Pessoal, Luz, Água, Tarifas Bancárias, Material de Limpeza, Gastos com
+  conservação e o contrato de Terceirização de Mão de Obra. Todo o resto soma em "Outros" (última barra); % sobre o total.
+  `relatorio_pdf.BARRAS_ITENS` / `_item_do_grafico` (terceirização casa por 'terceiriz'). PDF, DOCX e XLSX usam o mesmo `grafico['barras']`.
+  Se nenhum item existir, cai no top 5 antigo. Teste: `GraficoItensJoseTest` em `test_relatorio_xlsx.py`.
+
 ## Último trabalho (06/11/2026) — áudio José 06/11 (Cidade de Cabo Frio, pró-labore 3.242)
 
 - José: pró-labore do síndico saiu R$ 3.242/mês; o certo é 1.621 (um salário mínimo, o ano todo).
@@ -312,7 +319,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 
 ## Próximos passos
 
-0. **Push + rebuild no EasyPanel** (06/11: pró-labore, R6 por classe, alertas, gráfico do Excel). Reanalisar o Cabo Frio, conferir pró-labore 1.621 e perguntar ao José sobre o Contrato Terceirização de Mão de Obra (só jun/jul, R6 projeta 145.680/ano). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
+0. **Push + rebuild no EasyPanel** (06/11: pró-labore, R6 por classe, alertas, gráfico do Excel; 10/11: gráfico só com os itens do José, ainda NÃO commitado). Reanalisar o Cabo Frio, conferir pró-labore 1.621 e perguntar ao José sobre o Contrato Terceirização de Mão de Obra (só jun/jul, R6 projeta 145.680/ano). Reanalisar a Prainha e mostrar ao José a Tx. Administração 3.070 (R6 nova). José reenvia Cidade de Cabo Frio com a Group e o
    FIN00801 no campo de inadimplência. Perguntar ao José: complemento de taxa deve ser abatido também? (hoje fica fora, como na receita ordinária). Depois: gerar de novo o relatório do Chateau
    Canões (`0973588a1d80`) — o relatório recalcula do cache, não precisa reanalisar — e conferir seguro R$ 413,34/mês.
    Regra do seguro confirmada pela usuária 29/10: última parcela × nº de parcelas ÷ 12.
