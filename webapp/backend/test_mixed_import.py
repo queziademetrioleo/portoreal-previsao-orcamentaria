@@ -288,3 +288,22 @@ class SantoriniIntegrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ContratoManutencaoGeralTest(unittest.TestCase):
+    """José 10/2026 (Ed. Kennedy): o Alma chama de "(GERAL)" o contrato que o Condo21 chama
+    de "Contrato de Manutenção"; eram duas linhas e a R6 anualizava as duas (4.500 + 4.800)."""
+
+    def test_geral_junta_com_contrato_de_manutencao(self):
+        import parsers_alma as alma
+        import previsao
+        def bal(meses, nome, valores):
+            return {'meses': meses, 'receitas': [], 'despesas': [
+                {'grupo': 'Contratos', 'classe': nome, 'monthly': valores}]}
+        condo = bal(['07/2026', '08/2026'], 'Contrato de Manutenção', [375.0, 0.0])
+        alma_bal = bal(['07/2026', '08/2026'], 'CONTRATO DE MANUTENÇÃO (GERAL)', [0.0, 400.0])
+        res, _, _ = alma.consolidate_balances(condo, alma_bal)
+        linhas = [r for r in res['despesas'] if 'manutencao' in alma.norm(r['classe'])]
+        self.assertEqual(len(linhas), 1)
+        self.assertEqual(linhas[0]['monthly'], [375.0, 400.0])
+        self.assertEqual(previsao._media_ultimos_3_meses(linhas[0]['monthly']), 400.0)

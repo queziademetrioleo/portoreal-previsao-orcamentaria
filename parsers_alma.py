@@ -632,7 +632,8 @@ def consolidate_balances(condo, alma, start=None, end=None):
         raise ValueError('Faltam dados para os meses: ' + ', '.join(map(month_label, sorted(missing))))
     aliases = {'taxa de condominio': 'tx. condominio', 'fundo de reserva': 'fundo reserva',
                'consultoria, medicina e seg. do trabalho': 'consult., medicina e seg. do trabalho',
-               'manutencao jardim': 'manutencao de jardim', 'manutencao portao / porta': 'manutencao portao'}
+               'manutencao jardim': 'manutencao de jardim', 'manutencao portao / porta': 'manutencao portao',
+               'contrato de manutencao (geral)': 'contrato de manutencao'}
     def canonical(name):
         return aliases.get(norm(name), norm(name))
     original_names = {canonical(r['classe']): r['classe'] for kind in ('receitas', 'despesas') for r in condo[kind]}
@@ -710,6 +711,7 @@ def load_mixed(folder, core):
     # Nomes canônicos usados no balanço também precisam ser usados nos detalhes.
     aliases = {'manutencao jardim': 'manutencao de jardim',
                'manutencao portao / porta': 'manutencao portao',
+               'contrato de manutencao (geral)': 'contrato de manutencao',
                'consultoria, medicina e seg. do trabalho': 'consult., medicina e seg. do trabalho',
                'manutencao do sistema de gas (aquisicao de gas glp)': 'manutencao do sistema de gas'}
     names = {norm(r['classe']): r['classe'] for r in bal['despesas']}

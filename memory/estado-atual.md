@@ -61,6 +61,16 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
+## Ed. Kennedy (10/11/2026) — contrato de manutenção duplicado — NÃO commitado
+
+- Sessão `eea573fb0e63` (Condo21 + Alma). José: taxa deu 6.344 (ano passado 6.392 +5% → esperava ~6.712) e contrato de manutenção errado (últimos 400).
+- Contrato: o Alma chama de "CONTRATO DE MANUTENÇÃO (GERAL)" o que o Condo21 chama de "Contrato de Manutenção"; eram 2 linhas (375×12 + 400×12 = 9.300).
+  Alias `'contrato de manutencao (geral)'` nos 3 mapas (`parsers_alma.consolidate_balances`, `load_mixed`, `parsers_sistemas.ALIASES`) → 1 linha, 400×12 = 4.800.
+  Teste: `ContratoManutencaoGeralTest` em `test_mixed_import.py`. Sessão antiga só muda ao **reanalisar**.
+- Taxa: NÃO é bug. Lançado out/26 = 6.344,42; as unidades 201 (cota 288,53, metade) e 204 (285,31) têm cota abaixo do padrão
+  (fundo de reserva = 10% da cota indica 577,06 e 364,81); somando 288,53 + 79,50 dá 6.712,45 (= número do José). Motivo do desconto
+  desconhecido. **Pergunta aberta p/ o José:** desconsiderar esses descontos na receita? (+~R$ 4.400/ano). Regra vigente segue "taxa com desconto".
+
 ## Gráfico só com os itens do José (10/11/2026) — NÃO commitado
 
 - Pedido do José: o gráfico considera Despesas com Pessoal, Luz, Água, Tarifas Bancárias, Material de Limpeza, Gastos com

@@ -11,6 +11,7 @@ import parsers_group as group
 
 ALIASES = {'taxa de condominio': 'tx. condominio', 'fundo de reserva': 'fundo reserva',
            'manutencao jardim': 'manutencao de jardim',
+           'contrato de manutencao (geral)': 'contrato de manutencao',
            'manutencao portao / porta': 'manutencao portao',
            'consultoria, medicina e seg. do trabalho': 'consult., medicina e seg. do trabalho',
            'manutencao do sistema de gas (aquisicao de gas glp)': 'manutencao do sistema de gas'}
