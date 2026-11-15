@@ -304,6 +304,15 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
         despesas = relatorio_pdf._consolidar_despesas_relatorio(linhas, {'subtotal': 2400})
         self.assertEqual(despesas, [('Contrato de Assinatura de Internet', 200)])
 
+    def test_contrato_de_manutencao_geral_nao_e_somado_ao_do_elevador(self):
+        # Ibiza (11/2026): elevador 465,32 + contrato geral 250 saíam como 715,32.
+        linhas = [
+            {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção do Elevador', 'final': 5583.84},
+            {'grupo': 'Contratos', 'classe': 'Contrato de Manutenção', 'final': 3000}]
+        despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}))
+        self.assertAlmostEqual(despesas['Contrato de Manutenção do Elevador'], 465.32)
+        self.assertAlmostEqual(despesas['Contrato de Manutenção'], 250)
+
     def test_prefixo_de_contrato_ambiguo_nao_escolhe_servico_arbitrariamente(self):
         linhas = [{'grupo': 'Contratos', 'classe': nome, 'final': 120} for nome in (
             'Contrato de Manutenção do Elevador', 'Contrato de Manutenção da Piscina',

@@ -236,6 +236,17 @@ class UltimoPagamentoTest(unittest.TestCase):
             {'data': f'2026-{m:02d}-10', 'valor_pago': 300, 'parcela': '01/01'} for m in range(6, 10)])
         self.assertEqual(r['subtotal'], 1200)
 
+    def test_seguro_apolice_nova_sem_parcela_usa_total_da_anterior(self):
+        # Brisamar IV (11/2026): apólice anterior "Parcela 6/6"; a nova vem só com o
+        # nome da seguradora e 2 pagos. Total = 6 → 493,07 × 6 ÷ 12 = 246,535.
+        r = self.projetar('Seguro Incêndio', [
+            {'data': '2026-01-07', 'valor_pago': 394.13, 'descricao': 'Parcela 5/6 - TOKIO MARINE SEGURADO S.A.'},
+            {'data': '2026-02-11', 'valor_pago': 402.48, 'descricao': 'Parcela 6/6 - TOKIO MARINE SEGURADO S.A.'},
+            {'data': '2026-09-01', 'valor_pago': 493.07, 'descricao': 'TOKIO MARINE SEGURADORA S.A.'},
+            {'data': '2026-10-05', 'valor_pago': 493.07, 'descricao': 'TOKIO MARINE SEGURADORA S.A.'}])
+        self.assertEqual(r['subtotal'], 2958.42)
+        self.assertAlmostEqual(r['subtotal'] / 12, 246.535)
+
     def test_seguro_sem_parcela_conta_pagamentos_mensais_seguidos(self):
         r = self.projetar('Seguro Incêndio', [
             {'data': f'2026-{m:02d}-10', 'valor_pago': 300} for m in range(4, 10)])

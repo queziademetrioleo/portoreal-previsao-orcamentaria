@@ -314,6 +314,9 @@ def _categoria_despesa(linha):
     return 'outras'
 
 
+_CONTRATOS_GENERICOS_COMPLETOS = {'contrato de manutencao'}
+
+
 def _rotulo_contrato(linha, linhas):
     """Completa nomes cortados somente quando há uma correspondência inequívoca."""
     label = ' '.join(str(linha.get('classe') or 'Contrato de serviços').split()).strip()
@@ -322,7 +325,10 @@ def _rotulo_contrato(linha, linhas):
         str(l.get('classe')).strip() for l in linhas
         if _categoria_despesa(l) == 'contratos' and _norm(l.get('classe')).startswith(key + ' ')
     }
-    if len(candidatos) == 1:
+    # "Contrato de Manutenção" sem complemento é um contrato geral de verdade (Brisamar IV
+    # e Ibiza, 11/2026), não nome cortado: não pode ser engolido pelo contrato do elevador.
+    nome_completo = key in _CONTRATOS_GENERICOS_COMPLETOS and not re.search(r'\s(?:de|do|da|dos|das|e)$', key)
+    if len(candidatos) == 1 and not nome_completo:
         label = candidatos.pop()
     texto = _norm(label)
     servicos = [

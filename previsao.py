@@ -1074,6 +1074,13 @@ def _projecao_ultima_taxa(linha, itens):
 _RE_PARCELA = re.compile(r'(?:parcela\s*)?\b(\d{1,2})\s*/\s*(\d{1,2})\b', re.IGNORECASE)
 
 
+def _chave_seguradora(descricao):
+    """Duas primeiras palavras do nome da seguradora, sem o prefixo 'Parcela N/M -'."""
+    texto = _RE_PARCELA.sub(' ', _norm(descricao))
+    palavras = [w for w in re.findall(r'[a-z]{3,}', texto) if w != 'parcela']
+    return ' '.join(palavras[:2]) if len(palavras) >= 2 else ''
+
+
 def _total_parcelas_seguro(ultimo, pagos):
     """Total de parcelas da apólice do pagamento mais recente.
 
@@ -1097,6 +1104,20 @@ def _total_parcelas_seguro(ultimo, pagos):
     valor = float(ultimo['valor_pago'])
     anteriores = sorted((p for p in pagos if p is not ultimo),
                         key=lambda i: str(i.get('data') or ''), reverse=True)
+
+    # Apólice nova sem "N/M" na descrição (Brisamar IV, 11/2026: Tokio Marine
+    # passou de "Parcela 6/6" para só o nome da seguradora): usa o total da
+    # apólice anterior da mesma seguradora, em vez de contar só as parcelas
+    # já pagas (que subestima o seguro no início da apólice).
+    chave = _chave_seguradora(desc)
+    if chave:
+        for p in anteriores:
+            if _chave_seguradora(p.get('descricao')) != chave:
+                continue
+            m = _RE_PARCELA.search(str(p.get('descricao') or ''))
+            if m and 1 <= int(m.group(1)) <= int(m.group(2)) <= 12 and int(m.group(2)) > 1:
+                return int(m.group(2))
+
     def _data(item):
         try:
             return datetime.date.fromisoformat(str(item.get('data') or '')[:10])

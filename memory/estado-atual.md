@@ -61,6 +61,18 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
+## Brisamar IV `328ae1883a9d` e Ibiza `29d16021d809` (15/11/2026) — seguro e elevador — NÃO commitado
+
+- José achou seguro e elevador errados no Brisamar IV (esperado 246,53 e 547,02) e elevador errado no Ibiza (465,32, saía 715,32).
+- **Seguro:** apólice nova da Tokio Marine sem "Parcela N/M" na descrição, só 2 pagos → contava 2 parcelas (986,14/ano).
+  `_total_parcelas_seguro` agora herda o total da apólice anterior da mesma seguradora (`_chave_seguradora`) → 6 → 246,53/mês.
+  Teste `test_seguro_apolice_nova_sem_parcela_usa_total_da_anterior`.
+- **Elevador:** o cálculo da linha estava certo (547,02 e 465,32); o PDF somava o "Contrato de Manutenção" geral (415 e 250/mês) ao do elevador
+  porque `_rotulo_contrato` "completava nome cortado" com o único candidato. `_CONTRATOS_GENERICOS_COMPLETOS` protege "Contrato de Manutenção".
+  Teste `test_contrato_de_manutencao_geral_nao_e_somado_ao_do_elevador`. Verificado nas 2 sessões reais: 547,02 / 465,32.
+- Falta: commit, push, rebuild EasyPanel, e reanalisar/salvar revisão do Brisamar IV (seguro); o PDF do elevador só precisa regerar.
+- 4 testes de `test_classificacao_capital` ("projetor") já falhavam antes desta mudança.
+
 ## Ed. Kennedy (10/11/2026) — contrato de manutenção duplicado — NÃO commitado
 
 - Sessão `eea573fb0e63` (Condo21 + Alma). José: taxa deu 6.344 (ano passado 6.392 +5% → esperava ~6.712) e contrato de manutenção errado (últimos 400).
