@@ -320,12 +320,13 @@ REGRA_INAD = 'group_ultimos_2_meses'
 def parse_arrears(path):
     """Inadimplência detalhada da Group: mesma regra do Alma (José Henrique, 10/2026).
 
-    Inadimplente = boleto em aberto nos DOIS meses anteriores ao mês do relatório
-    (emissão em outubro → setembro E agosto). Com esses meses pagos, débito antigo é
+    Inadimplente = boleto em aberto nos TRÊS meses anteriores ao mês do relatório
+    (emissão em outubro → setembro, agosto E julho; José Henrique, 17/11/2026). Com esses meses pagos, débito antigo é
     acordo e não entra. Abate o boleto inteiro mais recente (taxa, fundo, água; sem
     juros/multa). Linha com Recebimento preenchido já foi paga. O relatório não traz
     o nome do condomínio: confere-se o total e o número de unidades declarados.
     """
+    from parsers_alma import MESES_INAD, _arrears_window  # import local: parsers_alma também importa daqui
     rows = read_rows(path)
     text = ' '.join(norm(v) for row in rows for v in row if v is not None)
     base = re.search(r'inadimplencia ate:?\s*(\d{2}/\d{2}/\d{4})', text)
@@ -333,8 +334,7 @@ def parse_arrears(path):
     if 'inadimplencia detalhada' not in text or not base or not issued:
         raise ValueError('Group: envie o relatório "Inadimplência detalhada" original, com filtro e data de emissão.')
     data_base, issued = date(base[1]), date(issued[1])
-    end_day = issued.replace(day=1) - dt.timedelta(days=1)
-    window = [(end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%m/%Y'), end_day.strftime('%m/%Y')]
+    window = [m.split('-')[1] + '/' + m.split('-')[0] for m in _arrears_window(issued)]
     start, cols = header(rows, ('unidade', 'nn', 'classe de conta', 'competencia', 'vencimento', 'valor (r$)', 'recebimento'))
     lines, declared = [], None
     for row_no, row in enumerate(rows[start + 1:], start + 2):
@@ -373,17 +373,17 @@ def parse_arrears(path):
     for unit, by_month in open_bills.items():
         if set(by_month) != set(window):
             continue
-        bill = by_month[window[1]]
+        bill = by_month[window[-1]]
         items.append({'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'taxa_condominio': True,
-                      'mes_ref': window[1], 'vencimento': bill[0]['vencimento'],
-                      'valor': float(sum(i['valor'] for i in bill)), 'proj_rec': None, 'meses_atraso': 2,
+                      'mes_ref': window[-1], 'vencimento': bill[0]['vencimento'],
+                      'valor': float(sum(i['valor'] for i in bill)), 'proj_rec': None, 'meses_atraso': MESES_INAD,
                       'critica': True, 'regra_inad': REGRA_INAD, 'sistema': 'group',
                       'linhas_origem': [i['linha_origem'] for i in bill]})
     total = round(sum(i['valor'] for i in items), 2)
     return {'total': float(declared), 'critica': total, 'recente': round(float(declared) - total, 2),
             'data_base': data_base, 'itens': items, 'unidades_criticas': len(items),
             'unidades_criticas_detalhe': {i['unidade']: {'impacto': i['valor'], 'tx_mensal_media': i['valor'],
-                                                       'meses_consecutivos': 2} for i in items},
+                                                       'meses_consecutivos': MESES_INAD} for i in items},
             'impacto_mensal_receita': total, 'meses_considerados': window, 'regra': REGRA_INAD}
 
 

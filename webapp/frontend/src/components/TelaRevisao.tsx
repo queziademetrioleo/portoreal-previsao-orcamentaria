@@ -521,7 +521,7 @@ export default function TelaRevisao({
                     <p className="section-desc">{sessao.inadimplencia_apurada === false || sessao.origem_sistema === 'group'
                       ? 'A inadimplência não foi apurada com os documentos disponíveis. Confira os avisos de importação.'
                       : sessao.sistemas?.includes('alma') || sessao.origem_sistema === 'misto'
-                      ? 'Somente os dois últimos meses do relatório de inadimplência do Alma. Para cada unidade, entra somente a última taxa condominial vencida; débitos antigos do Condo21 não entram.'
+                      ? 'Somente unidades que devem os três meses anteriores ao do relatório de inadimplência do Alma. Para cada unidade, entra somente a última taxa condominial vencida; débitos antigos do Condo21 não entram.'
                       : 'Apenas unidades com três ou mais meses consecutivos em atraso. Para cada unidade, entra somente a última taxa condominial vencida.'}</p>
                   </div>
                   <div className="choice-row">

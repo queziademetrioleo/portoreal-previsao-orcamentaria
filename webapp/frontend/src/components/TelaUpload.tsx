@@ -351,7 +351,7 @@ export default function TelaUpload({ onCriada, onVoltar }: Props) {
                       }} />
                       Não há inadimplência no Alma
                     </label>
-                    <p className="form-hint">Inadimplente é quem deve os dois meses anteriores ao do relatório do Alma (ex.: relatório de outubro → setembro e agosto); abatemos o boleto mais recente, cada receita da sua linha (taxa, fundo, água, gás; sem multa, juros, acordo ou taxa extra). Envie o FIN00801; o PDF antigo ainda é aceito, mas abate o boleto todo da taxa.</p>
+                    <p className="form-hint">Inadimplente é quem deve os três meses anteriores ao do relatório do Alma (ex.: relatório de outubro → setembro, agosto e julho); abatemos o boleto mais recente, cada receita da sua linha (taxa, fundo, água, gás; sem multa, juros, acordo ou taxa extra). Envie o FIN00801; o PDF antigo ainda é aceito, mas abate o boleto todo da taxa.</p>
                   </section>
               )}
               <Button

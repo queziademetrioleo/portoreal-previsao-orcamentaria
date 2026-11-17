@@ -1,6 +1,6 @@
 # Estado atual — Previsão Orçamentária
 
-> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 06/11/2026.
+> Documento vivo. **Atualizar a cada mudança** (ver `CLAUDE.md`). Última atualização: 17/11/2026.
 > Histórico detalhado de sessões antigas: `git log` e versões anteriores de `memory/`.
 
 ## O que é
@@ -61,7 +61,18 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Brisamar IV `328ae1883a9d` e Ibiza `29d16021d809` (15/11/2026) — seguro e elevador — NÃO commitado
+## Inadimplência Alma/Group 3 meses + item 7 (17/11/2026) — NÃO commitado
+
+- José (Barramares XVII): 1 unidade com 2 meses de atraso não deveria contar. Usuária: "todos são 3 meses" e vale só p/ análises novas.
+- `parsers_alma.MESES_INAD = 3` + `_arrears_window(base, n)` (usado por Alma PDF, FIN00801 e Group). `meses_atraso`/`meses_consecutivos` = 3.
+  Ids de regra `..._2_meses_...` mantidos de propósito (chaves gravadas nas sessões). Textos de tela/PDF/main.py atualizados p/ "três meses".
+- Condo21 sozinho não mudou (≥3 consecutivos). Testes atualizados + casos novos de 2 meses que não contam; suíte só com as 4 falhas de "projetor".
+- Falta: commit, push, rebuild EasyPanel. Item 4 (termo repetido "impressão de boleto") ainda NÃO feito.
+- **Item 7 do relatório (16-17/11, áudio José):** quando a receita sem fundo já cobre as despesas, os 2 ramos diziam "não é necessário reajuste" (confuso).
+  Agora o ramo "fundo preservado" diz "recomendamos um reajuste de pelo menos 5% na taxa condominial" (`REAJUSTE_MINIMO_PRESERVADO` em `relatorio_pdf.py`, usado no PDF/DOCX e na fórmula do XLSX).
+  Aplicado como regra geral nesse caso; José não disse explicitamente se é geral — confirmar. Edição manual do texto pelo José: usuária mandou ignorar.
+
+## Brisamar IV `328ae1883a9d` e Ibiza `29d16021d809` (15/11/2026) — seguro e elevador — commitado e no ar
 
 - José achou seguro e elevador errados no Brisamar IV (esperado 246,53 e 547,02) e elevador errado no Ibiza (465,32, saía 715,32).
 - **Seguro:** apólice nova da Tokio Marine sem "Parcela N/M" na descrição, só 2 pagos → contava 2 parcelas (986,14/ano).
@@ -70,10 +81,10 @@ Resumo em `regras.md`. Decisões que não podem regredir:
 - **Elevador:** o cálculo da linha estava certo (547,02 e 465,32); o PDF somava o "Contrato de Manutenção" geral (415 e 250/mês) ao do elevador
   porque `_rotulo_contrato` "completava nome cortado" com o único candidato. `_CONTRATOS_GENERICOS_COMPLETOS` protege "Contrato de Manutenção".
   Teste `test_contrato_de_manutencao_geral_nao_e_somado_ao_do_elevador`. Verificado nas 2 sessões reais: 547,02 / 465,32.
-- Falta: commit, push, rebuild EasyPanel, e reanalisar/salvar revisão do Brisamar IV (seguro); o PDF do elevador só precisa regerar.
+- Commit `2d77ded`, push e deploy no EasyPanel FEITOS (deploy confirmado pela usuária em 17/11, rodou ~15/11). Falta reanalisar/salvar revisão do Brisamar IV (seguro); o PDF do elevador só precisa regerar.
 - 4 testes de `test_classificacao_capital` ("projetor") já falhavam antes desta mudança.
 
-## Ed. Kennedy (10/11/2026) — contrato de manutenção duplicado — NÃO commitado
+## Ed. Kennedy (10/11/2026) — contrato de manutenção duplicado — commitado (`2968b3d`)
 
 - Sessão `eea573fb0e63` (Condo21 + Alma). José: taxa deu 6.344 (ano passado 6.392 +5% → esperava ~6.712) e contrato de manutenção errado (últimos 400).
 - Contrato: o Alma chama de "CONTRATO DE MANUTENÇÃO (GERAL)" o que o Condo21 chama de "Contrato de Manutenção"; eram 2 linhas (375×12 + 400×12 = 9.300).
@@ -83,7 +94,7 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   (fundo de reserva = 10% da cota indica 577,06 e 364,81); somando 288,53 + 79,50 dá 6.712,45 (= número do José). Motivo do desconto
   desconhecido. **Pergunta aberta p/ o José:** desconsiderar esses descontos na receita? (+~R$ 4.400/ano). Regra vigente segue "taxa com desconto".
 
-## Gráfico só com os itens do José (10/11/2026) — NÃO commitado
+## Gráfico só com os itens do José (10/11/2026) — commitado (`9a5f0c2`)
 
 - Pedido do José: o gráfico considera Despesas com Pessoal, Luz, Água, Tarifas Bancárias, Material de Limpeza, Gastos com
   conservação e o contrato de Terceirização de Mão de Obra. Todo o resto soma em "Outros" (última barra); % sobre o total.

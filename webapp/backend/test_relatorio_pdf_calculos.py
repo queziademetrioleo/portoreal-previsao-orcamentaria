@@ -147,7 +147,7 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
     def test_consideracao_sem_reajuste_nas_duas_partes(self):
         texto = relatorio_pdf._consideracao_opcoes(relatorio_pdf._opcoes_receita(36000, 6000, [], 30000))
         self.assertIn('prática não recomendada —, não é necessário reajuste da taxa condominial.', texto)
-        self.assertIn('finalidade original, não é necessário reajuste da taxa condominial para os próximos 12 meses.',
+        self.assertIn('finalidade original, recomendamos um reajuste de pelo menos 5% na taxa condominial para os próximos 12 meses.',
                       texto)
 
     def test_consideracao_com_fundo_usa_texto_do_jose(self):

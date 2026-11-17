@@ -119,16 +119,25 @@ def _parte_inadimplencia(receita):
     return None
 
 
-def _arrears_window(base):
-    end_day = base.replace(day=1) - dt.timedelta(days=1)
-    end = end_day.strftime('%Y-%m')
-    prev = (end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%Y-%m')
-    return prev, end
+# Inadimplente = deve os 3 meses anteriores ao mês do relatório (José Henrique, 17/11/2026;
+# antes eram 2). Os identificadores de regra ('..._2_meses_...') ficam como estão: são chaves
+# gravadas nas sessões salvas.
+MESES_INAD = 3
+
+
+def _arrears_window(base, n=MESES_INAD):
+    """Os n meses anteriores ao mês de `base`, do mais antigo ao mais recente ('AAAA-MM')."""
+    day = base.replace(day=1) - dt.timedelta(days=1)
+    meses = []
+    for _ in range(n):
+        meses.append(day.strftime('%Y-%m'))
+        day = day.replace(day=1) - dt.timedelta(days=1)
+    return meses[::-1]
 
 
 def read_arrears_fin(path):
     """FIN00801 (Contas a Receber, XLSX): mesma regra do PDF de inadimplência
-    (deve os dois meses anteriores ao mês do relatório → abate o boleto mais
+    (deve os três meses anteriores ao mês do relatório → abate o boleto mais
     recente), mas o boleto vem separado por receita, então o abatimento sai
     de cada receita: taxa da taxa, fundo do fundo, água da água, gás do gás.
     Mês do relatório = data de exportação gravada no arquivo."""
@@ -191,8 +200,9 @@ def read_arrears_fin(path):
         base = (last.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
     else:
         base = dt.date.today()
-    prev, end = _arrears_window(base)
-    window = {prev, end}
+    meses = _arrears_window(base)
+    end = meses[-1]
+    window = set(meses)
     owed, latest = defaultdict(set), {}
     for b in boletos:
         total = sum(b['partes'].values()) + sum(b['fora'].values())
@@ -215,7 +225,7 @@ def read_arrears_fin(path):
                       'partes': partes, 'fora_do_abatimento': {k: round(v, 2) for k, v in b['fora'].items()},
                       'mes_ref': month_label(b['mes']), 'vencimento': b['vencimento'], 'valor': valor,
                       'valor_original_titulo': valor, 'proj_rec': valor,
-                      'meses_atraso': 1 if b['mes'] == end else 2, 'critica': True,
+                      'meses_atraso': MESES_INAD, 'critica': True,
                       'regra_inad': 'misto_ultimos_2_meses_alma', 'sistema': 'alma',
                       'arquivo': Path(path).name, 'linha': b['linha']})
     total = round(sum(i['valor'] for i in items), 2)
@@ -223,14 +233,14 @@ def read_arrears_fin(path):
             'itens': items, 'unidades_criticas': len(items),
             'unidades_criticas_detalhe': {i['unidade']: {'impacto': i['valor'],
                 'tx_mensal_media': i['valor'], 'meses_consecutivos': i['meses_atraso']} for i in items},
-            'impacto_mensal_receita': total, 'meses_considerados': [month_label(prev), month_label(end)],
+            'impacto_mensal_receita': total, 'meses_considerados': [month_label(m) for m in meses],
             'regra': 'misto_ultimos_2_meses_alma', 'formato': 'fin00801'}
 
 
 def read_arrears(path):
-    """Inadimplente = deve os DOIS meses anteriores ao mês do relatório.
+    """Inadimplente = deve os TRÊS meses anteriores ao mês do relatório.
 
-    Ex.: relatório de outubro → deve setembro E agosto. Débito antigo com os
+    Ex.: relatório de outubro → deve setembro, agosto E julho. Débito antigo com os
     meses recentes pagos indica acordo e não entra (José Henrique, 10/2026).
     Abate o boleto inteiro da unidade (taxa, fundo de reserva e água): são as
     taxas que ela deixa de pagar (José Henrique, 10/2026). Assim não depende
@@ -249,10 +259,8 @@ def read_arrears(path):
     if not match:
         raise ValueError('Inadimplência Almah: data-base não identificada.')
     base = dt.datetime.strptime(match[1], '%d/%m/%Y').date()
-    end_day = base.replace(day=1) - dt.timedelta(days=1)
-    end = end_day.strftime('%Y-%m')
-    prev = (end_day.replace(day=1) - dt.timedelta(days=1)).strftime('%Y-%m')
-    window = {prev, end}
+    meses = _arrears_window(base)
+    window = set(meses)
     owed = defaultdict(set)
     latest = {}
     historical_count = 0
@@ -276,7 +284,7 @@ def read_arrears(path):
         # taxa_condominio: o boleto inteiro é o que se abate (o filtro da tela procura "condom").
         item = {'unidade': unit, 'classe': 'Boleto (taxa, fundo e água)', 'taxa_condominio': True, 'mes_ref': month_label(month),
                 'vencimento': due, 'valor': original, 'valor_original_titulo': original,
-                'proj_rec': original, 'meses_atraso': 1 if month == end else 2,
+                'proj_rec': original, 'meses_atraso': MESES_INAD,
                 'critica': True, 'regra_inad': 'misto_ultimos_2_meses_alma',
                 'sistema': 'alma', 'arquivo': Path(path).name, 'pagina': page}
         if unit not in latest or month_key(latest[unit]['mes_ref']) < month:
@@ -289,7 +297,7 @@ def read_arrears(path):
             'itens': items, 'unidades_criticas': len(items),
             'unidades_criticas_detalhe': {i['unidade']: {'impacto': i['valor'],
                 'tx_mensal_media': i['valor'], 'meses_consecutivos': i['meses_atraso']} for i in items},
-            'impacto_mensal_receita': total, 'meses_considerados': [month_label(prev), month_label(end)],
+            'impacto_mensal_receita': total, 'meses_considerados': [month_label(m) for m in meses],
             'regra': 'misto_ultimos_2_meses_alma'}
 
 

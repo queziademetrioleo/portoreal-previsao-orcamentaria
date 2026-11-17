@@ -151,11 +151,12 @@ class GroupImportTest(unittest.TestCase):
     def arrears(self):
         head = ['Unidade', 'Sacado', 'NN', 'Classe de conta', 'Competência', 'Vencimento', 'Atraso',
                 'Valor (R$)', 'Juros (R$)', 'Total (R$)', 'Informações do acordo', 'Recebimento']
-        rows = [['I Porto Real - VHR'], ['INADIMPLÊNCIA DETALHADA'], ['Número de unidades: 4'], [], head]
+        rows = [['I Porto Real - VHR'], ['INADIMPLÊNCIA DETALHADA'], ['Número de unidades: 5'], [], head]
         def bill(unit, nn, m, received='-', water=50):
             for cls, value in (('1.1.2 - .Tx. Condomínio', 100), ('1.1.3 - .Fundo Reserva', 10), ('1.1.36 - Água', water)):
                 rows.append([unit, 'Fulano', nn, cls, m, f'10/{m}', '20', value, 1, value + 1, '-', received])
-        bill('Águia - 201', '1', '08/2026'); bill('Águia - 201', '2', '09/2026', water=60)  # deve 08 e 09
+        bill('Águia - 201', '0', '07/2026'); bill('Águia - 201', '1', '08/2026'); bill('Águia - 201', '2', '09/2026', water=60)  # deve 07, 08 e 09
+        bill('Orion - 404', '9', '08/2026'); bill('Orion - 404', '10', '09/2026')          # só 08 e 09 (2 meses): não conta
         rows.append(['Águia - 201', 'Fulano', '3', '1.7.8 - Acordo Extrajudicial', '09/2026', '20/09/2026', '10', 900, 0, 900, 'Acordo 7', '-'])
         bill('Lince - 102', '4', '09/2026')                                                # só 09
         bill('Pegasus - 310', '5', '08/2026', received='05/10/2026'); bill('Pegasus - 310', '6', '09/2026')  # 08 pago depois
@@ -165,15 +166,15 @@ class GroupImportTest(unittest.TestCase):
                  ['Filtros:  Inadimplência até:30/09/2026; Competência: Todas'], ['Emissão: 19/10/2026 20:40']]
         return rows
 
-    def test_group_arrears_use_two_months_before_report_like_alma(self):
-        """Emissão em outubro: inadimplente é quem deve setembro E agosto (José, 10/2026)."""
+    def test_group_arrears_use_three_months_before_report_like_alma(self):
+        """Emissão em outubro: inadimplente é quem deve setembro, agosto E julho (José, 17/11/2026)."""
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder) / group.ARREARS_FILE).write_bytes(b'')
             with patch.object(group, 'read', side_effect=self.reader), \
                  patch.object(group, 'read_rows', return_value=self.arrears()):
                 data = group.load_group(folder, core)
         ina = data['inad']
-        self.assertEqual(ina['meses_considerados'], ['08/2026', '09/2026'])
+        self.assertEqual(ina['meses_considerados'], ['07/2026', '08/2026', '09/2026'])
         self.assertEqual([i['unidade'] for i in ina['itens']], ['Águia - 201'])
         # Boleto inteiro de 09 (taxa + fundo + água), sem juros e sem a parcela do acordo.
         self.assertEqual(ina['itens'][0]['valor'], 170)

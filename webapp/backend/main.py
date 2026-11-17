@@ -294,11 +294,11 @@ def _explicacao_deterministica_despesa(item):
 
 def _explicacao_deterministica_inad(item):
     if item.get('regra_inad') == 'misto_ultimos_2_meses_alma':
-        return {'resumo': 'Parcela em aberto nos dois últimos meses da referência do relatório Almah. O abatimento considera uma taxa mensal da unidade.',
+        return {'resumo': 'Parcela em aberto nos três meses anteriores ao relatório Almah. O abatimento considera uma taxa mensal da unidade.',
                 'evidencias': ['Posição atual Almah; histórico Condo21 não é somado.',
                                f"Última parcela: {item.get('mes_ref', '')}."]}
     if item.get('regra_inad') == 'group_ultimos_2_meses':
-        return {'resumo': 'Boletos em aberto nos dois meses anteriores ao relatório de inadimplência Group. '
+        return {'resumo': 'Boletos em aberto nos três meses anteriores ao relatório de inadimplência Group. '
                           'O abatimento considera o boleto inteiro da unidade (taxa, fundo e água), sem juros e multa.',
                 'evidencias': [f"Último boleto em aberto: {item.get('mes_ref', '')}."]}
     critica = bool(item.get('critica'))

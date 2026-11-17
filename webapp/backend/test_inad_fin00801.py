@@ -58,13 +58,16 @@ class Fin00801Test(unittest.TestCase):
                  ('TAXA EXTRA - FINS RESCISÓRIOS', '30,00'), ('COMPLEMENTO TX. CONDOMÍNIO', '92,29'),
                  ('MULTA', '30,44'), ('JUROS', '15,07')]
         _fin00801(self.path, [
+            _boleto('410', 'BL 0 REF. MÊS 08/2026', '05/08/2026', cheio),
             _boleto('410', 'BL 1 REF. MÊS 09/2026', '05/09/2026', cheio),
             _boleto('410', 'BL 2 REF. MÊS 10/2026', '05/10/2026', cheio),
             _boleto('208', 'BL 3 REF. MÊS 09/2026', '05/09/2026', cheio),      # só setembro
+            _boleto('209', 'BL 5 REF. MÊS 09/2026', '05/09/2026', cheio),      # 2 meses (setembro e outubro): não conta
+            _boleto('209', 'BL 6 REF. MÊS 10/2026', '05/10/2026', cheio),
             _boleto('105', 'BL 4 02/2016', '05/02/2016', cheio),               # débito antigo
         ])
         r = alma.read_arrears(self.path)
-        self.assertEqual(r['meses_considerados'], ['09/2026', '10/2026'])
+        self.assertEqual(r['meses_considerados'], ['08/2026', '09/2026', '10/2026'])
         self.assertEqual([i['unidade'] for i in r['itens']], ['ÚNICO 410'])
         item = r['itens'][0]
         self.assertEqual(item['mes_ref'], '10/2026')

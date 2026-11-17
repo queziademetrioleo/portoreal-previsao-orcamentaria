@@ -197,14 +197,18 @@ class MixedImportTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Faltam dados'):
             alma.consolidate_balances(balance(['05/2026'], [100]), balance(['07/2026'], [200]))
 
-    def test_arrears_require_both_previous_months_and_abate_whole_bill(self):
-        """Exemplo do José: em outubro, inadimplente é quem deve setembro E agosto."""
+    def test_arrears_require_three_previous_months_and_abate_whole_bill(self):
+        """Regra de 3 meses (José, 17/11/2026): em outubro, inadimplente é quem deve setembro, agosto E julho."""
         lines = [(1, 'Boletos em 05/10/2026'),
-                 # 01: deve agosto e setembro → inadimplente
+                 # 01: deve julho, agosto e setembro → inadimplente
+                 (1, 'UNICO 01 BL REF. MÊS 15/07/2026 1.800,00 0,00 1.800,00'),
                  (1, 'UNICO 01 BL REF. MÊS 15/08/2026 1.800,00 0,00 1.800,00'),
                  (1, 'UNICO 01 BL REF. MÊS 15/09/2026 1.900,00 0,00 1.900,00'),
                  # 02: deve só setembro → não
                  (1, 'UNICO 02 BL REF. MÊS 15/09/2026 1.800,00 0,00 1.800,00'),
+                 # 06: deve só agosto e setembro (2 meses) → não (Barramares XVII, José 16/11/2026)
+                 (1, 'UNICO 06 BL REF. MÊS 15/08/2026 1.800,00 0,00 1.800,00'),
+                 (1, 'UNICO 06 BL REF. MÊS 15/09/2026 1.800,00 0,00 1.800,00'),
                  # 03: deve março e abril, pagou de maio a setembro (acordo) → não
                  (1, 'UNICO 03 BL REF. MÊS 15/03/2026 1.800,00 0,00 1.800,00'),
                  (1, 'UNICO 03 BL REF. MÊS 15/04/2026 1.800,00 0,00 1.800,00'),
@@ -217,7 +221,7 @@ class MixedImportTest(unittest.TestCase):
                  (1, 'UNICO 05 BL REF. MÊS 15/09/2026 1.800,00 1.800,00 0,00')]
         with patch.object(alma, 'pdf_lines', return_value=lines):
             result = alma.read_arrears('alma_inad.pdf')
-        self.assertEqual(result['meses_considerados'], ['08/2026', '09/2026'])
+        self.assertEqual(result['meses_considerados'], ['07/2026', '08/2026', '09/2026'])
         self.assertEqual({i['unidade']: i['valor'] for i in result['itens']},
                          {'UNICO 01': 1900, 'UNICO 04': 1700})
         # Boleto inteiro (taxa, fundo e água), um mês por unidade.
@@ -261,8 +265,8 @@ class SantoriniIntegrationTest(unittest.TestCase):
         self.assertEqual(len(result['des']['itens']), 249)
         self.assertAlmostEqual(result['des']['grand_total'], 247103.24)
         self.assertAlmostEqual(result['bal']['total_despesas'], 247158.62)
-        # Relatório de 17/09: os dois meses anteriores ao mês do relatório.
-        self.assertEqual(result['inad']['meses_considerados'], ['07/2026', '08/2026'])
+        # Relatório de 17/09: os três meses anteriores ao mês do relatório.
+        self.assertEqual(result['inad']['meses_considerados'], ['06/2026', '07/2026', '08/2026'])
         self.assertEqual(result['inad']['impacto_mensal_receita'], 0)
         self.assertTrue(any('55.38' in warning for warning in result['divergencias']))
         self.assertEqual(result['origem_sistema'], 'misto')

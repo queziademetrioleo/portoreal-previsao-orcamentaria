@@ -666,13 +666,13 @@ def parse_dessin(path):
 # ----------------------------------------------------------------------------
 # INAD01 - inadimplencia
 # ----------------------------------------------------------------------------
-# Inadimplente = boleto em aberto nos dois meses anteriores ao relatório (José, 10/2026).
+# Inadimplente = boleto em aberto nos três meses anteriores ao relatório (José, 10/2026; 3 meses desde 17/11/2026).
 REGRAS_INAD_2_MESES = ('misto_ultimos_2_meses_alma', 'group_ultimos_2_meses')
 
 
 def _criterio_2_meses(inad):
-    return {'misto_ultimos_2_meses_alma': 'dois últimos meses do relatório Alma',
-            'group_ultimos_2_meses': 'dois meses anteriores ao relatório Group'}.get(inad.get('regra'))
+    return {'misto_ultimos_2_meses_alma': 'três meses anteriores ao relatório Alma',
+            'group_ultimos_2_meses': 'três meses anteriores ao relatório Group'}.get(inad.get('regra'))
 
 
 
@@ -2416,7 +2416,7 @@ def gerar_xlsx(folder, out_path=None):
         r += 1
         inad = R['inad']
         for label, val in [('Inadimplencia total', inad['total']),
-                           ('Dois últimos meses Alma' if misto_inad else 'Critica (>= 3 meses)', inad['critica']),
+                           ('Três meses anteriores (Alma)' if misto_inad else 'Critica (>= 3 meses)', inad['critica']),
                            ('Fora do período considerado' if misto_inad else 'Recente (< 3 meses) — nao abate receita', inad['recente']),
                            (f'Impacto mensal na receita ({inad["unidades_criticas"]} unidade(s) critica(s))',
                             inad['impacto_mensal_receita'])]:
