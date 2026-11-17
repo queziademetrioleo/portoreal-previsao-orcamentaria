@@ -24,7 +24,7 @@ import os
 import xlsxwriter
 
 import previsao as core
-from relatorio_pdf import (FUNDO_PRESERVADO, REAJUSTE_MINIMO_PRESERVADO, SEM_REAJUSTE, USO_DO_FUNDO, _money, _norm, _pct,
+from relatorio_pdf import (FUNDO_PRESERVADO, SEM_REAJUSTE, USO_DO_FUNDO, _money, _norm, _pct,
                            montar_contexto_relatorio)
 
 # Paleta do PDF (relatorio_pdf._HTML_TEMPLATE)
@@ -308,9 +308,9 @@ def _texto_opcoes(opcoes, refs):
     sugere, recomenda, taxa = 'sugerimos um reajuste de ', 'recomendamos um reajuste de ', '% na taxa condominial'
     formula = (f'{_str_f(uso)}&IF({com["res"]}<0,{_str_f(sugere)}&{_pct_f(com["reaj"])}&{_str_f(taxa + ".")},'
                f'{_str_f(SEM_REAJUSTE + ".")})&{_str_f(meio)}&IF({sem["res"]}<0,{_str_f(recomenda)}&'
-               f'{_pct_f(sem["reaj"])}&{_str_f(taxa)},{_str_f(REAJUSTE_MINIMO_PRESERVADO)})&{_str_f(fim)}')
+               f'{_pct_f(sem["reaj"])}&{_str_f(taxa)},{_str_f(SEM_REAJUSTE)})&{_str_f(fim)}')
     texto = (uso + (f'{sugere}{_pct(com["reajuste"])}{taxa}.' if com['resultado'] < 0 else f'{SEM_REAJUSTE}.')
-             + meio + (f'{recomenda}{_pct(sem["reajuste"])}{taxa}' if sem['resultado'] < 0 else REAJUSTE_MINIMO_PRESERVADO) + fim)
+             + meio + (f'{recomenda}{_pct(sem["reajuste"])}{taxa}' if sem['resultado'] < 0 else SEM_REAJUSTE) + fim)
     return formula, texto
 
 

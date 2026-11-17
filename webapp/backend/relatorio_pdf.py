@@ -141,9 +141,6 @@ USO_DO_FUNDO = ('Caso os valores arrecadados para a constituição do Fundo de R
 FUNDO_PRESERVADO = (' No entanto, caso os recursos do Fundo de Reserva sejam preservados para sua finalidade '
                     'original, ')
 SEM_REAJUSTE = 'não é necessário reajuste da taxa condominial'
-# José 16/11/2026: se usar o fundo não exige reajuste, o ramo "fundo preservado" recomenda
-# pelo menos 5% (antes os dois ramos diziam "não é necessário reajuste" e confundia).
-REAJUSTE_MINIMO_PRESERVADO = 'recomendamos um reajuste de pelo menos 5% na taxa condominial'
 
 
 def _consideracao_opcoes(opcoes):
@@ -160,7 +157,7 @@ def _consideracao_opcoes(opcoes):
     uso = (f'sugerimos um reajuste de {_pct(com["reajuste"])}% na taxa condominial.' if com['reajuste'] > 0
            else f'{SEM_REAJUSTE}.')
     preservado = (f'recomendamos um reajuste de {_pct(sem["reajuste"])}% na taxa condominial' if sem['reajuste'] > 0
-                  else REAJUSTE_MINIMO_PRESERVADO)
+                  else SEM_REAJUSTE)
     return USO_DO_FUNDO + uso + FUNDO_PRESERVADO + preservado + ' para os próximos 12 meses.'
 
 
@@ -558,9 +555,20 @@ def _grafico_barras_svg(grupos, total):
 # ---------------------------------------------------------------------------
 # Considerações Importantes — composição completa das categorias resumidas
 # ---------------------------------------------------------------------------
+_LIGACAO_COMPOSICAO = {'de', 'do', 'da', 'dos', 'das', 'e', 'a', 'o', 'as', 'os', 'p', 'para'}
+
+
+def _chave_composicao(valor):
+    """Chave p/ detectar item repetido nos comentários: ignora acento, caixa, pontuação e
+    palavras de ligação ("impressão boleto condominial" = "impressão de boleto condominial";
+    José Henrique, 17/11/2026)."""
+    palavras = re.findall(r'[a-z0-9]+', _norm(valor))
+    return ' '.join(p for p in palavras if p not in _LIGACAO_COMPOSICAO)
+
+
 def _adicionar_sem_repetir(destino, valor):
     valor = ' '.join(str(valor or '').split()).strip()
-    if valor and _norm(valor) not in {_norm(item) for item in destino}:
+    if valor and _chave_composicao(valor) not in {_chave_composicao(item) for item in destino}:
         destino.append(valor)
 
 

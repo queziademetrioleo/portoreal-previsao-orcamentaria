@@ -62,6 +62,14 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
                 despesas = dict(relatorio_pdf._consolidar_despesas_relatorio(linhas, {}))
                 self.assertAlmostEqual(despesas['Despesas Administrativas'] * 12, 3720)
 
+    def test_composicao_nao_repete_item_quase_igual(self):
+        # José 17/11/2026: "impressão boleto condominial" e "impressão de boleto condominial" saíam os dois.
+        linhas = [{'grupo': 'Despesas Administrativas', 'classe': c, 'final': 100}
+                  for c in ('Xerox', 'Correio', 'Material de Expediente', 'Impressão Boleto Condominial',
+                            'IMPRESSÃO DE BOLETO CONDOMINIAL', 'Xerox')]
+        self.assertEqual(relatorio_pdf._componentes_administrativas(linhas),
+                         ['Xerox', 'Correio', 'Material de Expediente', 'Impressão Boleto Condominial'])
+
     def test_composicao_apenas_com_decima_terceira_fica_sem_mencao(self):
         linhas = [{'grupo': 'Despesas Administrativas',
                    'classe': '13º Taxa de Administração', 'final': 1200}]
@@ -147,7 +155,7 @@ class RelatorioPdfCalculosTest(unittest.TestCase):
     def test_consideracao_sem_reajuste_nas_duas_partes(self):
         texto = relatorio_pdf._consideracao_opcoes(relatorio_pdf._opcoes_receita(36000, 6000, [], 30000))
         self.assertIn('prática não recomendada —, não é necessário reajuste da taxa condominial.', texto)
-        self.assertIn('finalidade original, recomendamos um reajuste de pelo menos 5% na taxa condominial para os próximos 12 meses.',
+        self.assertIn('finalidade original, não é necessário reajuste da taxa condominial para os próximos 12 meses.',
                       texto)
 
     def test_consideracao_com_fundo_usa_texto_do_jose(self):

@@ -61,16 +61,17 @@ Resumo em `regras.md`. Decisões que não podem regredir:
   nativo `bar` com % em fórmula (aba Dados, coluna C). Chave do contexto agora é `grafico` → `barras` (era `pizza`/`fatias`).
 - No GitHub em 30/10; falta rebuild EasyPanel; XLSX não foi conferido visualmente (sem LibreOffice no Mac).
 
-## Inadimplência Alma/Group 3 meses + item 7 (17/11/2026) — NÃO commitado
+## Inadimplência Alma/Group 3 meses (17/11/2026) — no GitHub (push 17/11); falta rebuild EasyPanel
 
 - José (Barramares XVII): 1 unidade com 2 meses de atraso não deveria contar. Usuária: "todos são 3 meses" e vale só p/ análises novas.
 - `parsers_alma.MESES_INAD = 3` + `_arrears_window(base, n)` (usado por Alma PDF, FIN00801 e Group). `meses_atraso`/`meses_consecutivos` = 3.
   Ids de regra `..._2_meses_...` mantidos de propósito (chaves gravadas nas sessões). Textos de tela/PDF/main.py atualizados p/ "três meses".
 - Condo21 sozinho não mudou (≥3 consecutivos). Testes atualizados + casos novos de 2 meses que não contam; suíte só com as 4 falhas de "projetor".
-- Falta: commit, push, rebuild EasyPanel. Item 4 (termo repetido "impressão de boleto") ainda NÃO feito.
-- **Item 7 do relatório (16-17/11, áudio José):** quando a receita sem fundo já cobre as despesas, os 2 ramos diziam "não é necessário reajuste" (confuso).
-  Agora o ramo "fundo preservado" diz "recomendamos um reajuste de pelo menos 5% na taxa condominial" (`REAJUSTE_MINIMO_PRESERVADO` em `relatorio_pdf.py`, usado no PDF/DOCX e na fórmula do XLSX).
-  Aplicado como regra geral nesse caso; José não disse explicitamente se é geral — confirmar. Edição manual do texto pelo José: usuária mandou ignorar.
+- Falta: rebuild EasyPanel.
+- **Item 4 (17/11, José):** "impressão boleto condominial" e "impressão de boleto condominial" saíam os dois na composição das despesas administrativas.
+  `relatorio_pdf._adicionar_sem_repetir` agora compara por `_chave_composicao` (sem acento/caixa/pontuação e sem "de/do/da/e/p/para"); vale p/ conservação e administrativas, PDF/DOCX/XLSX. NÃO commitado.
+- **Item 7 (fundo de reserva):** tentei mudar p/ "pelo menos 5%" e depois texto fixo; a usuária mandou DESFAZER (17/11): o cálculo do % já é feito e já entra na frase,
+  ficou o código original (sem `REAJUSTE_MINIMO_PRESERVADO`). Não mexer sem pedido claro; o que o José achou "confuso" (print do item 7) fica em aberto.
 
 ## Brisamar IV `328ae1883a9d` e Ibiza `29d16021d809` (15/11/2026) — seguro e elevador — commitado e no ar
 
